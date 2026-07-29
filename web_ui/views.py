@@ -576,11 +576,6 @@ def oauth_login(request, provider_id):
     """Initiate OAuth login"""
     provider = get_object_or_404(OAuthProvider, id=provider_id, is_active=True)
     
-    # Check if provider supports authorization code flow
-    if provider.supported_flows not in ['authorization_code', 'both']:
-        messages.error(request, f'Provider "{provider.name}" does not support user login.')
-        return redirect('web_ui:login')
-    
     # Build redirect URI
     redirect_uri = request.build_absolute_uri(f'/oauth/callback/{provider_id}/')
     
