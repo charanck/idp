@@ -1,0 +1,108 @@
+{% extends 'web_ui/base.html' %}
+
+{% block title %}Dashboard - Control Plane{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1">Dashboard</h2>
+        <p class="text-muted mb-0">Overview of your control plane resources.</p>
+    </div>
+    <a href="{% url 'web_ui:config_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> New Config / Secret
+    </a>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">Users</div>
+                <div class="display-6 fw-bold">{{ users_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">Service Clients</div>
+                <div class="display-6 fw-bold">{{ clients_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">Configs / Secrets</div>
+                <div class="display-6 fw-bold">{{ configs_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-muted small">OAuth Providers</div>
+                <div class="display-6 fw-bold">{{ oauth_providers_count }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Recent Configs / Secrets</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_configs %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Service</th>
+                                <th>Environment</th>
+                                <th>Key</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for config in recent_configs %}
+                            <tr>
+                                <td><code>{{ config.service }}</code></td>
+                                <td><code>{{ config.environment }}</code></td>
+                                <td><code>{{ config.key }}</code></td>
+                                <td>
+                                    {% if config.is_secret %}
+                                        <span class="badge bg-danger">Secret</span>
+                                    {% else %}
+                                        <span class="badge bg-primary">Config</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">No entries yet. Create your first config or secret to get started.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Quick Links</h5>
+            </div>
+            <div class="card-body d-grid gap-2">
+                <a href="{% url 'web_ui:users_list' %}" class="btn btn-outline-primary"><i class="bi bi-people"></i> Manage Users</a>
+                <a href="{% url 'web_ui:clients_list' %}" class="btn btn-outline-primary"><i class="bi bi-server"></i> Manage Clients</a>
+                <a href="{% url 'web_ui:configs_list' %}" class="btn btn-outline-primary"><i class="bi bi-sliders"></i> Manage Configs</a>
+                <a href="{% url 'web_ui:flags_list' %}" class="btn btn-outline-primary"><i class="bi bi-flag"></i> Manage Flags</a>
+                <a href="{% url 'web_ui:activity_log' %}" class="btn btn-outline-secondary"><i class="bi bi-clock-history"></i> View Activity Log</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

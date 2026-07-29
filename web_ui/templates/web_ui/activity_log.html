@@ -1,0 +1,211 @@
+{% extends 'web_ui/base.html' %}
+
+{% block title %}Activity Log - Control Plane{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Activity Log</h2>
+    <span class="badge bg-info">Readonly - Audit Trail</span>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label for="resource" class="form-label">Resource Type</label>
+                <select name="resource" id="resource" class="form-select">
+                    <option value="">All Resources</option>
+                    {% for resource in resource_types %}
+                        <option value="{{ resource }}" {% if resource == current_resource %}selected{% endif %}>
+                            {{ resource|title }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="type" class="form-label">Action Type</label>
+                <select name="type" id="type" class="form-select">
+                    <option value="">All Actions</option>
+                    {% for action in action_types %}
+                        <option value="{{ action }}" {% if action == current_type %}selected{% endif %}>
+                            {{ action|title }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="user" class="form-label">User Email</label>
+                <input type="text" name="user" id="user" class="form-control" 
+                       placeholder="Search by email" value="{{ current_user }}">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if activities %}
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Action</th>
+                        <th>Resource</th>
+                        <th>Name</th>
+                        <th>User</th>
+                        <th>IP Address</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for activity in activities %}
+                    <tr>
+                        <td>
+                            <small>{{ activity.timestamp|date:"Y-m-d H:i:s" }}</small>
+                        </td>
+                        <td>
+                            {% if activity.type == 'create' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-plus-circle"></i> Create
+                                </span>
+                            {% elif activity.type == 'update' %}
+                                <span class="badge bg-warning">
+                                    <i class="bi bi-pencil"></i> Update
+                                </span>
+                            {% elif activity.type == 'delete' %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-trash"></i> Delete
+                                </span>
+                            {% elif activity.type == 'toggle' %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-toggle-on"></i> Toggle
+                                </span>
+                            {% elif activity.type == 'login' %}
+                                <span class="badge bg-primary">
+                                    <i class="bi bi-box-arrow-in-right"></i> Login
+                                </span>
+                            {% elif activity.type == 'logout' %}
+                                <span class="badge bg-secondary">
+                                    <i class="bi bi-box-arrow-right"></i> Logout
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark">{{ activity.get_resource_display }}</span>
+                        </td>
+                        <td>
+                            <strong>{{ activity.resource_name|default:"-" }}</strong>
+                            <br>
+                            <small class="text-muted">ID: {{ activity.resource_id|truncatechars:20 }}</small>
+                        </td>
+                        <td>
+                            {% if activity.user_email %}
+                                <i class="bi bi-person-circle"></i> {{ activity.user_email }}
+                            {% else %}
+                                <span class="text-muted">System</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if activity.ip_address %}
+                                <small class="text-muted">{{ activity.ip_address }}</small>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if activity.details %}
+                                <small class="text-muted">{{ activity.details|truncatechars:50 }}</small>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Pagination -->
+{% if activities.has_other_pages %}
+<nav aria-label="Page navigation" class="mt-3">
+    <ul class="pagination justify-content-center">
+        {% if activities.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ activities.previous_page_number }}{% if current_resource %}&resource={{ current_resource }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}{% if current_user %}&user={{ current_user }}{% endif %}">Previous</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled">
+            <span class="page-link">Previous</span>
+        </li>
+        {% endif %}
+
+        {% for num in activities.paginator.page_range %}
+            {% if activities.number == num %}
+            <li class="page-item active">
+                <span class="page-link">{{ num }}</span>
+            </li>
+            {% elif num > activities.number|add:'-3' and num < activities.number|add:'3' %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ num }}{% if current_resource %}&resource={{ current_resource }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}{% if current_user %}&user={{ current_user }}{% endif %}">{{ num }}</a>
+            </li>
+            {% endif %}
+        {% endfor %}
+
+        {% if activities.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ activities.next_page_number }}{% if current_resource %}&resource={{ current_resource }}{% endif %}{% if current_type %}&type={{ current_type }}{% endif %}{% if current_user %}&user={{ current_user }}{% endif %}">Next</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled">
+            <span class="page-link">Next</span>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i>
+    No activities found matching your filters.
+</div>
+{% endif %}
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">About Activity Log</h5>
+    </div>
+    <div class="card-body">
+        <p>The activity log provides a complete audit trail of all actions performed in the control plane.</p>
+        
+        <h6>Logged Actions:</h6>
+        <ul>
+            <li><strong>Create</strong>: New users, clients, configs, flags, or OAuth providers</li>
+            <li><strong>Update</strong>: Modifications to existing resources</li>
+            <li><strong>Delete</strong>: Removal of resources</li>
+            <li><strong>Toggle</strong>: Activate/deactivate actions for clients, flags, and providers</li>
+            <li><strong>Login/Logout</strong>: User authentication events</li>
+        </ul>
+        
+        <h6>Information Tracked:</h6>
+        <ul>
+            <li><strong>Timestamp</strong>: Exact time of action</li>
+            <li><strong>User</strong>: Email of user who performed the action</li>
+            <li><strong>IP Address</strong>: Source IP for security auditing</li>
+            <li><strong>Details</strong>: Additional context (JSON encoded)</li>
+        </ul>
+        
+        <p class="text-muted mb-0">
+            <i class="bi bi-shield-check"></i>
+            This log is readonly and cannot be modified or deleted to ensure audit trail integrity.
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends 'web_ui/base.html' %}
+
+{% block title %}Service Client Created - Control Plane{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-success">
+            <div class="card-body p-4">
+                <h3 class="text-success">Service Client Created</h3>
+                <p class="text-muted">Copy the API key now. It will not be shown again.</p>
+
+                <div class="alert alert-warning">
+                    <strong>Client:</strong> {{ client.name }}<br>
+                    <strong>API Key ID:</strong> <code>{{ client.api_key_id }}</code><br>
+                    <strong>API Key:</strong> <code>{{ api_key }}</code>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <a href="{% url 'web_ui:clients_list' %}" class="btn btn-secondary">Back to Clients</a>
+                    <a href="{% url 'web_ui:client_detail' client.id %}" class="btn btn-primary">View Details</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

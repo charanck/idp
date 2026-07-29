@@ -1,0 +1,56 @@
+{% extends 'web_ui/base.html' %}
+
+{% block title %}Login - Control Plane{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <h2 class="fw-bold">Control Plane</h2>
+                    <p class="text-muted">Sign in to manage configs, users, clients, and activity.</p>
+                </div>
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="{{ form.username.id_for_label }}" class="form-label">Email</label>
+                        {{ form.username }}
+                        {% if form.username.errors %}
+                            <div class="text-danger small mt-1">{{ form.username.errors|join:', ' }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
+                        {{ form.password }}
+                        {% if form.password.errors %}
+                            <div class="text-danger small mt-1">{{ form.password.errors|join:', ' }}</div>
+                        {% endif %}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-box-arrow-in-right"></i> Sign In
+                    </button>
+                </form>
+
+                {% if oauth_providers %}
+                <div class="mt-4">
+                    <div class="text-muted small mb-2">Or continue with an OAuth provider</div>
+                    <div class="d-grid gap-2">
+                        {% for provider in oauth_providers %}
+                        <a href="{% url 'web_ui:oauth_login' provider.id %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-box-arrow-in-right"></i> Continue with {{ provider.name }}
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="mt-4 text-center">
+                    <a href="{% url 'web_ui:register' %}" class="text-decoration-none">Create an account</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
