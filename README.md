@@ -1,379 +1,243 @@
-﻿# Control Plane - Configuration & Secret Management
+<p align="center">
+  <img src="web_ui/static/web_ui/img/logo.svg" width="72" height="72" alt="IDP logo">
+</p>
 
-A comprehensive Django + Django Ninja control plane for configuration and secret management with **enterprise-grade encryption**, user authentication, service-to-service (S2S) authentication, and a Bootstrap-based web UI.
+<h1 align="center">IDP — Internal Developer Platform</h1>
 
-## 🔐 **NEW: Built-in Encryption System**
-
-All configs and secrets are now **encrypted at rest** in the database and **encrypted in transit** with client-specific encryption keys!
-
-- ✅ Database values encrypted with master key
-- ✅ Each service client gets unique encryption key  
-- ✅ API serves configs/secrets encrypted for specific client
-- ✅ Clients decrypt using their own keys
-- ✅ Industry-standard Fernet encryption (AES-128 CBC)
-
-See [ENCRYPTION_IMPLEMENTATION.md](./ENCRYPTION_IMPLEMENTATION.md) for detailed encryption documentation.
+<p align="center">
+  A Django + Django Ninja control plane for configuration &amp; secret management and feature flags,
+  with JWT user auth, API-key service-to-service (S2S) auth, OAuth2/OIDC login, and a
+  server-rendered Bootstrap web UI.
+</p>
 
 ---
 
-## Features
+## What it does
 
-### Core Features
-- **🔐 End-to-End Encryption**: Database encryption + client-specific re-encryption
-- **👤 User Authentication**: JWT token-based auth with forced password reset
-- **🔑 S2S Authentication**: API key-based service-to-service authentication
-- **⚙️ Configuration Management**: Multi-environment, per-service configs
-- **🔒 Secret Management**: Secrets are handled as secure config entries (`is_secret=true`)
-- **🚩 Feature Flags**: Toggle features with soft delete
-- **🎨 Web UI**: Bootstrap 5 interface with full CRUD operations
-- **📊 Dashboard**: Statistics and recent activity tracking
-- **🔧 Admin Setup**: Automated admin user creation from environment
+- **Configuration & secrets** — `ConfigEntry` records scoped per application + environment. Secrets
+  are the same model with `is_secret=true`; values are **encrypted at rest** with a master key and
+  **re-encrypted per service client** on read, so a client only ever sees ciphertext it can decrypt
+  with its own key.
+- **Feature flags** — toggle features per application + environment, with soft delete.
+- **Two independent auth systems**:
+  - **API** (`/api/v1/...`) — stateless, JWT bearer tokens for users/admins and `X-API-Key` for
+    service-to-service calls.
+  - **Web UI** (`/...`) — standard Django session auth, gated by `is_staff` for admin screens.
+- **OAuth2 / OIDC login** — authorization-code flow via [authlib](https://authlib.org/) for signing
+  into the web UI through an external identity provider.
+- **Activity log** — append-only audit trail of who did what, from where.
+- **Optional Redis (or in-memory) caching** for the read-heavy config/flag list endpoints, with
+  version-based invalidation.
 
-### Security Features
-- **Database Encryption**: Master key encryption for all stored values
-- **Client-Specific Keys**: Unique encryption key per service client
-- **No Plaintext Exposure**: Values encrypted in transit and at rest
-- **Bcrypt Password Hashing**: Secure password storage
-- **JWT Tokens**: Configurable token expiration
-- **API Key Hashing**: Secure S2S authentication
-- **CSRF Protection**: For web forms
-- **Force Password Reset**: Initial admin requires password change
+## Architecture
+
+Four Django apps, each with a narrow role:
+
+| App | Responsibility |
+|---|---|
+| `control_plane_project/` | Settings, root URLs. Mounts the Ninja API at `/api/v1/`, Django admin at `/admin/`, web UI at `/`. |
+| `authentication/` | Custom `User` model, `ServiceClient` (S2S API keys), OAuth provider/token models, JWT issuance. |
+| `config_management/` | `Application` → `Environment` → `ConfigEntry` / `FeatureFlag`, plus the `Activity` audit log. |
+| `web_ui/` | Server-rendered CRUD for everything above (Bootstrap templates), OAuth login/callback, activity log view. |
+| `common/` | Shared utilities: Fernet encryption, JWT helpers, Ninja auth classes, password hashing, activity logging. |
+
+See [CLAUDE.md](./CLAUDE.md) for a deeper architectural walkthrough (encryption flow, caching
+invalidation strategy, etc.).
 
 ---
 
-## Quick Start
+## Quick start (local, no Docker)
 
 ### Prerequisites
 - Python 3.12+
-- PostgreSQL (or SQLite for development)
-- [uv](https://docs.astral.sh/uv/) - Fast Python package installer
+- [uv](https://docs.astral.sh/uv/) — dependency manager used by this project
+- SQLite (bundled, default) or PostgreSQL if you want to match production
 
-### Installation
+### 1. Clone and install dependencies
 
-1. **Clone the repository**
 ```bash
 git clone <repository-url>
 cd control-plane
-```
-
-2. **Install uv** (if not already installed)
-```bash
-# On macOS/Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# On Windows
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-3. **Install dependencies with uv**
-```bash
-# This creates a .venv and installs all dependencies
-uv sync
-
-# Or install with dev dependencies
 uv sync --group dev
 ```
 
-4. **Activate the virtual environment**
-```bash
-# On Windows
-.venv\Scripts\activate
+`uv sync` creates `.venv` and installs everything from `uv.lock`. `--group dev` adds `pytest` /
+`pytest-django` for running tests.
 
-# On macOS/Linux
-source .venv/bin/activate
-```
+### 2. Configure environment variables
 
-5. **Set up environment variables**
 ```bash
 cp .env.example .env
-# Edit .env with your settings
 ```
 
-Required environment variables:
-```env
-# Database
-DATABASE_URL=sqlite:///./db.sqlite3  # or PostgreSQL URL
+Then edit `.env`. At minimum, set:
 
-# Security Keys
-SECRET_KEY=your-django-secret-key-here
-MASTER_ENCRYPTION_KEY=your-32-byte-base64-key  # Generate with: python -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+- `DJANGO_SECRET_KEY`, `JWT_SECRET_KEY` — any long random strings for local dev.
+- `MASTER_ENCRYPTION_KEY` — generate with:
+  ```bash
+  uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+  ```
+  If left unset, a key is auto-generated at startup **for convenience only** — it changes every
+  restart, so encrypted data becomes unreadable. Never leave this unset in production.
+- `ADMIN_EMAIL` / `ADMIN_PASSWORD` — see [Admin user](#admin-user) below.
 
-# JWT
-JWT_SECRET_KEY=your-jwt-secret-key
-JWT_ALGORITHM=HS256
-JWT_EXPIRATION_MINUTES=60
+The full variable list, with defaults, is documented in [`.env.example`](./.env.example).
 
-# Admin User (for initial setup)
-ADMIN_EMAIL=admin@example.com
+### 3. Run migrations and start the server
 
-# Optional
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-# Cache (fully optional; disabled by default)
-# CACHE_ENABLED=false
-
-# To enable cache:
-CACHE_ENABLED=true
-CACHE_BACKEND=redis
-CACHE_TIMEOUT=300
-CACHE_KEY_PREFIX=control_plane
-REDIS_URL=redis://127.0.0.1:6379/1
-
-# Local-memory backend option
-# CACHE_BACKEND=locmem
-```
-
-When cache is enabled, the app currently caches:
-- `GET /api/config/configs/list` responses (scoped by service + environment + client encryption key hash)
-- `GET /api/config/feature-flags` responses (scoped by service + environment)
-
-Caches are invalidated automatically when related config/flag values are changed via API or UI.
-
-6. **Run database migrations**
 ```bash
 uv run python manage.py migrate
-```
-
-7. **Create admin user**
-```bash
-# Admin user is created automatically from ADMIN_EMAIL env var on first run
-# Default password: "admin" (you'll be forced to change it on first login)
-```
-
-8. **Start the development server**
-```bash
 uv run python manage.py runserver
 ```
 
-The application will be available at:
-- **Web UI**: http://localhost:8000/
-- **API Documentation**: http://localhost:8000/api/docs
-- **Django Admin**: http://localhost:8000/admin/
+The admin user (if `ADMIN_EMAIL`/`ADMIN_PASSWORD` are set) is provisioned automatically as part of
+the `authentication` app's migrations — no separate step needed.
+
+The app is now available at:
+
+- **Web UI** — http://localhost:8000/
+- **API docs (Swagger)** — http://localhost:8000/api/v1/docs
+- **Django admin** — http://localhost:8000/admin/
+
+### Admin user
+
+On first `migrate`, if `ADMIN_EMAIL` and `ADMIN_PASSWORD` are set, a superuser is created once with
+`force_password_reset=True` (you'll be prompted to change the password on first login). This only
+ever happens **once**: if a user with that email already exists, startup leaves it untouched —
+changing `ADMIN_PASSWORD` in `.env` later and restarting will **not** reset the password. To
+change admin credentials afterwards, use the web UI or:
+
+```bash
+uv run python manage.py setup_admin --email admin@example.com --password NewSecurePass123
+```
 
 ---
 
-## Using uv
-
-uv is a fast Python package installer and resolver, written in Rust. It's significantly faster than pip!
-
-### Common Commands
+## Running tests
 
 ```bash
-# Install dependencies
-uv sync
-
-# Install with dev dependencies
-uv sync --group dev
-
-# Add a new dependency
-uv add package-name
-
-# Add a dev dependency
-uv add --group dev package-name
-
-# Remove a dependency
-uv remove package-name
-
-# Update dependencies
-uv sync --upgrade
-
-# Run Python with venv
-uv run python script.py
-
-# Run Django management command
-uv run python manage.py <command>
-
-# Lock dependencies (regenerate uv.lock)
-uv lock
+DJANGO_SETTINGS_MODULE=control_plane_project.settings uv run pytest
+# or
+uv run python manage.py test
 ```
-
-### Benefits of uv
-- ⚡ **10-100x faster** than pip
-- 🔒 **Deterministic installs** with uv.lock
-- 🎯 **Automatic virtual environment** management
-- 📦 **Built-in dependency resolver**
-- 🔄 **Compatible with pip** and pyproject.toml
 
 ---
 
 ## Docker
 
-Build locally:
+### Local development (build from source)
 
 ```bash
-docker build -t control-plane:local .
+cp .env.example .env
+# then set MASTER_ENCRYPTION_KEY, ADMIN_EMAIL, ADMIN_PASSWORD in .env
+docker compose -f docker-compose.local.yml --env-file .env up --build
 ```
 
-Run locally:
+This builds the image from the repo's `Dockerfile`, and brings up Postgres and Redis alongside the
+app — everything needed to run IDP locally with no other setup. The app is available at
+http://localhost:8000/ once the containers are healthy.
+
+> `docker-compose.yml` (no suffix) is a separate, pre-existing deployment config pointed at a
+> specific staging host and the published GHCR image — don't use it for local development.
+
+### Build/run the image directly
 
 ```bash
-docker run --rm -p 8000:8000 --env-file .env control-plane:local
+docker build -t idp:local .
+docker run --rm -p 8000:8000 --env-file .env idp:local
 ```
 
 The container runs migrations at startup and then starts Django on `0.0.0.0:8000`.
 
-## GitHub Container Registry (GHCR) release publishing
+### GHCR release publishing
 
-A GitHub Actions workflow publishes a container image to GHCR when you push a tag matching:
-
-- `release-*`
-- `release/*`
-
-Example:
+A GitHub Actions workflow publishes a container image to GHCR when you push a tag matching
+`release-*` or `release/*`:
 
 ```bash
 git tag release-1.0.0
 git push origin release-1.0.0
 ```
 
-Published image:
-
-```text
-ghcr.io/<owner>/<repo>:release-1.0.0
-ghcr.io/<owner>/<repo>:latest
-```
+Published as `ghcr.io/<owner>/<repo>:release-1.0.0` and `ghcr.io/<owner>/<repo>:latest`.
 
 ---
 
-```bash
-# 1. Clone repository
-git clone <repository-url>
-cd control-plane
+## Encryption model
 
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment
-cp .env.example .env
-# Edit .env - at minimum set MASTER_ENCRYPTION_KEY!
-
-# 5. Run migrations
-python manage.py migrate
-
-# 6. Create admin user
-python manage.py setup_admin --email admin@example.com --password SecurePass123
-
-# 7. Run server
-python manage.py runserver
-
-# 8. Access application
-# Web UI: http://127.0.0.1:8000/
-# API Docs: http://127.0.0.1:8000/api/docs
-# Django Admin: http://127.0.0.1:8000/admin/
-```
-
----
-
-## 🔐 Encryption System
-
-### How It Works
-
-1. **Admin creates config/secret** (JWT auth):
-   ```bash
-   POST /api/configs/upsert
-   {
-     "service": "my-app",
-     "environment": "prod",
-     "key": "DB_PASSWORD",
-     "value": "plain-text-password"
-   }
-   ```
-   → Encrypted with master key → Stored in database
-
-2. **Client requests config** (API Key auth):
-   ```bash
-   GET /api/configs/list?service=my-app&environment=prod
-   X-API-Key: <key_id>.<secret>
-   ```
-   → Server decrypts from database → Re-encrypts for client → Returns encrypted value
-
-3. **Client decrypts locally**:
+1. **Write** — an admin creates a config/secret (`POST /api/v1/config/configs/upsert`, JWT auth, or via
+   the web UI). The value is encrypted with `MASTER_ENCRYPTION_KEY` before it's stored; the API/UI
+   response never echoes the plaintext back (secrets show as `***ENCRYPTED***`).
+2. **Read** — a service client calls `GET /api/v1/config/configs/list` with its `X-API-Key`. The server
+   decrypts with the master key and **re-encrypts with that client's own encryption key** (generated
+   once, at client-creation time) before returning it.
+3. **Client-side decrypt**:
    ```python
    from cryptography.fernet import Fernet
-   
+
    fernet = Fernet(client_encryption_key.encode())
    decrypted = fernet.decrypt(encrypted_value.encode()).decode()
    ```
 
-### Generate Master Encryption Key
-
-```bash
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-```
-
-Add to `.env`:
-```bash
-MASTER_ENCRYPTION_KEY=<generated-key>
-```
-
-**⚠️ CRITICAL**: Keep this key secure! If lost, all data becomes unrecoverable.
+Losing `MASTER_ENCRYPTION_KEY` makes all stored config/secret values permanently unrecoverable —
+back it up somewhere durable outside the app.
 
 ---
 
-## API Examples
+## API examples
 
-### 1. Create Service Client (Admin)
+### Get a user JWT
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/s2s/create-client \
+curl -X POST http://localhost:8000/api/v1/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin@example.com", "password": "<password>"}'
+```
+
+### Create a service client (admin JWT required)
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/s2s/clients \
   -H "Authorization: Bearer <admin-jwt>" \
   -H "Content-Type: application/json" \
-  -d '{"name": "my-service", "description": "My service client"}'
+  -d '{"name": "my-service"}'
 ```
 
-**Response includes encryption_key** - save it securely!
+The response includes `api_key` and `encryption_key` — both are shown once, at creation time. Store
+them securely; they can't be retrieved again.
 
-### 2. Get Encrypted Configs/Secrets (Client)
+### Write a config/secret (admin JWT required)
 
 ```bash
-curl "http://127.0.0.1:8000/api/configs/list?service=my-service&environment=production" \
-  -H "X-API-Key: <client-api-key>"
+curl -X POST http://localhost:8000/api/v1/config/configs/upsert \
+  -H "Authorization: Bearer <admin-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"service": "my-app", "environment": "prod", "key": "DB_PASSWORD", "value": "secret-value", "is_secret": true}'
 ```
 
-Values returned are encrypted with the client's encryption key.
+### Read configs as a service client
 
-### 3. Decrypt Client-Side
-
-```python
-from cryptography.fernet import Fernet
-
-encryption_key = "client-encryption-key-from-creation"
-fernet = Fernet(encryption_key.encode())
-decrypted = fernet.decrypt(encrypted_value.encode()).decode()
+```bash
+curl "http://localhost:8000/api/v1/config/configs/list?service=my-app&environment=prod" \
+  -H "X-API-Key: <key_id>.<secret>"
 ```
+
+Full endpoint reference is available at `/api/v1/docs` once the server is running.
 
 ---
 
-## Documentation
+## Security notes
 
-- **[ENCRYPTION_IMPLEMENTATION.md](./ENCRYPTION_IMPLEMENTATION.md)** - Detailed encryption docs
-- **[README_DJANGO_USAGE.md](./README_DJANGO_USAGE.md)** - Comprehensive usage guide
-- **[IMPLEMENTATION_COMPLETE.md](./IMPLEMENTATION_COMPLETE.md)** - Implementation summary
-- **API Docs**: http://127.0.0.1:8000/api/docs
-
----
-
-## Security Best Practices
-
-1. **Set MASTER_ENCRYPTION_KEY** in environment (never commit!)
-2. **Use PostgreSQL** in production
-3. **Enable HTTPS** for all production traffic
-4. **Secure client encryption keys** - clients must store them safely
-5. **Backup master key** securely
-6. **Set DEBUG=False** in production
-7. **Change default secrets** (DJANGO_SECRET_KEY, JWT_SECRET_KEY)
+- Set `MASTER_ENCRYPTION_KEY`, `DJANGO_SECRET_KEY`, and `JWT_SECRET_KEY` explicitly in every
+  non-local environment — never rely on the auto-generated dev fallback.
+- Use PostgreSQL (not SQLite) and `DEBUG=False` in production.
+- Admin (`is_staff`) users cannot change their own `is_staff`/`is_active` flags through the web UI —
+  role changes must come from a different admin, to prevent self privilege-escalation.
+- Service client API keys and encryption keys are shown once at creation and stored hashed/encrypted
+  thereafter — there is no way to retrieve them again through the app.
 
 ---
 
 ## License
 
-MIT License
-
----
-
-**Made with ❤️ using Django + Django Ninja + Cryptography**
+MIT

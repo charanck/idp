@@ -226,21 +226,34 @@ def user_create(request):
 def user_edit(request, pk):
     """Edit user"""
     user = get_object_or_404(User, pk=pk)
-    
+    editing_self = user.pk == request.user.pk
+    original_is_staff = user.is_staff
+    original_is_active = user.is_active
+
     if request.method == 'POST':
         form = UserEditForm(request.POST, instance=user)
         if form.is_valid():
+            if editing_self and (
+                form.cleaned_data.get('is_staff') != original_is_staff
+                or form.cleaned_data.get('is_active') != original_is_active
+            ):
+                # Prevent admins from escalating/de-escalating their own privileges;
+                # role changes must come from a different admin.
+                form.instance.is_staff = original_is_staff
+                form.instance.is_active = original_is_active
+                messages.warning(request, 'You cannot change your own role or active status. Ask another admin to do it.')
             form.save()
             log_update('user', str(user.id), user.email, request)
             messages.success(request, f'User {user.email} updated successfully.')
             return redirect('web_ui:users_list')
     else:
         form = UserEditForm(instance=user)
-    
+
     return render(request, 'web_ui/user_form.html', {
         'form': form,
         'action': 'Edit',
-        'user': user
+        'user': user,
+        'editing_self': editing_self,
     })
 
 

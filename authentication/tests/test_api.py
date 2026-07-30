@@ -30,7 +30,7 @@ def admin_headers(admin_user):
 class TestRegisterEndpoint:
     def test_requires_admin_auth(self, client):
         response = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             data={"email": "new@example.com", "password": "password123"},
             content_type="application/json",
         )
@@ -38,7 +38,7 @@ class TestRegisterEndpoint:
 
     def test_creates_user_as_admin(self, client, admin_headers):
         response = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             data={"email": "new@example.com", "password": "password123"},
             content_type="application/json",
             **admin_headers,
@@ -53,7 +53,7 @@ class TestRegisterEndpoint:
         auth_service.register_user("dup@example.com", "password123")
 
         response = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             data={"email": "dup@example.com", "password": "password123"},
             content_type="application/json",
             **admin_headers,
@@ -63,7 +63,7 @@ class TestRegisterEndpoint:
 
     def test_rejects_short_password(self, client, admin_headers):
         response = client.post(
-            "/api/auth/register",
+            "/api/v1/auth/register",
             data={"email": "new@example.com", "password": "short"},
             content_type="application/json",
             **admin_headers,
@@ -77,7 +77,7 @@ class TestTokenEndpoint:
         auth_service.register_user("user@example.com", "password123")
 
         response = client.post(
-            "/api/auth/token",
+            "/api/v1/auth/token",
             data={"username": "user@example.com", "password": "password123"},
             content_type="application/json",
         )
@@ -90,7 +90,7 @@ class TestTokenEndpoint:
         auth_service.register_user("user@example.com", "password123")
 
         response = client.post(
-            "/api/auth/token",
+            "/api/v1/auth/token",
             data={"username": "user@example.com", "password": "wrong"},
             content_type="application/json",
         )
@@ -103,20 +103,20 @@ class TestMeEndpoint:
         user = auth_service.register_user("user@example.com", "password123")
         token = create_access_token(subject=str(user.id), token_type="user")
 
-        response = client.get("/api/auth/me", HTTP_AUTHORIZATION=f"Bearer {token}")
+        response = client.get("/api/v1/auth/me", HTTP_AUTHORIZATION=f"Bearer {token}")
 
         assert response.status_code == 200
         assert response.json()["email"] == "user@example.com"
 
     def test_requires_auth(self, client):
-        response = client.get("/api/auth/me")
+        response = client.get("/api/v1/auth/me")
         assert response.status_code == 401
 
 
 class TestServiceClientEndpoints:
     def test_create_client_requires_admin(self, client):
         response = client.post(
-            "/api/auth/s2s/clients",
+            "/api/v1/auth/s2s/clients",
             data={"name": "billing-service"},
             content_type="application/json",
         )
@@ -124,7 +124,7 @@ class TestServiceClientEndpoints:
 
     def test_create_client_returns_usable_api_key(self, client, admin_headers):
         response = client.post(
-            "/api/auth/s2s/clients",
+            "/api/v1/auth/s2s/clients",
             data={"name": "billing-service"},
             content_type="application/json",
             **admin_headers,
@@ -135,7 +135,7 @@ class TestServiceClientEndpoints:
         assert body["name"] == "billing-service"
         api_key = body["api_key"]
 
-        ping_response = client.get("/api/auth/s2s/ping", HTTP_X_API_KEY=api_key)
+        ping_response = client.get("/api/v1/auth/s2s/ping", HTTP_X_API_KEY=api_key)
         assert ping_response.status_code == 200
         assert ping_response.json()["identity"]["name"] == "billing-service"
 
@@ -143,7 +143,7 @@ class TestServiceClientEndpoints:
         auth_service.create_service_client("billing-service")
 
         response = client.post(
-            "/api/auth/s2s/clients",
+            "/api/v1/auth/s2s/clients",
             data={"name": "billing-service"},
             content_type="application/json",
             **admin_headers,
@@ -152,5 +152,5 @@ class TestServiceClientEndpoints:
         assert response.status_code == 409
 
     def test_s2s_ping_rejects_invalid_api_key(self, client):
-        response = client.get("/api/auth/s2s/ping", HTTP_X_API_KEY="sk_live_bad.wrong")
+        response = client.get("/api/v1/auth/s2s/ping", HTTP_X_API_KEY="sk_live_bad.wrong")
         assert response.status_code == 401

@@ -1,6 +1,6 @@
 {% extends 'web_ui/base.html' %}
 
-{% block title %}{{ action }} User - Control Plane{% endblock %}
+{% block title %}{{ action }} User - IDP{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
@@ -8,6 +8,11 @@
         <div class="card shadow-sm">
             <div class="card-body p-4">
                 <h3 class="mb-3">{{ action }} User</h3>
+                {% if editing_self %}
+                <div class="alert alert-info">
+                    You're editing your own account. Role and active-status changes to your own account are ignored — ask another admin to change them.
+                </div>
+                {% endif %}
                 <form method="post" novalidate>
                     {% csrf_token %}
                     {% for field in form %}

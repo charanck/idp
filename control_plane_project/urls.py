@@ -44,6 +44,6 @@ def handle_unexpected_error(request: HttpRequest, exc: Exception):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/', api.urls),
+    path('api/v1/', api.urls),
     path('', include('web_ui.urls')),  # Web UI routes
 ]

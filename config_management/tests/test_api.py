@@ -38,7 +38,7 @@ def service_client_credentials():
 class TestUpsertConfigEndpoint:
     def test_requires_jwt_auth(self, client):
         response = client.post(
-            "/api/config/configs/upsert",
+            "/api/v1/config/configs/upsert",
             data={"service": "payments", "environment": "prod", "key": "API_URL", "value": "https://a"},
             content_type="application/json",
         )
@@ -46,7 +46,7 @@ class TestUpsertConfigEndpoint:
 
     def test_creates_config_and_never_returns_raw_value(self, client, user_headers):
         response = client.post(
-            "/api/config/configs/upsert",
+            "/api/v1/config/configs/upsert",
             data={
                 "service": "payments",
                 "environment": "prod",
@@ -68,10 +68,10 @@ class TestUpsertConfigEndpoint:
 
     def test_upserting_same_key_updates_rather_than_duplicates(self, client, user_headers):
         payload = {"service": "payments", "environment": "prod", "key": "API_URL", "value": "https://v1"}
-        client.post("/api/config/configs/upsert", data=payload, content_type="application/json", **user_headers)
+        client.post("/api/v1/config/configs/upsert", data=payload, content_type="application/json", **user_headers)
 
         payload["value"] = "https://v2"
-        client.post("/api/config/configs/upsert", data=payload, content_type="application/json", **user_headers)
+        client.post("/api/v1/config/configs/upsert", data=payload, content_type="application/json", **user_headers)
 
         stored = config_service.get_config("payments", "prod", "API_URL")
         assert config_service.decrypt_config_value(stored) == "https://v2"
@@ -79,14 +79,14 @@ class TestUpsertConfigEndpoint:
 
 class TestListConfigsForClientEndpoint:
     def test_requires_api_key_auth(self, client):
-        response = client.get("/api/config/configs/list", {"service": "payments", "environment": "prod"})
+        response = client.get("/api/v1/config/configs/list", {"service": "payments", "environment": "prod"})
         assert response.status_code == 401
 
     def test_returns_configs_encrypted_with_client_key(self, client, service_client_credentials):
         config_service.upsert_config("payments", "prod", "API_URL", "https://api.example.com")
 
         response = client.get(
-            "/api/config/configs/list",
+            "/api/v1/config/configs/list",
             {"service": "payments", "environment": "prod"},
             HTTP_X_API_KEY=service_client_credentials.api_key,
         )
@@ -100,7 +100,7 @@ class TestListConfigsForClientEndpoint:
 
     def test_returns_empty_list_for_unknown_scope(self, client, service_client_credentials):
         response = client.get(
-            "/api/config/configs/list",
+            "/api/v1/config/configs/list",
             {"service": "unknown", "environment": "prod"},
             HTTP_X_API_KEY=service_client_credentials.api_key,
         )
@@ -115,7 +115,7 @@ class TestFeatureFlagEndpoints:
         config_service.upsert_config("payments", "staging", "seed", "v")
 
         response = client.post(
-            "/api/config/feature-flags",
+            "/api/v1/config/feature-flags",
             data={"service": "payments", "name": "new-checkout", "is_enabled": True},
             content_type="application/json",
             **user_headers,
@@ -126,7 +126,7 @@ class TestFeatureFlagEndpoints:
 
     def test_create_flag_conflicts_when_application_unknown(self, client, user_headers):
         response = client.post(
-            "/api/config/feature-flags",
+            "/api/v1/config/feature-flags",
             data={"service": "unknown-app", "name": "new-checkout"},
             content_type="application/json",
             **user_headers,
@@ -137,20 +137,20 @@ class TestFeatureFlagEndpoints:
     def test_list_and_toggle_flag_roundtrip(self, client, user_headers):
         config_service.upsert_config("payments", "prod", "seed", "v")
         client.post(
-            "/api/config/feature-flags",
+            "/api/v1/config/feature-flags",
             data={"service": "payments", "environment": "prod", "name": "new-checkout", "is_enabled": False},
             content_type="application/json",
             **user_headers,
         )
 
         list_response = client.get(
-            "/api/config/feature-flags", {"service": "payments", "environment": "prod"}, **user_headers
+            "/api/v1/config/feature-flags", {"service": "payments", "environment": "prod"}, **user_headers
         )
         assert list_response.status_code == 200
         assert list_response.json()[0]["is_enabled"] is False
 
         toggle_response = client.post(
-            "/api/config/feature-flags/new-checkout/toggle?service=payments&environment=prod",
+            "/api/v1/config/feature-flags/new-checkout/toggle?service=payments&environment=prod",
             **user_headers,
         )
         assert toggle_response.status_code == 200
@@ -158,7 +158,7 @@ class TestFeatureFlagEndpoints:
 
     def test_toggle_returns_404_for_unknown_flag(self, client, user_headers):
         response = client.post(
-            "/api/config/feature-flags/missing/toggle?service=payments&environment=prod",
+            "/api/v1/config/feature-flags/missing/toggle?service=payments&environment=prod",
             **user_headers,
         )
         assert response.status_code == 404
