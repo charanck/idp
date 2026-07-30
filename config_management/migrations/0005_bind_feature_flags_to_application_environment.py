@@ -27,6 +27,8 @@ def backfill_feature_flag_scope(apps, schema_editor):
 
 class Migration(migrations.Migration):
 
+    atomic = False
+
     dependencies = [
         ("config_management", "0004_rename_generated_indexes"),
     ]
