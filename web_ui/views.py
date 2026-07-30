@@ -411,7 +411,24 @@ def environments_list(request):
         environments = environments.filter(application_id=app_filter)
 
     applications = Application.objects.all().order_by('name')
-    paginator = Paginator(environments, 20)
+
+    grouped_environments_map = defaultdict(list)
+    for environment in environments:
+        grouped_environments_map[environment.application].append(environment)
+
+    grouped_environments = []
+    for application, env_items in grouped_environments_map.items():
+        grouped_environments.append(
+            {
+                'application': application,
+                'environments': sorted(env_items, key=lambda item: item.name.lower()),
+                'env_count': len(env_items),
+            }
+        )
+
+    grouped_environments.sort(key=lambda group: group['application'].name.lower())
+
+    paginator = Paginator(grouped_environments, 20)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
