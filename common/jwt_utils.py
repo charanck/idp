@@ -1,9 +1,12 @@
 """
 JWT Token utilities for authentication
 """
+import logging
 import jwt
 from datetime import datetime, timedelta, timezone
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 def create_access_token(subject: str, token_type: str = "user") -> str:
@@ -56,6 +59,8 @@ def decode_access_token(token: str) -> dict:
         )
         return payload
     except jwt.ExpiredSignatureError as e:
+        logger.info("Rejected expired JWT")
         raise ValueError("Token has expired") from e
     except jwt.InvalidTokenError as e:
+        logger.warning("Rejected invalid JWT: %s", e)
         raise ValueError("Invalid token") from e

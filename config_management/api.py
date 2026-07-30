@@ -1,6 +1,8 @@
 """
 Config Management API endpoints
 """
+import logging
+
 from ninja import Router
 from ninja.errors import HttpError
 from django.http import HttpRequest
@@ -13,7 +15,10 @@ from config_management.schemas import (
     FeatureFlagResponse,
 )
 from config_management.services import ConfigService, FeatureFlagService
+from common.activity_logger import log_create, log_toggle, log_update
 from common.authentication import JWTAuth, APIKeyAuth
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 config_service = ConfigService()
@@ -25,23 +30,37 @@ apikey_auth = APIKeyAuth()
 @router.post("/configs/upsert", response=ConfigResponse, auth=jwt_auth, tags=["config"])
 def upsert_config(request: HttpRequest, payload: ConfigUpsertRequest):
     """Create or update a configuration entry"""
-    entry = config_service.upsert_config(
-        service=payload.service,
-        environment=payload.environment,
-        key=payload.key,
-        value=payload.value,
-        is_secret=payload.is_secret,
-        config_type=payload.type
-    )
-    
-    # For JWT auth (admin), show masked value for secrets
-    shown_value = "***ENCRYPTED***" if entry.is_secret else "***ENCRYPTED***"
+    existed_before = config_service.get_config(payload.service, payload.environment, payload.key) is not None
+
+    try:
+        entry = config_service.upsert_config(
+            service=payload.service,
+            environment=payload.environment,
+            key=payload.key,
+            value=payload.value,
+            is_secret=payload.is_secret,
+            config_type=payload.type
+        )
+    except Exception:
+        logger.exception(
+            "Unexpected error upserting config %s/%s/%s", payload.service, payload.environment, payload.key
+        )
+        raise HttpError(500, "Failed to save configuration")
+
+    config_name = f"{entry.application.name}/{entry.environment.name}/{entry.key}"
+    details = {'is_secret': entry.is_secret, 'type': entry.type}
+    if existed_before:
+        log_update('config', str(entry.id), config_name, request=request, details=details)
+    else:
+        log_create('config', str(entry.id), config_name, request=request, details=details)
+
+    # Don't return the actual value over the admin API - not even encrypted.
     return ConfigResponse(
         id=str(entry.id),
         service=entry.application.name,
         environment=entry.environment.name,
         key=entry.key,
-        value=shown_value,  # Don't return actual value for security
+        value="***ENCRYPTED***",
         is_secret=entry.is_secret,
         type=entry.type
     )
@@ -56,14 +75,21 @@ def list_configs_for_client(request: HttpRequest, service: str, environment: str
     """
     # Get client from request (set by APIKeyAuth)
     client = request.auth
-    
-    # Get configs encrypted for this client
-    configs = config_service.list_configs_for_client(
-        service=service,
-        environment=environment,
-        client_encryption_key=client.encryption_key
-    )
-    
+
+    try:
+        configs = config_service.list_configs_for_client(
+            service=service,
+            environment=environment,
+            client_encryption_key=client.encryption_key
+        )
+    except Exception:
+        logger.exception(
+            "Unexpected error listing configs for client %s (%s/%s)", client.name, service, environment
+        )
+        raise HttpError(500, "Failed to list configurations")
+
+    logger.debug("Client %s fetched %d config(s) for %s/%s", client.name, len(configs), service, environment)
+
     return [
         ConfigResponse(
             id=config['id'],
@@ -90,24 +116,40 @@ def create_feature_flag(request: HttpRequest, payload: FeatureFlagCreateRequest)
             environment=payload.environment or None,
             create_all_environments=True,
         )
-        flag = flags[0]
-        return FeatureFlagResponse(
-            id=str(flag.id),
-            service=flag.application.name,
-            environment=flag.environment.name,
-            name=flag.name,
-            description=flag.description or "",
-            is_enabled=flag.is_enabled,
-            created_count=len(flags),
-        )
     except ValueError as e:
         raise HttpError(409, str(e))
+    except Exception:
+        logger.exception("Unexpected error creating feature flag %s/%s", payload.service, payload.name)
+        raise HttpError(500, "Failed to create feature flag")
+
+    flag = flags[0]
+    log_create(
+        'flag',
+        str(flag.id),
+        f"{flag.application.name}/{flag.name}",
+        request=request,
+        details={'is_enabled': flag.is_enabled, 'environments_affected': len(flags)},
+    )
+    return FeatureFlagResponse(
+        id=str(flag.id),
+        service=flag.application.name,
+        environment=flag.environment.name,
+        name=flag.name,
+        description=flag.description or "",
+        is_enabled=flag.is_enabled,
+        created_count=len(flags),
+    )
 
 
 @router.get("/feature-flags", response=List[FeatureFlagResponse], auth=jwt_auth, tags=["feature-flags"])
 def list_feature_flags(request: HttpRequest, service: str, environment: str):
     """List feature flags for a specific service/environment"""
-    flags = flag_service.list_flags(service=service, environment=environment)
+    try:
+        flags = flag_service.list_flags(service=service, environment=environment)
+    except Exception:
+        logger.exception("Unexpected error listing feature flags for %s/%s", service, environment)
+        raise HttpError(500, "Failed to list feature flags")
+
     return [
         FeatureFlagResponse(
             id=str(flag.id),
@@ -124,9 +166,19 @@ def list_feature_flags(request: HttpRequest, service: str, environment: str):
 @router.post("/feature-flags/{name}/toggle", response=FeatureFlagResponse, auth=jwt_auth, tags=["feature-flags"])
 def toggle_feature_flag(request: HttpRequest, name: str, service: str, environment: str):
     """Toggle a feature flag's enabled state"""
-    flag = flag_service.toggle_flag(service=service, environment=environment, name=name)
+    try:
+        flag = flag_service.toggle_flag(service=service, environment=environment, name=name)
+    except Exception:
+        logger.exception("Unexpected error toggling feature flag %s/%s/%s", service, environment, name)
+        raise HttpError(500, "Failed to toggle feature flag")
+
     if flag is None:
         raise HttpError(404, "Feature flag not found")
+
+    log_toggle(
+        'flag', str(flag.id), f"{flag.application.name}/{flag.environment.name}/{flag.name}",
+        request=request, details={'is_enabled': flag.is_enabled},
+    )
     return FeatureFlagResponse(
         id=str(flag.id),
         service=flag.application.name,

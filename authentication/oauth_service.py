@@ -1,7 +1,10 @@
 """
 OAuth2/OIDC Service - Simplified
 """
+import logging
+
 from authlib.integrations.requests_client import OAuth2Session
+from authlib.integrations.base_client.errors import OAuthError
 from django.contrib.auth import get_user_model
 from datetime import datetime, timedelta
 from typing import Dict, Tuple
@@ -11,10 +14,12 @@ from .oauth_models import OAuthProvider, OAuthUserToken
 
 User = get_user_model()
 
+logger = logging.getLogger(__name__)
+
 
 class OAuthService:
     """OAuth2/OIDC service for user authentication"""
-    
+
     def get_authorization_url(self, provider: OAuthProvider, redirect_uri: str) -> Tuple[str, str]:
         """Get OAuth2 authorization URL (returns: authorization_url, state)"""
         oauth = OAuth2Session(
@@ -24,7 +29,7 @@ class OAuthService:
             redirect_uri=redirect_uri
         )
         return oauth.create_authorization_url(provider.authorization_url)
-    
+
     def exchange_code_for_token(self, provider: OAuthProvider, code: str, redirect_uri: str) -> Dict:
         """Exchange authorization code for access token"""
         oauth = OAuth2Session(
@@ -32,21 +37,36 @@ class OAuthService:
             client_secret=provider.client_secret,
             redirect_uri=redirect_uri
         )
-        return oauth.fetch_token(
-            url=provider.token_url,
-            code=code,
-            grant_type='authorization_code'
-        )
-    
+        try:
+            return oauth.fetch_token(
+                url=provider.token_url,
+                code=code,
+                grant_type='authorization_code'
+            )
+        except OAuthError as e:
+            logger.warning("OAuth token exchange rejected by provider %s: %s", provider.name, e)
+            raise ValueError(f"Provider rejected the authorization code: {e}") from e
+        except requests.RequestException as e:
+            logger.error("OAuth token exchange failed for provider %s: %s", provider.name, e)
+            raise ValueError(f"Could not reach {provider.name} to exchange the authorization code") from e
+
     def get_user_info(self, provider: OAuthProvider, access_token: str) -> Dict:
         """Get user info from OAuth provider"""
         if not provider.userinfo_url:
             raise ValueError("Provider does not have userinfo_url configured")
-        
+
         headers = {'Authorization': f'Bearer {access_token}'}
-        response = requests.get(provider.userinfo_url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.get(provider.userinfo_url, headers=headers, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error("Failed to fetch user info from provider %s: %s", provider.name, e)
+            raise ValueError(f"Could not fetch user info from {provider.name}") from e
+        except ValueError as e:
+            # response.json() failed to parse
+            logger.error("Provider %s returned an unparseable userinfo response: %s", provider.name, e)
+            raise ValueError(f"{provider.name} returned an invalid user info response") from e
     
     def authenticate_or_create_user(
         self,
