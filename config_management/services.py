@@ -2,6 +2,7 @@
 Config management services - Simplified
 """
 import hashlib
+import logging
 import uuid
 from typing import Dict, List, Optional
 
@@ -11,6 +12,8 @@ from django.core.cache import cache
 
 from common.encryption import EncryptionService
 from config_management.models import Application, ConfigEntry, Environment, FeatureFlag
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigService:
@@ -74,7 +77,7 @@ class ConfigService:
         encrypted_value = self.encryption_service.encrypt_for_storage(value)
         application, env = self._get_or_create_scope(service, environment)
 
-        config, _ = ConfigEntry.objects.update_or_create(
+        config, created = ConfigEntry.objects.update_or_create(
             application=application,
             environment=env,
             key=key,
@@ -85,6 +88,10 @@ class ConfigService:
             },
         )
         self._bump_scope_version(service, environment)
+        logger.info(
+            "%s config %s/%s/%s (secret=%s)",
+            "Created" if created else "Updated", service, environment, key, is_secret,
+        )
         return config
 
     def get_config(self, service: str, environment: str, key: str) -> Optional[ConfigEntry]:
@@ -151,10 +158,13 @@ class ConfigService:
             config = ConfigEntry.objects.get(id=uuid.UUID(config_id))
             service = config.application.name
             environment = config.environment.name
+            key = config.key
             config.delete()
             self._bump_scope_version(service, environment)
+            logger.info("Deleted config %s/%s/%s", service, environment, key)
             return True
         except (ConfigEntry.DoesNotExist, ValueError):
+            logger.warning("Config delete failed: %s not found", config_id)
             return False
 
     def get_config_for_client(
@@ -169,7 +179,15 @@ class ConfigService:
         if not config:
             return None
 
-        decrypted_value = self.encryption_service.decrypt_from_storage(config.value)
+        try:
+            decrypted_value = self.encryption_service.decrypt_from_storage(config.value)
+        except InvalidToken as e:
+            logger.error(
+                "Failed to decrypt config %s/%s/%s: value is not valid under MASTER_ENCRYPTION_KEY",
+                service, environment, key,
+            )
+            raise ValueError(f"Config '{key}' could not be decrypted") from e
+
         client_encrypted_value = self.encryption_service.re_encrypt_for_client(
             decrypted_value,
             client_encryption_key,
@@ -205,7 +223,17 @@ class ConfigService:
 
         result = []
         for config in configs:
-            decrypted_value = self.encryption_service.decrypt_from_storage(config.value)
+            try:
+                decrypted_value = self.encryption_service.decrypt_from_storage(config.value)
+            except InvalidToken:
+                # One corrupted/undecryptable row shouldn't take down the whole
+                # list for every client polling this scope - skip and flag it.
+                logger.error(
+                    "Skipping config %s/%s/%s in client list: value is not valid under MASTER_ENCRYPTION_KEY",
+                    service, environment, config.key,
+                )
+                continue
+
             client_encrypted_value = self.encryption_service.re_encrypt_for_client(
                 decrypted_value,
                 client_encryption_key,
@@ -333,6 +361,7 @@ class FeatureFlagService:
             flags.append(flag)
             self._bump_scope_version(service, env.name)
 
+        logger.info("Created/updated feature flag %s/%s across %d environment(s)", service, name, len(flags))
         return flags
 
     def get_flag(self, service: str, environment: str, name: str) -> Optional[FeatureFlag]:
@@ -406,6 +435,8 @@ class FeatureFlagService:
             flag.is_enabled = not flag.is_enabled
             flag.save()
             self._bump_scope_version(service, environment)
+            logger.info("Toggled feature flag %s/%s/%s to %s", service, environment, name, flag.is_enabled)
             return flag
         except (FeatureFlag.DoesNotExist, Application.DoesNotExist, Environment.DoesNotExist):
+            logger.warning("Feature flag toggle failed: %s/%s/%s not found", service, environment, name)
             return None

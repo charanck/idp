@@ -2,9 +2,12 @@
 Activity logging utility - Simplified
 """
 import json
+import logging
 from typing import Optional, Any
 from django.http import HttpRequest
 from config_management.models import Activity
+
+logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request: HttpRequest) -> Optional[str]:
@@ -24,25 +27,40 @@ def log_activity(
     request: HttpRequest = None,
     details: Any = None
 ):
-    """Log an activity to the database"""
+    """Log an activity to the database.
+
+    Audit writes must never take down the request they're describing (e.g. a
+    momentary DB blip shouldn't turn a successful config update into a 500),
+    so failures are logged loudly instead of raised.
+    """
     if not user_email and request and hasattr(request, 'user') and request.user.is_authenticated:
         user_email = request.user.email
-    
+
     ip_address = get_client_ip(request) if request else None
-    
+
     details_str = None
     if details:
-        details_str = json.dumps(details) if isinstance(details, (dict, list)) else str(details)
-    
-    Activity.objects.create(
-        type=type,
-        resource=resource,
-        resource_id=str(resource_id),
-        resource_name=resource_name,
-        user_email=user_email,
-        ip_address=ip_address,
-        details=details_str
-    )
+        try:
+            details_str = json.dumps(details) if isinstance(details, (dict, list)) else str(details)
+        except (TypeError, ValueError):
+            logger.warning("Failed to serialize activity details for %s/%s", resource, resource_id, exc_info=True)
+            details_str = str(details)
+
+    try:
+        Activity.objects.create(
+            type=type,
+            resource=resource,
+            resource_id=str(resource_id),
+            resource_name=resource_name,
+            user_email=user_email,
+            ip_address=ip_address,
+            details=details_str
+        )
+    except Exception:
+        logger.error(
+            "Failed to record activity: type=%s resource=%s resource_id=%s user=%s",
+            type, resource, resource_id, user_email, exc_info=True
+        )
 
 
 # Convenience functions
@@ -68,3 +86,13 @@ def log_login(user_email: str, request: HttpRequest = None, details: Any = None)
 
 def log_logout(user_email: str, request: HttpRequest = None):
     log_activity('logout', 'user', user_email, user_email, user_email=user_email, request=request)
+
+
+def log_login_failed(identifier: str, request: HttpRequest = None, details: Any = None):
+    """Record a failed authentication attempt (bad password, unknown user, etc.)."""
+    log_activity('login_failed', 'user', identifier, identifier, user_email=identifier, request=request, details=details)
+
+
+def log_auth_failed(resource: str, identifier: str, request: HttpRequest = None, details: Any = None):
+    """Record a failed non-user authentication attempt (e.g. an invalid S2S API key)."""
+    log_activity('auth_failed', resource, identifier, identifier, request=request, details=details)

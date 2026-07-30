@@ -170,6 +170,8 @@ class Activity(models.Model):
         ("toggle", "Toggle"),
         ("login", "Login"),
         ("logout", "Logout"),
+        ("login_failed", "Login Failed"),
+        ("auth_failed", "Authentication Failed"),
     ]
 
     RESOURCE_CHOICES = [

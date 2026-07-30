@@ -18,7 +18,7 @@ from authentication.services import AuthService
 from authentication.oauth_service import OAuthService
 from config_management.models import Application, ConfigEntry, Environment, FeatureFlag, Activity
 from config_management.services import ConfigService, FeatureFlagService
-from common.activity_logger import log_create, log_update, log_delete, log_toggle, log_login, log_logout
+from common.activity_logger import log_create, log_update, log_delete, log_toggle, log_login, log_logout, log_login_failed
 
 from .forms import (
     LoginForm,
@@ -88,6 +88,9 @@ def login_view(request):
             log_login(user.email, request, details='Web UI login')
             return redirect('web_ui:dashboard')
         else:
+            attempted_email = request.POST.get('username', '')
+            logger.warning("Web UI login failed for %s", attempted_email)
+            log_login_failed(attempted_email, request, details='Web UI login')
             messages.error(request, 'Invalid email or password.')
     else:
         form = LoginForm()
