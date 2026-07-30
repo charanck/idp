@@ -34,6 +34,8 @@ class SecretResponse(BaseModel):
 
 
 class FeatureFlagCreateRequest(BaseModel):
+    service: str = Field(min_length=1)
+    environment: str = ""
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
     is_enabled: bool = False
@@ -41,6 +43,9 @@ class FeatureFlagCreateRequest(BaseModel):
 
 class FeatureFlagResponse(BaseModel):
     id: str
+    service: str
+    environment: str
     name: str
     description: str
     is_enabled: bool
+    created_count: int = 1

@@ -11,6 +11,18 @@
                     <h4><i class="bi bi-sliders"></i> {{ action }} Config/Secret</h4>
                 </div>
                 <div class="card-body">
+                    {% if source_config %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-files"></i>
+                        Cloning from <code>{{ source_config.application.name }}/{{ source_config.environment.name }}/{{ source_config.key }}</code>
+                    </div>
+                    {% endif %}
+                    {% if action == 'Edit' and config and config.is_secret %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-shield-lock"></i>
+                        Secret values are not displayed. Provide the full replacement value to update this secret.
+                    </div>
+                    {% endif %}
                     <form method="post">
                         {% csrf_token %}
                         
@@ -47,7 +59,11 @@
                             {% if form.value.errors %}
                                 <div class="text-danger">{{ form.value.errors }}</div>
                             {% endif %}
+                            {% if action == 'Edit' and config and config.is_secret %}
+                            <div class="form-text">Enter the complete new secret value. Existing value is never revealed.</div>
+                            {% else %}
                             <div class="form-text">Configuration value</div>
+                            {% endif %}
                         </div>
 
                         <div class="mb-3">
@@ -70,13 +86,20 @@
                             <div class="form-text">Check this box if the value should be treated as a secret (hidden in UI)</div>
                         </div>
 
-                        <div class="d-flex justify-content-between">
+                        <div class="d-flex justify-content-between flex-wrap gap-2">
                             <a href="{% url 'web_ui:configs_list' %}" class="btn btn-secondary">
                                 <i class="bi bi-arrow-left"></i> Cancel
                             </a>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-check-circle"></i> {{ action }}
-                            </button>
+                            <div class="d-flex gap-2">
+                                {% if action != 'Edit' %}
+                                <button type="submit" class="btn btn-outline-primary" name="submit_action" value="create_all_env">
+                                    <i class="bi bi-collection"></i> Create for All Environments
+                                </button>
+                                {% endif %}
+                                <button type="submit" class="btn btn-primary" name="submit_action" value="create_single">
+                                    <i class="bi bi-check-circle"></i> {{ action }}
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>

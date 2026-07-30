@@ -33,11 +33,11 @@ class ConfigEntryAdmin(admin.ModelAdmin):
 
 @admin.register(FeatureFlag)
 class FeatureFlagAdmin(admin.ModelAdmin):
-    list_display = ["name", "is_enabled", "created_at", "deleted_at"]
-    list_filter = ["is_enabled"]
-    search_fields = ["name", "description"]
+    list_display = ["name", "application", "environment", "is_enabled", "created_at", "deleted_at"]
+    list_filter = ["application", "environment", "is_enabled"]
+    search_fields = ["name", "description", "application__name", "environment__name"]
     readonly_fields = ["id", "created_at", "updated_at"]
-    ordering = ["name"]
+    ordering = ["application__name", "environment__name", "name"]
 
 
 @admin.register(Activity)

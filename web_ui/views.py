@@ -1,6 +1,8 @@
 """
 Web UI views with full CRUD functionality
 """
+from collections import defaultdict
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -482,6 +484,40 @@ def environment_delete(request, pk):
 
 
 # Configs Management (includes secrets via is_secret field)
+def _upsert_config_from_form(form):
+    """Persist a single config entry from cleaned form data."""
+    cleaned = form.cleaned_data
+    return config_service.upsert_config(
+        service=cleaned['application'].name,
+        environment=cleaned['environment'].name,
+        key=cleaned['key'],
+        value=cleaned['value'],
+        is_secret=cleaned['is_secret'],
+        config_type=cleaned['type'],
+    )
+
+
+def _upsert_config_for_all_environments(form):
+    """Persist config entry for all environments in selected application."""
+    cleaned = form.cleaned_data
+    application = cleaned['application']
+    environments = Environment.objects.filter(application=application).order_by('name')
+    created_or_updated = 0
+
+    for env in environments:
+        config_service.upsert_config(
+            service=application.name,
+            environment=env.name,
+            key=cleaned['key'],
+            value=cleaned['value'],
+            is_secret=cleaned['is_secret'],
+            config_type=cleaned['type'],
+        )
+        created_or_updated += 1
+
+    return created_or_updated
+
+
 @login_required
 def configs_list(request):
     """List all configs and secrets"""
@@ -512,7 +548,45 @@ def configs_list(request):
     if application_filter:
         environments = environments.filter(application_id=application_filter)
 
-    paginator = Paginator(configs, 20)
+    grouped_configs_map = defaultdict(list)
+    for config in configs:
+        config.display_value = (
+            '***ENCRYPTED***'
+            if config.is_secret
+            else config_service.decrypt_config_value_or_original(config)
+        )
+        group_key = (
+            str(config.application_id),
+            config.application.name,
+            config.key,
+            config.is_secret,
+            config.type,
+        )
+        grouped_configs_map[group_key].append(config)
+
+    grouped_configs = []
+    for group_key, entries in grouped_configs_map.items():
+        _, application_name, key, is_secret, config_type = group_key
+        grouped_configs.append(
+            {
+                'application_name': application_name,
+                'key': key,
+                'is_secret': is_secret,
+                'type': config_type,
+                'entries': sorted(entries, key=lambda item: item.environment.name.lower()),
+                'env_count': len(entries),
+            }
+        )
+
+    grouped_configs.sort(
+        key=lambda group: (
+            group['application_name'].lower(),
+            group['key'].lower(),
+            group['type'].lower(),
+        )
+    )
+
+    paginator = Paginator(grouped_configs, 20)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
@@ -531,12 +605,27 @@ def configs_list(request):
 def config_create(request):
     """Create new config"""
     if request.method == 'POST':
+        submit_action = request.POST.get('submit_action', 'create_single')
         form = ConfigEntryForm(request.POST)
+        if submit_action == 'create_all_env':
+            form.fields['environment'].required = False
         if form.is_valid():
-            config = form.save()
-            config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
-            log_create('config', str(config.id), config_name, request, details={'is_secret': config.is_secret})
-            messages.success(request, 'Config created successfully.')
+            if submit_action == 'create_all_env':
+                count = _upsert_config_for_all_environments(form)
+                cleaned = form.cleaned_data
+                log_create(
+                    'config',
+                    f"{cleaned['application'].id}:{cleaned['key']}",
+                    f"{cleaned['application'].name}/ALL/{cleaned['key']}",
+                    request,
+                    details={'is_secret': cleaned['is_secret'], 'create_all_env': True, 'count': count},
+                )
+                messages.success(request, f'Config/secret created or updated in {count} environments.')
+            else:
+                config = _upsert_config_from_form(form)
+                config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
+                log_create('config', str(config.id), config_name, request, details={'is_secret': config.is_secret})
+                messages.success(request, 'Config created successfully.')
             return redirect('web_ui:configs_list')
     else:
         form = ConfigEntryForm()
@@ -548,6 +637,64 @@ def config_create(request):
 
 
 @login_required
+def config_clone(request, pk):
+    """Clone config/secret to another scope"""
+    source = get_object_or_404(ConfigEntry, pk=pk)
+
+    if request.method == 'POST':
+        submit_action = request.POST.get('submit_action', 'create_single')
+        form = ConfigEntryForm(request.POST)
+        if submit_action == 'create_all_env':
+            form.fields['environment'].required = False
+        if form.is_valid():
+            if submit_action == 'create_all_env':
+                count = _upsert_config_for_all_environments(form)
+                cleaned = form.cleaned_data
+                log_create(
+                    'config',
+                    f"{cleaned['application'].id}:{cleaned['key']}:clone-all",
+                    f"{cleaned['application'].name}/ALL/{cleaned['key']}",
+                    request,
+                    details={
+                        'is_secret': cleaned['is_secret'],
+                        'create_all_env': True,
+                        'source_config_id': str(source.id),
+                        'count': count,
+                    },
+                )
+                messages.success(request, f'Cloned to {count} environments successfully.')
+            else:
+                config = _upsert_config_from_form(form)
+                config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
+                log_create(
+                    'config',
+                    str(config.id),
+                    config_name,
+                    request,
+                    details={'is_secret': config.is_secret, 'source_config_id': str(source.id)},
+                )
+                messages.success(request, 'Config/secret cloned successfully.')
+            return redirect('web_ui:configs_list')
+    else:
+        form = ConfigEntryForm(
+            initial={
+                'application': source.application_id,
+                'environment': source.environment_id,
+                'key': source.key,
+                'value': '' if source.is_secret else config_service.decrypt_config_value_or_original(source),
+                'type': source.type,
+                'is_secret': source.is_secret,
+            }
+        )
+
+    return render(request, 'web_ui/config_form.html', {
+        'form': form,
+        'action': 'Clone',
+        'source_config': source,
+    })
+
+
+@login_required
 def config_edit(request, pk):
     """Edit config"""
     config = get_object_or_404(ConfigEntry, pk=pk)
@@ -555,13 +702,25 @@ def config_edit(request, pk):
     if request.method == 'POST':
         form = ConfigEntryForm(request.POST, instance=config)
         if form.is_valid():
-            config = form.save()
+            cleaned = form.cleaned_data
+            config.application = cleaned['application']
+            config.environment = cleaned['environment']
+            config.key = cleaned['key']
+            config.value = config_service.encryption_service.encrypt_for_storage(cleaned['value'])
+            config.type = cleaned['type']
+            config.is_secret = cleaned['is_secret']
+            config.save()
             config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
             log_update('config', str(config.id), config_name, request, details={'is_secret': config.is_secret})
             messages.success(request, 'Config updated successfully.')
             return redirect('web_ui:configs_list')
     else:
-        form = ConfigEntryForm(instance=config)
+        form = ConfigEntryForm(
+            instance=config,
+            initial={
+                'value': '' if config.is_secret else config_service.decrypt_config_value_or_original(config),
+            },
+        )
     
     return render(request, 'web_ui/config_form.html', {
         'form': form,
@@ -590,19 +749,69 @@ def config_delete(request, pk):
 @login_required
 def flags_list(request):
     """List all feature flags"""
-    flags = FeatureFlag.objects.filter(deleted_at__isnull=True).order_by('name')
-    
+    application_filter = request.GET.get('application', '')
+    env_filter = request.GET.get('environment', '')
     search_query = request.GET.get('search', '')
+    flags = FeatureFlag.objects.select_related('application', 'environment').filter(
+        deleted_at__isnull=True
+    ).order_by('application__name', 'environment__name', 'name')
+
+    if application_filter:
+        flags = flags.filter(application_id=application_filter)
+    if env_filter:
+        flags = flags.filter(environment_id=env_filter)
     if search_query:
         flags = flags.filter(name__icontains=search_query)
-    
-    paginator = Paginator(flags, 20)
+
+    applications = Application.objects.all().order_by('name')
+    environments = Environment.objects.select_related('application').all().order_by('application__name', 'name')
+    if application_filter:
+        environments = environments.filter(application_id=application_filter)
+
+    grouped_flags_map = defaultdict(list)
+    for flag in flags:
+        group_key = (
+            str(flag.application_id),
+            flag.application.name,
+            flag.name,
+            (flag.description or '').strip(),
+        )
+        grouped_flags_map[group_key].append(flag)
+
+    grouped_flags = []
+    for group_key, entries in grouped_flags_map.items():
+        _, application_name, flag_name, description = group_key
+        sorted_entries = sorted(entries, key=lambda item: item.environment.name.lower())
+        enabled_count = sum(1 for item in sorted_entries if item.is_enabled)
+        grouped_flags.append(
+            {
+                'application_name': application_name,
+                'name': flag_name,
+                'description': description,
+                'entries': sorted_entries,
+                'enabled_count': enabled_count,
+                'total_count': len(sorted_entries),
+            }
+        )
+
+    grouped_flags.sort(
+        key=lambda group: (
+            group['application_name'].lower(),
+            group['name'].lower(),
+        )
+    )
+
+    paginator = Paginator(grouped_flags, 20)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-    
+
     return render(request, 'web_ui/flags_list.html', {
         'page_obj': page_obj,
-        'search_query': search_query
+        'search_query': search_query,
+        'applications': applications,
+        'environments': environments,
+        'application_filter': application_filter,
+        'env_filter': env_filter,
     })
 
 
@@ -612,17 +821,34 @@ def flag_create(request):
     if request.method == 'POST':
         form = FeatureFlagForm(request.POST)
         if form.is_valid():
+            application = form.cleaned_data['application']
             try:
-                flag = flag_service.create_flag(
+                created_flags = flag_service.create_flag(
+                    service=application.name,
                     name=form.cleaned_data['name'],
-                    description=form.cleaned_data.get('description', ''),
-                    is_enabled=form.cleaned_data.get('is_enabled', False)
+                    description=form.cleaned_data.get('description') or '',
+                    is_enabled=form.cleaned_data['is_enabled'],
+                    create_all_environments=True,
                 )
-                log_create('flag', str(flag.id), flag.name, request, details={'is_enabled': flag.is_enabled})
-                messages.success(request, 'Feature flag created successfully.')
-                return redirect('web_ui:flags_list')
-            except ValueError as e:
-                messages.error(request, str(e))
+            except ValueError as exc:
+                form.add_error(None, str(exc))
+                return render(request, 'web_ui/flag_form.html', {'form': form})
+            flag_name = f'{application.name}/ALL/{form.cleaned_data["name"]}'
+            log_create(
+                'flag',
+                f'{application.id}:{form.cleaned_data["name"]}',
+                flag_name,
+                request,
+                details={
+                    'is_enabled': form.cleaned_data['is_enabled'],
+                    'created_count': len(created_flags),
+                },
+            )
+            messages.success(
+                request,
+                f'Feature flag created for {len(created_flags)} environment(s).',
+            )
+            return redirect('web_ui:flags_list')
     else:
         form = FeatureFlagForm()
     
@@ -635,10 +861,11 @@ def flag_toggle(request, pk):
     flag = get_object_or_404(FeatureFlag, pk=pk, deleted_at__isnull=True)
     flag.is_enabled = not flag.is_enabled
     flag.save()
-    log_toggle('flag', str(flag.id), flag.name, request, details={'is_enabled': flag.is_enabled})
+    flag_name = f'{flag.application.name}/{flag.environment.name}/{flag.name}'
+    log_toggle('flag', str(flag.id), flag_name, request, details={'is_enabled': flag.is_enabled})
     
     status = 'enabled' if flag.is_enabled else 'disabled'
-    messages.success(request, f'Feature flag {flag.name} {status}.')
+    messages.success(request, f'Feature flag {flag_name} {status}.')
     return redirect('web_ui:flags_list')
 
 
@@ -649,7 +876,7 @@ def flag_delete(request, pk):
     flag = get_object_or_404(FeatureFlag, pk=pk, deleted_at__isnull=True)
     
     if request.method == 'POST':
-        flag_name = flag.name
+        flag_name = f'{flag.application.name}/{flag.environment.name}/{flag.name}'
         flag.deleted_at = timezone.now()
         flag.save()
         log_delete('flag', str(pk), flag_name, request)

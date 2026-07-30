@@ -46,6 +46,7 @@ urlpatterns = [
     # Configs (includes secrets via is_secret field)
     path('configs/', views.configs_list, name='configs_list'),
     path('configs/create/', views.config_create, name='config_create'),
+    path('configs/<uuid:pk>/clone/', views.config_clone, name='config_clone'),
     path('configs/<uuid:pk>/edit/', views.config_edit, name='config_edit'),
     path('configs/<uuid:pk>/delete/', views.config_delete, name='config_delete'),
     

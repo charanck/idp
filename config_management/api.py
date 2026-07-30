@@ -117,28 +117,37 @@ def get_secret(request: HttpRequest, key: str):
 def create_feature_flag(request: HttpRequest, payload: FeatureFlagCreateRequest):
     """Create a new feature flag"""
     try:
-        flag = flag_service.create_flag(
+        flags = flag_service.create_flag(
+            service=payload.service,
             name=payload.name,
             description=payload.description,
-            is_enabled=payload.is_enabled
+            is_enabled=payload.is_enabled,
+            environment=payload.environment or None,
+            create_all_environments=True,
         )
+        flag = flags[0]
         return FeatureFlagResponse(
             id=str(flag.id),
+            service=flag.application.name,
+            environment=flag.environment.name,
             name=flag.name,
             description=flag.description or "",
-            is_enabled=flag.is_enabled
+            is_enabled=flag.is_enabled,
+            created_count=len(flags),
         )
     except ValueError as e:
         raise HttpError(409, str(e))
 
 
 @router.get("/feature-flags", response=List[FeatureFlagResponse], auth=jwt_auth, tags=["feature-flags"])
-def list_feature_flags(request: HttpRequest):
-    """List all feature flags"""
-    flags = flag_service.list_flags()
+def list_feature_flags(request: HttpRequest, service: str, environment: str):
+    """List feature flags for a specific service/environment"""
+    flags = flag_service.list_flags(service=service, environment=environment)
     return [
         FeatureFlagResponse(
             id=str(flag.id),
+            service=flag.application.name,
+            environment=flag.environment.name,
             name=flag.name,
             description=flag.description or "",
             is_enabled=flag.is_enabled
@@ -148,13 +157,15 @@ def list_feature_flags(request: HttpRequest):
 
 
 @router.post("/feature-flags/{name}/toggle", response=FeatureFlagResponse, auth=jwt_auth, tags=["feature-flags"])
-def toggle_feature_flag(request: HttpRequest, name: str):
+def toggle_feature_flag(request: HttpRequest, name: str, service: str, environment: str):
     """Toggle a feature flag's enabled state"""
-    flag = flag_service.toggle_flag(name)
+    flag = flag_service.toggle_flag(service=service, environment=environment, name=name)
     if flag is None:
         raise HttpError(404, "Feature flag not found")
     return FeatureFlagResponse(
         id=str(flag.id),
+        service=flag.application.name,
+        environment=flag.environment.name,
         name=flag.name,
         description=flag.description or "",
         is_enabled=flag.is_enabled

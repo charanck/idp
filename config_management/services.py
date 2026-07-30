@@ -4,6 +4,8 @@ Config management services - Simplified
 import uuid
 from typing import Dict, List, Optional
 
+from cryptography.fernet import InvalidToken
+
 from common.encryption import EncryptionService
 from config_management.models import Application, ConfigEntry, Environment, FeatureFlag
 
@@ -88,6 +90,13 @@ class ConfigService:
     def decrypt_config_value(self, config: ConfigEntry) -> str:
         """Decrypt a config value for internal use"""
         return self.encryption_service.decrypt_from_storage(config.value)
+
+    def decrypt_config_value_or_original(self, config: ConfigEntry) -> str:
+        """Decrypt value when possible, fallback to original for legacy plaintext rows."""
+        try:
+            return self.decrypt_config_value(config)
+        except InvalidToken:
+            return config.value
 
     def delete_config(self, config_id: str) -> bool:
         """Delete a configuration entry"""
@@ -183,7 +192,20 @@ class FeatureFlagService:
     Feature flag management service
     """
 
-    def create_flag(self, name: str, description: str = "", is_enabled: bool = False) -> FeatureFlag:
+    def _get_scope(self, service: str, environment: str) -> tuple[Application, Environment]:
+        application = Application.objects.get(name=service)
+        env = Environment.objects.get(application=application, name=environment)
+        return application, env
+
+    def create_flag(
+        self,
+        service: str,
+        name: str,
+        description: str = "",
+        is_enabled: bool = False,
+        environment: Optional[str] = None,
+        create_all_environments: bool = True,
+    ) -> List[FeatureFlag]:
         """
         Create a new feature flag
 
@@ -193,22 +215,40 @@ class FeatureFlagService:
             is_enabled: Initial enabled state
 
         Returns:
-            FeatureFlag object
+            List of created/updated FeatureFlag objects
 
         Raises:
-            ValueError: If flag already exists
+            ValueError: If application or environment is invalid
         """
-        if FeatureFlag.objects.filter(name=name, deleted_at__isnull=True).exists():
-            raise ValueError("Feature flag already exists")
+        application = Application.objects.get(name=service)
 
-        return FeatureFlag.objects.create(
-            id=uuid.uuid4(),
-            name=name,
-            description=description,
-            is_enabled=is_enabled,
-        )
+        environments = Environment.objects.filter(application=application).order_by("name")
+        if not create_all_environments:
+            if not environment:
+                raise ValueError("Environment is required when create_all_environments is false")
+            environments = environments.filter(name=environment)
 
-    def get_flag(self, name: str) -> Optional[FeatureFlag]:
+        environments = list(environments)
+        if not environments:
+            raise ValueError("No environments found for the selected application")
+
+        flags: List[FeatureFlag] = []
+        for env in environments:
+            flag, _ = FeatureFlag.objects.update_or_create(
+                application=application,
+                environment=env,
+                name=name,
+                defaults={
+                    "description": description,
+                    "is_enabled": is_enabled,
+                    "deleted_at": None,
+                },
+            )
+            flags.append(flag)
+
+        return flags
+
+    def get_flag(self, service: str, environment: str, name: str) -> Optional[FeatureFlag]:
         """
         Get a feature flag by name
 
@@ -219,20 +259,37 @@ class FeatureFlagService:
             FeatureFlag object if found, None otherwise
         """
         try:
-            return FeatureFlag.objects.get(name=name, deleted_at__isnull=True)
-        except FeatureFlag.DoesNotExist:
+            application, env = self._get_scope(service, environment)
+            return FeatureFlag.objects.get(
+                application=application,
+                environment=env,
+                name=name,
+                deleted_at__isnull=True,
+            )
+        except (FeatureFlag.DoesNotExist, Application.DoesNotExist, Environment.DoesNotExist):
             return None
 
-    def list_flags(self) -> List[FeatureFlag]:
+    def list_flags(self, service: str, environment: str) -> List[FeatureFlag]:
         """
         List all active feature flags
 
         Returns:
             List of FeatureFlag objects
         """
-        return list(FeatureFlag.objects.filter(deleted_at__isnull=True))
+        try:
+            application, env = self._get_scope(service, environment)
+        except (Application.DoesNotExist, Environment.DoesNotExist):
+            return []
 
-    def toggle_flag(self, name: str) -> Optional[FeatureFlag]:
+        return list(
+            FeatureFlag.objects.filter(
+                application=application,
+                environment=env,
+                deleted_at__isnull=True,
+            )
+        )
+
+    def toggle_flag(self, service: str, environment: str, name: str) -> Optional[FeatureFlag]:
         """
         Toggle a feature flag's enabled state
 
@@ -243,9 +300,15 @@ class FeatureFlagService:
             Updated FeatureFlag object if found, None otherwise
         """
         try:
-            flag = FeatureFlag.objects.get(name=name, deleted_at__isnull=True)
+            application, env = self._get_scope(service, environment)
+            flag = FeatureFlag.objects.get(
+                application=application,
+                environment=env,
+                name=name,
+                deleted_at__isnull=True,
+            )
             flag.is_enabled = not flag.is_enabled
             flag.save()
             return flag
-        except FeatureFlag.DoesNotExist:
+        except (FeatureFlag.DoesNotExist, Application.DoesNotExist, Environment.DoesNotExist):
             return None

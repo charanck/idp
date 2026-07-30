@@ -65,7 +65,7 @@
     <!-- Info Alert -->
     <div class="alert alert-info">
         <i class="bi bi-info-circle"></i>
-        <strong>Tip:</strong> Secret values are hidden by default for security. Click "Show" to reveal them temporarily.
+        <strong>Tip:</strong> Secret values are never shown in UI and are displayed only as encrypted placeholders.
     </div>
 
     <!-- Configs/Secrets Table -->
@@ -73,57 +73,59 @@
         <div class="card">
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-hover">
+                    <table class="table table-sm table-hover cp-table-dense mb-0">
                         <thead>
                             <tr>
-                                <th>Type</th>
                                 <th>Application</th>
-                                <th>Environment</th>
                                 <th>Key</th>
-                                <th>Value</th>
+                                <th>Type</th>
                                 <th>Data Type</th>
-                                <th>Actions</th>
+                                <th>Environment Values</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for config in page_obj %}
+                            {% for group in page_obj %}
                                 <tr>
                                     <td>
-                                        {% if config.is_secret %}
-                                            <span class="badge bg-danger">
-                                                <i class="bi bi-shield-lock"></i> Secret
-                                            </span>
+                                        <code>{{ group.application_name }}</code>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <code>{{ group.key }}</code>
+                                            <span class="badge text-bg-light border">{{ group.env_count }} env</span>
+                                        </div>
+                                        <div class="cp-group-meta">Scoped key</div>
+                                    </td>
+                                    <td>
+                                        {% if group.is_secret %}
+                                            <span class="badge bg-danger"><i class="bi bi-shield-lock"></i> Secret</span>
                                         {% else %}
-                                            <span class="badge bg-primary">
-                                                <i class="bi bi-sliders"></i> Config
-                                            </span>
+                                            <span class="badge bg-primary"><i class="bi bi-sliders"></i> Config</span>
                                         {% endif %}
                                     </td>
-                                    <td><code>{{ config.application.name }}</code></td>
-                                    <td><code>{{ config.environment.name }}</code></td>
-                                    <td><code>{{ config.key }}</code></td>
                                     <td>
-                                        {% if config.is_secret %}
-                                            <span class="text-muted" id="value-{{ config.id }}">••••••••</span>
-                                            <button class="btn btn-sm btn-outline-secondary" 
-                                                    onclick="toggleSecret('{{ config.id }}', '{{ config.value|escapejs }}')"
-                                                    id="btn-{{ config.id }}">
-                                                <i class="bi bi-eye"></i> Show
-                                            </button>
-                                        {% else %}
-                                            <code>{{ config.value|truncatechars:50 }}</code>
-                                        {% endif %}
+                                        <span class="badge bg-secondary">{{ group.type }}</span>
                                     </td>
-                                    <td><span class="badge bg-secondary">{{ config.type }}</span></td>
                                     <td>
-                                        <a href="{% url 'web_ui:config_edit' config.id %}" 
-                                           class="btn btn-sm btn-warning">
-                                            <i class="bi bi-pencil"></i>
-                                        </a>
-                                        <a href="{% url 'web_ui:config_delete' config.id %}" 
-                                           class="btn btn-sm btn-danger">
-                                            <i class="bi bi-trash"></i>
-                                        </a>
+                                        <div class="cp-group-stack">
+                                            {% for config in group.entries %}
+                                            <div class="cp-group-item">
+                                                <div class="d-flex align-items-center flex-wrap gap-2">
+                                                    <span class="badge text-bg-light border">{{ config.environment.name }}</span>
+                                                    {% if config.is_secret %}
+                                                        <code>***ENCRYPTED***</code>
+                                                    {% else %}
+                                                        <code>{{ config.display_value|truncatechars:70 }}</code>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="{% url 'web_ui:config_edit' config.id %}" class="btn btn-outline-warning"><i class="bi bi-pencil"></i></a>
+                                                    <a href="{% url 'web_ui:config_clone' config.id %}" class="btn btn-outline-info"><i class="bi bi-files"></i></a>
+                                                    <a href="{% url 'web_ui:config_delete' config.id %}" class="btn btn-outline-danger"><i class="bi bi-trash"></i></a>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
                                     </td>
                                 </tr>
                             {% endfor %}
@@ -178,18 +180,4 @@
     {% endif %}
 </div>
 
-<script>
-    function toggleSecret(configId, value) {
-        const valueSpan = document.getElementById('value-' + configId);
-        const btn = document.getElementById('btn-' + configId);
-        
-        if (valueSpan.textContent === '••••••••') {
-            valueSpan.textContent = value;
-            btn.innerHTML = '<i class="bi bi-eye-slash"></i> Hide';
-        } else {
-            valueSpan.textContent = '••••••••';
-            btn.innerHTML = '<i class="bi bi-eye"></i> Show';
-        }
-    }
-</script>
 {% endblock %}

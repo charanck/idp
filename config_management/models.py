@@ -117,7 +117,17 @@ class FeatureFlag(models.Model):
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=120, unique=True, db_index=True)
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name="feature_flags",
+    )
+    environment = models.ForeignKey(
+        Environment,
+        on_delete=models.CASCADE,
+        related_name="feature_flags",
+    )
+    name = models.CharField(max_length=120, db_index=True)
     description = models.TextField(blank=True, null=True)
     is_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -128,9 +138,21 @@ class FeatureFlag(models.Model):
         db_table = "feature_flags"
         verbose_name = "Feature Flag"
         verbose_name_plural = "Feature Flags"
+        unique_together = [["application", "environment", "name"]]
+        indexes = [
+            models.Index(fields=["application", "environment", "name"]),
+        ]
+
+    def clean(self):
+        if (
+            self.application_id
+            and self.environment_id
+            and self.environment.application_id != self.application_id
+        ):
+            raise ValidationError("Selected environment does not belong to selected application.")
 
     def __str__(self):
-        return self.name
+        return f"{self.application.name}/{self.environment.name}/{self.name}"
 
 
 class Activity(models.Model):
