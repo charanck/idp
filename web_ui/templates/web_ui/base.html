@@ -202,20 +202,26 @@
                 <div class="cp-section-title">Overview</div>
                 <ul class="cp-nav">
                     <li><a class="cp-nav-link {% if current == 'dashboard' %}active{% endif %}" href="{% url 'web_ui:dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                    {% if user.is_staff %}
                     <li><a class="cp-nav-link {% if current == 'activity_log' %}active{% endif %}" href="{% url 'web_ui:activity_log' %}"><i class="bi bi-clock-history"></i> Activity</a></li>
+                    {% endif %}
                 </ul>
 
+                {% if user.is_staff %}
                 <div class="cp-section-title">Identity & Access</div>
                 <ul class="cp-nav">
                     <li><a class="cp-nav-link {% if current == 'users_list' or current == 'user_create' or current == 'user_edit' or current == 'user_delete' %}active{% endif %}" href="{% url 'web_ui:users_list' %}"><i class="bi bi-people"></i> Users</a></li>
                     <li><a class="cp-nav-link {% if current == 'clients_list' or current == 'client_create' or current == 'client_detail' %}active{% endif %}" href="{% url 'web_ui:clients_list' %}"><i class="bi bi-server"></i> Service Clients</a></li>
                     <li><a class="cp-nav-link {% if current == 'oauth_providers_list' or current == 'oauth_provider_create' or current == 'oauth_provider_edit' or current == 'oauth_provider_delete' %}active{% endif %}" href="{% url 'web_ui:oauth_providers_list' %}"><i class="bi bi-key"></i> OAuth Providers</a></li>
                 </ul>
+                {% endif %}
 
                 <div class="cp-section-title">Configuration</div>
                 <ul class="cp-nav">
+                    {% if user.is_staff %}
                     <li><a class="cp-nav-link {% if current == 'applications_list' or current == 'application_create' or current == 'application_edit' or current == 'application_delete' %}active{% endif %}" href="{% url 'web_ui:applications_list' %}"><i class="bi bi-grid-1x2"></i> Applications</a></li>
                     <li><a class="cp-nav-link {% if current == 'environments_list' or current == 'environment_create' or current == 'environment_edit' or current == 'environment_delete' %}active{% endif %}" href="{% url 'web_ui:environments_list' %}"><i class="bi bi-diagram-3"></i> Environments</a></li>
+                    {% endif %}
                     <li><a class="cp-nav-link {% if current == 'configs_list' or current == 'config_create' or current == 'config_edit' or current == 'config_delete' %}active{% endif %}" href="{% url 'web_ui:configs_list' %}"><i class="bi bi-sliders"></i> Configs & Secrets</a></li>
                     <li><a class="cp-nav-link {% if current == 'flags_list' or current == 'flag_create' or current == 'flag_delete' %}active{% endif %}" href="{% url 'web_ui:flags_list' %}"><i class="bi bi-flag"></i> Feature Flags</a></li>
                 </ul>

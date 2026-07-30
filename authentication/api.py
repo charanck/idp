@@ -15,18 +15,19 @@ from authentication.schemas import (
 )
 from authentication.services import AuthService
 from common.jwt_utils import create_access_token
-from common.authentication import JWTAuth, APIKeyAuth
+from common.authentication import JWTAuth, JWTAdminAuth, APIKeyAuth
 
 router = Router()
 auth_service = AuthService()
 
 # JWT authentication instance
 jwt_auth = JWTAuth()
+admin_jwt_auth = JWTAdminAuth()
 # API Key authentication instance
 api_key_auth = APIKeyAuth()
 
 
-@router.post("/register", response=UserResponse, tags=["auth"])
+@router.post("/register", response=UserResponse, auth=admin_jwt_auth, tags=["auth"])
 def register_user(request: HttpRequest, payload: RegisterUserRequest):
     """Register a new user"""
     try:
@@ -64,7 +65,7 @@ def get_current_user_info(request: HttpRequest):
     )
 
 
-@router.post("/s2s/clients", response=ServiceClientResponse, auth=jwt_auth, tags=["s2s"])
+@router.post("/s2s/clients", response=ServiceClientResponse, auth=admin_jwt_auth, tags=["s2s"])
 def create_service_client(request: HttpRequest, payload: CreateServiceClientRequest):
     """Create a new service client for S2S authentication"""
     try:

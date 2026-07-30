@@ -2,6 +2,7 @@
 Web UI views with full CRUD functionality
 """
 from collections import defaultdict
+from functools import wraps
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
@@ -34,6 +35,20 @@ auth_service = AuthService()
 config_service = ConfigService()
 flag_service = FeatureFlagService()
 oauth_service = OAuthService()
+
+
+def admin_required(view_func):
+    """Require an authenticated admin/staff user for privileged views."""
+
+    @wraps(view_func)
+    @login_required
+    def _wrapped_view(request, *args, **kwargs):
+        if not request.user.is_staff:
+            messages.error(request, "You do not have permission to access this page.")
+            return redirect('web_ui:dashboard')
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped_view
 
 
 # Home
@@ -82,20 +97,9 @@ def login_view(request):
 
 
 def register_view(request):
-    """User registration"""
-    if request.user.is_authenticated:
-        return redirect('web_ui:dashboard')
-    
-    if request.method == 'POST':
-        form = UserRegisterForm(request.POST)
-        if form.is_valid():
-            user = form.save()
-            messages.success(request, 'Registration successful! Please log in.')
-            return redirect('web_ui:login')
-    else:
-        form = UserRegisterForm()
-    
-    return render(request, 'web_ui/register.html', {'form': form})
+    """Self-registration is disabled; admins create users."""
+    messages.error(request, 'Self-registration is disabled. Contact an administrator.')
+    return redirect('web_ui:login')
 
 
 @login_required
@@ -172,7 +176,7 @@ def dashboard(request):
 
 
 # Users Management
-@login_required
+@admin_required
 def users_list(request):
     """List all users"""
     search_query = request.GET.get('search', '')
@@ -194,7 +198,7 @@ def users_list(request):
     })
 
 
-@login_required
+@admin_required
 def user_create(request):
     """Create new user"""
     if request.method == 'POST':
@@ -213,7 +217,7 @@ def user_create(request):
     })
 
 
-@login_required
+@admin_required
 def user_edit(request, pk):
     """Edit user"""
     user = get_object_or_404(User, pk=pk)
@@ -235,7 +239,7 @@ def user_edit(request, pk):
     })
 
 
-@login_required
+@admin_required
 def user_delete(request, pk):
     """Delete user"""
     user = get_object_or_404(User, pk=pk)
@@ -254,7 +258,7 @@ def user_delete(request, pk):
 
 
 # Service Clients Management
-@login_required
+@admin_required
 def clients_list(request):
     """List all service clients"""
     search_query = request.GET.get('search', '')
@@ -273,7 +277,7 @@ def clients_list(request):
     })
 
 
-@login_required
+@admin_required
 def client_create(request):
     """Create new service client"""
     if request.method == 'POST':
@@ -295,14 +299,14 @@ def client_create(request):
     return render(request, 'web_ui/client_form.html', {'form': form})
 
 
-@login_required
+@admin_required
 def client_detail(request, pk):
     """View service client details"""
     client = get_object_or_404(ServiceClient, pk=pk)
     return render(request, 'web_ui/client_detail.html', {'client': client})
 
 
-@login_required
+@admin_required
 def client_toggle(request, pk):
     """Toggle service client active status"""
     client = get_object_or_404(ServiceClient, pk=pk)
@@ -316,7 +320,7 @@ def client_toggle(request, pk):
 
 
 # Applications Management
-@login_required
+@admin_required
 def applications_list(request):
     """List all applications"""
     search_query = request.GET.get('search', '')
@@ -335,7 +339,7 @@ def applications_list(request):
     })
 
 
-@login_required
+@admin_required
 def application_create(request):
     """Create new application"""
     if request.method == 'POST':
@@ -354,7 +358,7 @@ def application_create(request):
     })
 
 
-@login_required
+@admin_required
 def application_edit(request, pk):
     """Edit application"""
     application = get_object_or_404(Application, pk=pk)
@@ -376,7 +380,7 @@ def application_edit(request, pk):
     })
 
 
-@login_required
+@admin_required
 def application_delete(request, pk):
     """Delete application"""
     application = get_object_or_404(Application, pk=pk)
@@ -392,7 +396,7 @@ def application_delete(request, pk):
 
 
 # Environments Management
-@login_required
+@admin_required
 def environments_list(request):
     """List all environments"""
     search_query = request.GET.get('search', '')
@@ -417,7 +421,7 @@ def environments_list(request):
     })
 
 
-@login_required
+@admin_required
 def environment_create(request):
     """Create new environment"""
     if request.method == 'POST':
@@ -441,7 +445,7 @@ def environment_create(request):
     })
 
 
-@login_required
+@admin_required
 def environment_edit(request, pk):
     """Edit environment"""
     environment = get_object_or_404(Environment, pk=pk)
@@ -468,7 +472,7 @@ def environment_edit(request, pk):
     })
 
 
-@login_required
+@admin_required
 def environment_delete(request, pk):
     """Delete environment"""
     environment = get_object_or_404(Environment, pk=pk)
@@ -887,7 +891,7 @@ def flag_delete(request, pk):
 
 
 # OAuth Providers Management
-@login_required
+@admin_required
 def oauth_providers_list(request):
     """List all OAuth providers"""
     providers_list = OAuthProvider.objects.all().order_by('-created_at')
@@ -902,7 +906,7 @@ def oauth_providers_list(request):
     })
 
 
-@login_required
+@admin_required
 def oauth_provider_create(request):
     """Create new OAuth provider"""
     if request.method == 'POST':
@@ -922,7 +926,7 @@ def oauth_provider_create(request):
     })
 
 
-@login_required
+@admin_required
 def oauth_provider_edit(request, pk):
     """Edit OAuth provider"""
     provider = get_object_or_404(OAuthProvider, id=pk)
@@ -945,7 +949,7 @@ def oauth_provider_edit(request, pk):
     })
 
 
-@login_required
+@admin_required
 def oauth_provider_delete(request, pk):
     """Delete OAuth provider"""
     provider = get_object_or_404(OAuthProvider, id=pk)
@@ -962,7 +966,7 @@ def oauth_provider_delete(request, pk):
     })
 
 
-@login_required
+@admin_required
 def oauth_provider_toggle(request, pk):
     """Toggle OAuth provider active status"""
     provider = get_object_or_404(OAuthProvider, id=pk)
@@ -1036,7 +1040,7 @@ def oauth_callback(request, provider_id):
 
 
 # Activity Log (Readonly)
-@login_required
+@admin_required
 def activity_log(request):
     """View activity log (readonly)"""
     # Get filter parameters

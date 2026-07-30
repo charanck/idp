@@ -14,6 +14,7 @@
 </div>
 
 <div class="row g-4 mb-4">
+    {% if user.is_staff %}
     <div class="col-md-2">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
@@ -62,6 +63,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 
 <div class="row g-4">
@@ -112,13 +114,17 @@
                 <h5 class="mb-0">Quick Links</h5>
             </div>
             <div class="card-body d-grid gap-2">
+                {% if user.is_staff %}
                 <a href="{% url 'web_ui:users_list' %}" class="btn btn-outline-primary"><i class="bi bi-people"></i> Manage Users</a>
                 <a href="{% url 'web_ui:clients_list' %}" class="btn btn-outline-primary"><i class="bi bi-server"></i> Manage Clients</a>
                 <a href="{% url 'web_ui:applications_list' %}" class="btn btn-outline-primary"><i class="bi bi-grid-1x2"></i> Manage Applications</a>
                 <a href="{% url 'web_ui:environments_list' %}" class="btn btn-outline-primary"><i class="bi bi-diagram-3"></i> Manage Environments</a>
+                {% endif %}
                 <a href="{% url 'web_ui:configs_list' %}" class="btn btn-outline-primary"><i class="bi bi-sliders"></i> Manage Configs</a>
                 <a href="{% url 'web_ui:flags_list' %}" class="btn btn-outline-primary"><i class="bi bi-flag"></i> Manage Flags</a>
+                {% if user.is_staff %}
                 <a href="{% url 'web_ui:activity_log' %}" class="btn btn-outline-secondary"><i class="bi bi-clock-history"></i> View Activity Log</a>
+                {% endif %}
             </div>
         </div>
     </div>

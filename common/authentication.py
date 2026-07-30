@@ -33,6 +33,17 @@ class JWTAuth(HttpBearer):
         except (User.DoesNotExist, ValueError):
             return None
 
+
+class JWTAdminAuth(JWTAuth):
+    """JWT authentication restricted to admin/staff users."""
+
+    def authenticate(self, request: HttpRequest, token: str) -> Optional[User]:
+        user = super().authenticate(request, token)
+        if user is None or not user.is_staff:
+            return None
+        return user
+
+
 class APIKeyAuth(APIKeyHeader):
     """Service-to-service API Key authentication."""
 
