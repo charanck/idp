@@ -23,7 +23,7 @@ See [ENCRYPTION_IMPLEMENTATION.md](./ENCRYPTION_IMPLEMENTATION.md) for detailed 
 - **👤 User Authentication**: JWT token-based auth with forced password reset
 - **🔑 S2S Authentication**: API key-based service-to-service authentication
 - **⚙️ Configuration Management**: Multi-environment, per-service configs
-- **🔒 Secret Management**: Secure global secret storage
+- **🔒 Secret Management**: Secrets are handled as secure config entries (`is_secret=true`)
 - **🚩 Feature Flags**: Toggle features with soft delete
 - **🎨 Web UI**: Bootstrap 5 interface with full CRUD operations
 - **📊 Dashboard**: Statistics and recent activity tracking
@@ -234,7 +234,7 @@ python manage.py runserver
 
 ### How It Works
 
-1. **Admin creates config** (JWT auth):
+1. **Admin creates config/secret** (JWT auth):
    ```bash
    POST /api/configs/upsert
    {
@@ -289,7 +289,7 @@ curl -X POST http://127.0.0.1:8000/api/s2s/create-client \
 
 **Response includes encryption_key** - save it securely!
 
-### 2. Get Encrypted Configs (Client)
+### 2. Get Encrypted Configs/Secrets (Client)
 
 ```bash
 curl "http://127.0.0.1:8000/api/configs/list?service=my-service&environment=production" \

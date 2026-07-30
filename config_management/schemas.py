@@ -23,16 +23,6 @@ class ConfigResponse(BaseModel):
     type: str
 
 
-class CreateSecretRequest(BaseModel):
-    key: str = Field(min_length=1)
-    value: str = Field(min_length=1)
-
-
-class SecretResponse(BaseModel):
-    key: str
-    value: str
-
-
 class FeatureFlagCreateRequest(BaseModel):
     service: str = Field(min_length=1)
     environment: str = ""

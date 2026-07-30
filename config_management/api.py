@@ -9,8 +9,6 @@ from typing import List
 from config_management.schemas import (
     ConfigUpsertRequest,
     ConfigResponse,
-    CreateSecretRequest,
-    SecretResponse,
     FeatureFlagCreateRequest,
     FeatureFlagResponse,
 )
@@ -78,39 +76,6 @@ def list_configs_for_client(request: HttpRequest, service: str, environment: str
         )
         for config in configs
     ]
-
-
-@router.post("/secrets/", response=SecretResponse, auth=jwt_auth, tags=["secret"])
-def create_secret(request: HttpRequest, payload: CreateSecretRequest):
-    """Create a global secret"""
-    try:
-        secret = config_service.create_secret(key=payload.key, value=payload.value)
-        return SecretResponse(
-            key=secret.key,
-            value="***ENCRYPTED***"  # Don't return actual value
-        )
-    except ValueError as e:
-        raise HttpError(409, str(e))
-
-
-@router.get("/secrets/{key}", response=SecretResponse, auth=apikey_auth, tags=["secret"])
-def get_secret(request: HttpRequest, key: str):
-    """
-    Get a global secret by key
-    Value is encrypted with the client's encryption key
-    Client must decrypt using their encryption key
-    """
-    # Get client from request (set by APIKeyAuth)
-    client = request.auth
-    
-    secret = config_service.get_secret_for_client(key, client.encryption_key)
-    if secret is None:
-        raise HttpError(404, "Secret not found")
-    
-    return SecretResponse(
-        key=secret['key'],
-        value=secret['value']  # Encrypted for client
-    )
 
 
 @router.post("/feature-flags", response=FeatureFlagResponse, auth=jwt_auth, tags=["feature-flags"])
