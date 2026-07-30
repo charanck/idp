@@ -82,19 +82,16 @@ class AuthService:
         if not api_key:
             return None
 
-        if "." in api_key:
-            key_id, secret = api_key.split('.', 1)
-            if not key_id:
-                return None
-
-            client = ServiceClient.objects.filter(is_active=True, api_key_id=key_id).first()
-            if client and client.api_key_hash and verify_password(secret, client.api_key_hash):
-                return client
+        if "." not in api_key:
             return None
 
-        for client in ServiceClient.objects.filter(is_active=True):
-            if client.api_key_hash and verify_password(api_key, client.api_key_hash):
-                return client
+        key_id, secret = api_key.split('.', 1)
+        if not key_id or not secret:
+            return None
+
+        client = ServiceClient.objects.filter(is_active=True, api_key_id=key_id).first()
+        if client and client.api_key_hash and verify_password(secret, client.api_key_hash):
+            return client
         return None
     
     def get_service_client_by_id(self, client_id: str) -> Optional[ServiceClient]:

@@ -3,6 +3,7 @@ Web UI views with full CRUD functionality
 """
 from collections import defaultdict
 from functools import wraps
+import logging
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
@@ -35,6 +36,7 @@ auth_service = AuthService()
 config_service = ConfigService()
 flag_service = FeatureFlagService()
 oauth_service = OAuthService()
+logger = logging.getLogger(__name__)
 
 
 def admin_required(view_func):
@@ -250,8 +252,8 @@ def user_delete(request, pk):
         else:
             email = user.email
             user.delete()
-        log_delete('user', str(pk), email, request)
-        messages.success(request, f'User {email} deleted successfully.')
+            log_delete('user', str(pk), email, request)
+            messages.success(request, f'User {email} deleted successfully.')
         return redirect('web_ui:users_list')
     
     return render(request, 'web_ui/user_confirm_delete.html', {'user': user})
@@ -1025,6 +1027,7 @@ def oauth_callback(request, provider_id):
     # Get code from callback
     code = request.GET.get('code')
     error = request.GET.get('error')
+    state = request.GET.get('state')
     
     if error:
         messages.error(request, f'OAuth error: {error}')
@@ -1032,6 +1035,11 @@ def oauth_callback(request, provider_id):
     
     if not code:
         messages.error(request, 'No authorization code received.')
+        return redirect('web_ui:login')
+
+    expected_state = request.session.pop(f'oauth_state_{provider_id}', None)
+    if not expected_state or not state or state != expected_state:
+        messages.error(request, 'OAuth state validation failed. Please try again.')
         return redirect('web_ui:login')
     
     try:
@@ -1054,8 +1062,12 @@ def oauth_callback(request, provider_id):
         messages.success(request, f'Successfully logged in with {provider.name}!')
         return redirect('web_ui:dashboard')
         
-    except Exception as e:
-        messages.error(request, f'OAuth login failed: {str(e)}')
+    except ValueError as exc:
+        messages.error(request, f'OAuth login failed: {exc}')
+        return redirect('web_ui:login')
+    except Exception:
+        logger.exception("Unexpected OAuth login failure for provider %s", provider_id)
+        messages.error(request, 'OAuth login failed due to an internal error.')
         return redirect('web_ui:login')
 
 

@@ -61,6 +61,9 @@ class OAuthProvider(models.Model):
         db_table = 'oauth_providers'
         verbose_name = 'OAuth Provider'
         verbose_name_plural = 'OAuth Providers'
+        indexes = [
+            models.Index(fields=['is_active', '-created_at']),
+        ]
     
     def __str__(self):
         return self.name
@@ -104,7 +107,7 @@ class OAuthUserToken(models.Model):
         verbose_name_plural = 'OAuth User Tokens'
         unique_together = [['user', 'provider']]
         indexes = [
-            models.Index(fields=['provider_user_id', 'provider']),
+            models.Index(fields=['provider', 'provider_user_id']),
         ]
     
     def __str__(self):

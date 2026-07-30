@@ -29,6 +29,10 @@ class User(AbstractUser):
         db_table = 'users'
         verbose_name = 'User'
         verbose_name_plural = 'Users'
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['is_active', '-created_at']),
+        ]
     
     def __str__(self):
         return self.email
@@ -67,6 +71,10 @@ class ServiceClient(models.Model):
         db_table = 'service_clients'
         verbose_name = 'Service Client'
         verbose_name_plural = 'Service Clients'
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['is_active', '-created_at']),
+        ]
         
     def __str__(self):
         return self.name
@@ -74,4 +82,3 @@ class ServiceClient(models.Model):
 
 # Import OAuth models here to include them in migrations
 from .oauth_models import OAuthProvider, OAuthUserToken
-

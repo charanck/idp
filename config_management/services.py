@@ -12,6 +12,9 @@ from django.core.cache import cache
 from common.encryption import EncryptionService
 from config_management.models import Application, ConfigEntry, Environment, FeatureFlag
 
+GLOBAL_SECRET_SERVICE = "__global__"
+GLOBAL_SECRET_ENVIRONMENT = "__shared__"
+
 
 class ConfigService:
     """Configuration and secret management service (unified)"""
@@ -102,6 +105,24 @@ class ConfigService:
         except ConfigEntry.DoesNotExist:
             return None
 
+    def get_config_with_scope(self, service: str, environment: str, key: str) -> Optional[ConfigEntry]:
+        """Get a specific configuration with related scope preloaded."""
+        application, env = self._get_scope(service, environment)
+        if not application or not env:
+            return None
+
+        try:
+            return (
+                ConfigEntry.objects.select_related("application", "environment")
+                .get(
+                    application=application,
+                    environment=env,
+                    key=key,
+                )
+            )
+        except ConfigEntry.DoesNotExist:
+            return None
+
     def list_configs(self, service: str, environment: str) -> List[ConfigEntry]:
         """List all configurations for a service/environment"""
         application, env = self._get_scope(service, environment)
@@ -109,7 +130,8 @@ class ConfigService:
             return []
 
         return list(
-            ConfigEntry.objects.filter(
+            ConfigEntry.objects.select_related("application", "environment")
+            .filter(
                 application=application,
                 environment=env,
             )
@@ -146,7 +168,7 @@ class ConfigService:
         client_encryption_key: str,
     ) -> Optional[Dict]:
         """Get a config encrypted for a specific client"""
-        config = self.get_config(service, environment, key)
+        config = self.get_config_with_scope(service, environment, key)
         if not config:
             return None
 
@@ -206,6 +228,32 @@ class ConfigService:
 
         cache.set(cache_key, result, self.cache_timeout)
         return result
+
+    def create_secret(self, key: str, value: str) -> ConfigEntry:
+        """Create or update a global secret."""
+        return self.upsert_config(
+            service=GLOBAL_SECRET_SERVICE,
+            environment=GLOBAL_SECRET_ENVIRONMENT,
+            key=key,
+            value=value,
+            is_secret=True,
+            config_type="string",
+        )
+
+    def get_secret_for_client(self, key: str, client_encryption_key: str) -> Optional[Dict]:
+        """Get a global secret encrypted for a specific client."""
+        secret = self.get_config_for_client(
+            service=GLOBAL_SECRET_SERVICE,
+            environment=GLOBAL_SECRET_ENVIRONMENT,
+            key=key,
+            client_encryption_key=client_encryption_key,
+        )
+        if secret is None:
+            return None
+        return {
+            "key": secret["key"],
+            "value": secret["value"],
+        }
 
     def list_services(self) -> List[str]:
         """List all unique applications used by configs"""
@@ -356,7 +404,8 @@ class FeatureFlagService:
             return cached_flags
 
         flags = list(
-            FeatureFlag.objects.filter(
+            FeatureFlag.objects.select_related("application", "environment")
+            .filter(
                 application=application,
                 environment=env,
                 deleted_at__isnull=True,

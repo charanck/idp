@@ -141,6 +141,8 @@ class FeatureFlag(models.Model):
         unique_together = [["application", "environment", "name"]]
         indexes = [
             models.Index(fields=["application", "environment", "name"]),
+            models.Index(fields=["application", "environment", "deleted_at"]),
+            models.Index(fields=["deleted_at"]),
         ]
 
     def clean(self):
@@ -198,6 +200,7 @@ class Activity(models.Model):
         indexes = [
             models.Index(fields=["-timestamp", "resource"]),
             models.Index(fields=["user_email", "-timestamp"]),
+            models.Index(fields=["resource", "type", "-timestamp"]),
         ]
 
     def __str__(self):
