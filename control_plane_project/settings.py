@@ -48,6 +48,13 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()
+]
+
+# Behind a reverse proxy (Dokploy/Traefik/nginx) that terminates TLS and forwards plain HTTP.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # Cache Configuration (fully optional)
 CACHE_ENABLED = os.getenv('CACHE_ENABLED', 'False').lower() in ('1', 'true', 'yes', 'on')
 CACHE_BACKEND = os.getenv('CACHE_BACKEND', 'redis').lower()
