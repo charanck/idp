@@ -197,6 +197,45 @@ uv lock
 
 ---
 
+## Docker
+
+Build locally:
+
+```bash
+docker build -t control-plane:local .
+```
+
+Run locally:
+
+```bash
+docker run --rm -p 8000:8000 --env-file .env control-plane:local
+```
+
+The container runs migrations at startup and then starts Django on `0.0.0.0:8000`.
+
+## GitHub Container Registry (GHCR) release publishing
+
+A GitHub Actions workflow publishes a container image to GHCR when you push a tag matching:
+
+- `release-*`
+- `release/*`
+
+Example:
+
+```bash
+git tag release-1.0.0
+git push origin release-1.0.0
+```
+
+Published image:
+
+```text
+ghcr.io/<owner>/<repo>:release-1.0.0
+ghcr.io/<owner>/<repo>:latest
+```
+
+---
+
 ```bash
 # 1. Clone repository
 git clone <repository-url>

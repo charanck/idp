@@ -334,7 +334,10 @@ class FeatureFlagService:
         Raises:
             ValueError: If application or environment is invalid
         """
-        application = Application.objects.get(name=service)
+        try:
+            application = Application.objects.get(name=service)
+        except Application.DoesNotExist:
+            raise ValueError(f"Application '{service}' does not exist")
 
         environments = Environment.objects.filter(application=application).order_by("name")
         if not create_all_environments:
