@@ -1,10 +1,13 @@
 """
 Config management services - Simplified
 """
+import hashlib
 import uuid
 from typing import Dict, List, Optional
 
 from cryptography.fernet import InvalidToken
+from django.conf import settings
+from django.core.cache import cache
 
 from common.encryption import EncryptionService
 from config_management.models import Application, ConfigEntry, Environment, FeatureFlag
@@ -15,6 +18,7 @@ class ConfigService:
 
     def __init__(self):
         self.encryption_service = EncryptionService()
+        self.cache_timeout = getattr(settings, "CACHE_TIMEOUT", 300)
 
     def _get_or_create_scope(self, service: str, environment: str) -> tuple[Application, Environment]:
         application, _ = Application.objects.get_or_create(name=service)
@@ -33,6 +37,29 @@ class ConfigService:
             return application, None
 
         return application, env
+
+    @staticmethod
+    def _scope_version_key(service: str, environment: str) -> str:
+        return f"config:scope-version:{service}:{environment}"
+
+    def _get_scope_version(self, service: str, environment: str) -> int:
+        version = cache.get(self._scope_version_key(service, environment))
+        return int(version) if version is not None else 1
+
+    def _bump_scope_version(self, service: str, environment: str) -> None:
+        version_key = self._scope_version_key(service, environment)
+        current = cache.get(version_key)
+        if current is None:
+            cache.set(version_key, 2, None)
+            return
+        try:
+            cache.incr(version_key)
+        except ValueError:
+            cache.set(version_key, int(current) + 1, None)
+
+    def invalidate_scope_cache(self, service: str, environment: str) -> None:
+        """Invalidate cached config payloads for a service/environment scope."""
+        self._bump_scope_version(service, environment)
 
     def upsert_config(
         self,
@@ -57,6 +84,7 @@ class ConfigService:
                 "type": config_type,
             },
         )
+        self._bump_scope_version(service, environment)
         return config
 
     def get_config(self, service: str, environment: str, key: str) -> Optional[ConfigEntry]:
@@ -102,7 +130,10 @@ class ConfigService:
         """Delete a configuration entry"""
         try:
             config = ConfigEntry.objects.get(id=uuid.UUID(config_id))
+            service = config.application.name
+            environment = config.environment.name
             config.delete()
+            self._bump_scope_version(service, environment)
             return True
         except (ConfigEntry.DoesNotExist, ValueError):
             return False
@@ -142,6 +173,15 @@ class ConfigService:
         client_encryption_key: str,
     ) -> List[Dict]:
         """List all configs for a service/environment, encrypted for a specific client"""
+        client_key_hash = hashlib.sha256(client_encryption_key.encode("utf-8")).hexdigest()[:16]
+        scope_version = self._get_scope_version(service, environment)
+        cache_key = (
+            f"config:list:{service}:{environment}:{client_key_hash}:v{scope_version}"
+        )
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result
+
         configs = self.list_configs(service, environment)
 
         result = []
@@ -164,6 +204,7 @@ class ConfigService:
                 }
             )
 
+        cache.set(cache_key, result, self.cache_timeout)
         return result
 
     def list_services(self) -> List[str]:
@@ -192,10 +233,36 @@ class FeatureFlagService:
     Feature flag management service
     """
 
+    def __init__(self):
+        self.cache_timeout = getattr(settings, "CACHE_TIMEOUT", 300)
+
     def _get_scope(self, service: str, environment: str) -> tuple[Application, Environment]:
         application = Application.objects.get(name=service)
         env = Environment.objects.get(application=application, name=environment)
         return application, env
+
+    @staticmethod
+    def _scope_version_key(service: str, environment: str) -> str:
+        return f"flag:scope-version:{service}:{environment}"
+
+    def _get_scope_version(self, service: str, environment: str) -> int:
+        version = cache.get(self._scope_version_key(service, environment))
+        return int(version) if version is not None else 1
+
+    def _bump_scope_version(self, service: str, environment: str) -> None:
+        version_key = self._scope_version_key(service, environment)
+        current = cache.get(version_key)
+        if current is None:
+            cache.set(version_key, 2, None)
+            return
+        try:
+            cache.incr(version_key)
+        except ValueError:
+            cache.set(version_key, int(current) + 1, None)
+
+    def invalidate_scope_cache(self, service: str, environment: str) -> None:
+        """Invalidate cached feature-flag lists for a service/environment scope."""
+        self._bump_scope_version(service, environment)
 
     def create_flag(
         self,
@@ -245,6 +312,7 @@ class FeatureFlagService:
                 },
             )
             flags.append(flag)
+            self._bump_scope_version(service, env.name)
 
         return flags
 
@@ -281,13 +349,21 @@ class FeatureFlagService:
         except (Application.DoesNotExist, Environment.DoesNotExist):
             return []
 
-        return list(
+        scope_version = self._get_scope_version(service, environment)
+        cache_key = f"flag:list:{service}:{environment}:v{scope_version}"
+        cached_flags = cache.get(cache_key)
+        if cached_flags is not None:
+            return cached_flags
+
+        flags = list(
             FeatureFlag.objects.filter(
                 application=application,
                 environment=env,
                 deleted_at__isnull=True,
             )
         )
+        cache.set(cache_key, flags, self.cache_timeout)
+        return flags
 
     def toggle_flag(self, service: str, environment: str, name: str) -> Optional[FeatureFlag]:
         """
@@ -309,6 +385,7 @@ class FeatureFlagService:
             )
             flag.is_enabled = not flag.is_enabled
             flag.save()
+            self._bump_scope_version(service, environment)
             return flag
         except (FeatureFlag.DoesNotExist, Application.DoesNotExist, Environment.DoesNotExist):
             return None

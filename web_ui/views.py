@@ -714,6 +714,10 @@ def config_edit(request, pk):
             config.type = cleaned['type']
             config.is_secret = cleaned['is_secret']
             config.save()
+            config_service.invalidate_scope_cache(
+                service=config.application.name,
+                environment=config.environment.name,
+            )
             config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
             log_update('config', str(config.id), config_name, request, details={'is_secret': config.is_secret})
             messages.success(request, 'Config updated successfully.')
@@ -739,9 +743,15 @@ def config_delete(request, pk):
     config = get_object_or_404(ConfigEntry, pk=pk)
     
     if request.method == 'POST':
+        service_name = config.application.name
+        environment_name = config.environment.name
         config_key = config.key
         config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
         config.delete()
+        config_service.invalidate_scope_cache(
+            service=service_name,
+            environment=environment_name,
+        )
         log_delete('config', str(pk), config_name, request)
         messages.success(request, f'Config {config_key} deleted successfully.')
         return redirect('web_ui:configs_list')
@@ -865,6 +875,10 @@ def flag_toggle(request, pk):
     flag = get_object_or_404(FeatureFlag, pk=pk, deleted_at__isnull=True)
     flag.is_enabled = not flag.is_enabled
     flag.save()
+    flag_service.invalidate_scope_cache(
+        service=flag.application.name,
+        environment=flag.environment.name,
+    )
     flag_name = f'{flag.application.name}/{flag.environment.name}/{flag.name}'
     log_toggle('flag', str(flag.id), flag_name, request, details={'is_enabled': flag.is_enabled})
     
@@ -880,9 +894,15 @@ def flag_delete(request, pk):
     flag = get_object_or_404(FeatureFlag, pk=pk, deleted_at__isnull=True)
     
     if request.method == 'POST':
+        service_name = flag.application.name
+        environment_name = flag.environment.name
         flag_name = f'{flag.application.name}/{flag.environment.name}/{flag.name}'
         flag.deleted_at = timezone.now()
         flag.save()
+        flag_service.invalidate_scope_cache(
+            service=service_name,
+            environment=environment_name,
+        )
         log_delete('flag', str(pk), flag_name, request)
         messages.success(request, f'Feature flag {flag_name} deleted successfully.')
         return redirect('web_ui:flags_list')

@@ -109,7 +109,26 @@ ADMIN_EMAIL=admin@example.com
 # Optional
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
+
+# Cache (fully optional; disabled by default)
+# CACHE_ENABLED=false
+
+# To enable cache:
+CACHE_ENABLED=true
+CACHE_BACKEND=redis
+CACHE_TIMEOUT=300
+CACHE_KEY_PREFIX=control_plane
+REDIS_URL=redis://127.0.0.1:6379/1
+
+# Local-memory backend option
+# CACHE_BACKEND=locmem
 ```
+
+When cache is enabled, the app currently caches:
+- `GET /api/config/configs/list` responses (scoped by service + environment + client encryption key hash)
+- `GET /api/config/feature-flags` responses (scoped by service + environment)
+
+Caches are invalidated automatically when related config/flag values are changed via API or UI.
 
 6. **Run database migrations**
 ```bash

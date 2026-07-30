@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 # Load environment variables from .env file
 load_dotenv()
@@ -46,6 +47,42 @@ if not MASTER_ENCRYPTION_KEY:
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+# Cache Configuration (fully optional)
+CACHE_ENABLED = os.getenv('CACHE_ENABLED', 'False').lower() in ('1', 'true', 'yes', 'on')
+CACHE_BACKEND = os.getenv('CACHE_BACKEND', 'redis').lower()
+CACHE_TIMEOUT = int(os.getenv('CACHE_TIMEOUT', '300'))
+CACHE_KEY_PREFIX = os.getenv('CACHE_KEY_PREFIX', 'control_plane')
+REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/1')
+
+if not CACHE_ENABLED:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
+        }
+    }
+elif CACHE_BACKEND == 'redis':
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+            'TIMEOUT': CACHE_TIMEOUT,
+            'KEY_PREFIX': CACHE_KEY_PREFIX,
+        }
+    }
+elif CACHE_BACKEND == 'locmem':
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'control-plane-local-cache',
+            'TIMEOUT': CACHE_TIMEOUT,
+            'KEY_PREFIX': CACHE_KEY_PREFIX,
+        }
+    }
+else:
+    raise ImproperlyConfigured(
+        "Invalid CACHE_BACKEND value. Supported values: redis, locmem."
+    )
 
 
 # Application definition
