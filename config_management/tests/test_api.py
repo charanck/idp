@@ -77,6 +77,72 @@ class TestUpsertConfigEndpoint:
         assert config_service.decrypt_config_value(stored) == "https://v2"
 
 
+class TestConfigHistoryAndRollbackEndpoints:
+    def test_history_requires_jwt_auth(self, client):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1")
+        response = client.get(f"/api/v1/config/configs/{entry.id}/history")
+        assert response.status_code == 401
+
+    def test_history_lists_versions_newest_first_with_decrypted_values(self, client, user_headers):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1")
+        config_service.upsert_config("payments", "prod", "API_URL", "https://v2")
+
+        response = client.get(f"/api/v1/config/configs/{entry.id}/history", **user_headers)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [v["action"] for v in body] == ["update", "create"]
+        assert body[0]["value"] == "https://v2"
+        assert body[1]["value"] == "https://v1"
+
+    def test_history_never_exposes_secret_values(self, client, user_headers):
+        entry = config_service.upsert_config("payments", "prod", "DB_PASSWORD", "s3cret", is_secret=True)
+
+        response = client.get(f"/api/v1/config/configs/{entry.id}/history", **user_headers)
+
+        body = response.json()
+        assert body[0]["is_secret"] is True
+        assert body[0]["value"] is None
+
+    def test_rollback_restores_prior_value(self, client, user_headers):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1")
+        config_service.upsert_config("payments", "prod", "API_URL", "https://v2")
+
+        response = client.post(
+            f"/api/v1/config/configs/{entry.id}/rollback",
+            data={"version": 1},
+            content_type="application/json",
+            **user_headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["value"] == "***ENCRYPTED***"
+
+        stored = config_service.get_config("payments", "prod", "API_URL")
+        assert config_service.decrypt_config_value(stored) == "https://v1"
+
+    def test_rollback_to_unknown_version_returns_404(self, client, user_headers):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1")
+
+        response = client.post(
+            f"/api/v1/config/configs/{entry.id}/rollback",
+            data={"version": 99},
+            content_type="application/json",
+            **user_headers,
+        )
+
+        assert response.status_code == 404
+
+    def test_rollback_requires_jwt_auth(self, client):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1")
+        response = client.post(
+            f"/api/v1/config/configs/{entry.id}/rollback",
+            data={"version": 1},
+            content_type="application/json",
+        )
+        assert response.status_code == 401
+
+
 class TestListConfigsForClientEndpoint:
     def test_requires_api_key_auth(self, client):
         response = client.get("/api/v1/config/configs/list", {"service": "payments", "environment": "prod"})

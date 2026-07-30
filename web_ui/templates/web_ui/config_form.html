@@ -107,4 +107,42 @@
         </div>
     </div>
 </div>
+
+{{ environments_by_application|json_script:"environments-by-application" }}
+<script>
+(function () {
+    var dataEl = document.getElementById('environments-by-application');
+    var appSelect = document.getElementById('{{ form.application.id_for_label }}');
+    var envSelect = document.getElementById('{{ form.environment.id_for_label }}');
+    if (!dataEl || !appSelect || !envSelect) {
+        return;
+    }
+
+    var environmentsByApp = JSON.parse(dataEl.textContent);
+
+    function renderEnvironments(appId, selectedEnvId) {
+        var environments = environmentsByApp[appId] || [];
+        envSelect.innerHTML = '';
+        environments.forEach(function (env) {
+            var option = document.createElement('option');
+            option.value = env.id;
+            option.textContent = env.name;
+            if (env.id === selectedEnvId) {
+                option.selected = true;
+            }
+            envSelect.appendChild(option);
+        });
+        if (environments.length === 0) {
+            var placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'No environments for this application';
+            envSelect.appendChild(placeholder);
+        }
+    }
+
+    appSelect.addEventListener('change', function () {
+        renderEnvironments(appSelect.value, null);
+    });
+})();
+</script>
 {% endblock %}

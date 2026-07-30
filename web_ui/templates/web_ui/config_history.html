@@ -1,0 +1,91 @@
+{% extends 'web_ui/base.html' %}
+
+{% block title %}History - {{ config.key }} - IDP{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2><i class="bi bi-clock-history"></i> Version History</h2>
+        <div class="text-muted">
+            <code>{{ config.application.name }}/{{ config.environment.name }}/{{ config.key }}</code>
+            {% if config.is_secret %}
+                <span class="badge bg-danger ms-1"><i class="bi bi-shield-lock"></i> Secret</span>
+            {% else %}
+                <span class="badge bg-primary ms-1"><i class="bi bi-sliders"></i> Config</span>
+            {% endif %}
+        </div>
+    </div>
+    <a href="{% url 'web_ui:configs_list' %}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Configs
+    </a>
+</div>
+
+{% if config.is_secret %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i>
+    Secret values are never shown, including in history - only that a change happened, when, and by whom. You can
+    still roll back to a prior version without seeing its value.
+</div>
+{% endif %}
+
+{% if versions %}
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover cp-table-dense mb-0">
+                <thead>
+                    <tr>
+                        <th>Version</th>
+                        <th>Action</th>
+                        <th>Value</th>
+                        <th>Changed By</th>
+                        <th>Timestamp</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for version in versions %}
+                    <tr>
+                        <td><span class="badge text-bg-light border">v{{ version.version }}</span></td>
+                        <td>
+                            {% if version.action == 'create' %}
+                                <span class="badge bg-success"><i class="bi bi-plus-circle"></i> Create</span>
+                            {% elif version.action == 'update' %}
+                                <span class="badge bg-warning"><i class="bi bi-pencil"></i> Update</span>
+                            {% elif version.action == 'rollback' %}
+                                <span class="badge bg-info"><i class="bi bi-arrow-counterclockwise"></i> Rollback</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <code>{{ version.display_value|truncatechars:70 }}</code>
+                        </td>
+                        <td>
+                            {% if version.changed_by %}
+                                <i class="bi bi-person-circle"></i> {{ version.changed_by }}
+                            {% else %}
+                                <span class="text-muted">System</span>
+                            {% endif %}
+                        </td>
+                        <td><small>{{ version.created_at|date:"Y-m-d H:i:s" }}</small></td>
+                        <td>
+                            <form method="post" action="{% url 'web_ui:config_rollback' config.id version.version %}"
+                                  onsubmit="return confirm('Roll back {{ config.key }} to version {{ version.version }}? This creates a new version with this value.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-arrow-counterclockwise"></i> Roll back
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No version history recorded for this config yet.
+</div>
+{% endif %}
+{% endblock %}

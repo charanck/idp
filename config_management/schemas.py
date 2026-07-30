@@ -1,6 +1,8 @@
 """
 Config management API schemas
 """
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -21,6 +23,21 @@ class ConfigResponse(BaseModel):
     value: str
     is_secret: bool
     type: str
+
+
+class ConfigVersionResponse(BaseModel):
+    version: int
+    action: str
+    # Omitted (None) for secrets - history never exposes decrypted secret values.
+    value: Optional[str] = None
+    is_secret: bool
+    type: str
+    changed_by: Optional[str] = None
+    created_at: str
+
+
+class ConfigRollbackRequest(BaseModel):
+    version: int = Field(gt=0)
 
 
 class FeatureFlagCreateRequest(BaseModel):

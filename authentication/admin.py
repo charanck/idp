@@ -22,9 +22,7 @@ class UserAdmin(BaseUserAdmin):
     readonly_fields = ['created_at', 'updated_at', 'date_joined', 'last_login']
 
     def save_model(self, request, obj, form, change):
-        # Mirror the web UI's rule here: nobody can change their own privilege
-        # flags, even via the Django admin - role changes must come from a
-        # different admin.
+        # Mirrors the web UI: nobody can change their own privilege flags here either.
         if change and obj.pk == request.user.pk:
             original = User.objects.get(pk=obj.pk)
             if obj.is_staff != original.is_staff or obj.is_superuser != original.is_superuser or obj.is_active != original.is_active:

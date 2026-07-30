@@ -11,7 +11,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from common.encryption import EncryptionService
-from config_management.models import Application, ConfigEntry, Environment, FeatureFlag
+from config_management.models import Application, ConfigEntry, ConfigEntryVersion, Environment, FeatureFlag
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,25 @@ class ConfigService:
         """Invalidate cached config payloads for a service/environment scope."""
         self._bump_scope_version(service, environment)
 
+    def record_config_version(
+        self,
+        config: ConfigEntry,
+        action: str,
+        changed_by: Optional[str] = None,
+    ) -> ConfigEntryVersion:
+        """Snapshot a ConfigEntry's current encrypted value into history. Not called on delete - history cascades away with the entry."""
+        last = config.versions.order_by("-version").first()
+        version_number = (last.version + 1) if last else 1
+        return ConfigEntryVersion.objects.create(
+            config_entry=config,
+            value=config.value,
+            type=config.type,
+            is_secret=config.is_secret,
+            action=action,
+            version=version_number,
+            changed_by=changed_by or None,
+        )
+
     def upsert_config(
         self,
         service: str,
@@ -72,6 +91,8 @@ class ConfigService:
         value: str,
         is_secret: bool = False,
         config_type: str = "string",
+        changed_by: Optional[str] = None,
+        history_action: Optional[str] = None,
     ) -> ConfigEntry:
         """Create or update a configuration/secret entry"""
         encrypted_value = self.encryption_service.encrypt_for_storage(value)
@@ -86,6 +107,11 @@ class ConfigService:
                 "is_secret": is_secret,
                 "type": config_type,
             },
+        )
+        self.record_config_version(
+            config,
+            action=history_action or ("create" if created else "update"),
+            changed_by=changed_by,
         )
         self._bump_scope_version(service, environment)
         logger.info(
@@ -153,7 +179,7 @@ class ConfigService:
             return config.value
 
     def delete_config(self, config_id: str) -> bool:
-        """Delete a configuration entry"""
+        """Delete a configuration entry. Its version history is deleted with it."""
         try:
             config = ConfigEntry.objects.get(id=uuid.UUID(config_id))
             service = config.application.name
@@ -166,6 +192,50 @@ class ConfigService:
         except (ConfigEntry.DoesNotExist, ValueError):
             logger.warning("Config delete failed: %s not found", config_id)
             return False
+
+    def get_config_history(self, config_id: str) -> List[ConfigEntryVersion]:
+        """List version history for a config entry, newest first."""
+        try:
+            config = ConfigEntry.objects.get(id=uuid.UUID(config_id))
+        except (ConfigEntry.DoesNotExist, ValueError):
+            return []
+
+        return list(config.versions.order_by("-version"))
+
+    def decrypt_version_value(self, version: ConfigEntryVersion) -> str:
+        """Decrypt a historical version's value for internal use."""
+        return self.encryption_service.decrypt_from_storage(version.value)
+
+    def rollback_config(
+        self,
+        config_id: str,
+        version: int,
+        changed_by: Optional[str] = None,
+    ) -> Optional[ConfigEntry]:
+        """Restore a prior version by writing it again, so the rollback itself becomes a new version."""
+        try:
+            config = ConfigEntry.objects.select_related("application", "environment").get(
+                id=uuid.UUID(config_id)
+            )
+        except (ConfigEntry.DoesNotExist, ValueError):
+            return None
+
+        try:
+            target = config.versions.get(version=version)
+        except ConfigEntryVersion.DoesNotExist:
+            return None
+
+        decrypted_value = self.encryption_service.decrypt_from_storage(target.value)
+        return self.upsert_config(
+            service=config.application.name,
+            environment=config.environment.name,
+            key=config.key,
+            value=decrypted_value,
+            is_secret=target.is_secret,
+            config_type=target.type,
+            changed_by=changed_by,
+            history_action="rollback",
+        )
 
     def get_config_for_client(
         self,

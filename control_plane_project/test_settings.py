@@ -33,8 +33,16 @@ CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'test-cache',
-    }
+    },
+    'ratelimit': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'test-ratelimit-cache',
+    },
 }
+
+# High enough that ordinary test traffic never trips the limiter.
+AUTH_RATE_LIMIT = 100000
+AUTH_RATE_LIMIT_WINDOW_SECONDS = 60
 
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',

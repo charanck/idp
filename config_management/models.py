@@ -111,6 +111,43 @@ class ConfigEntry(models.Model):
         return f"{self.application.name}/{self.environment.name}/{self.key}"
 
 
+class ConfigEntryVersion(models.Model):
+    """Snapshot of a ConfigEntry's value; deleted along with it (cascading FK)."""
+
+    ACTION_CHOICES = [
+        ("create", "Create"),
+        ("update", "Update"),
+        ("rollback", "Rollback"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    config_entry = models.ForeignKey(
+        ConfigEntry,
+        on_delete=models.CASCADE,
+        related_name="versions",
+    )
+    value = models.TextField()
+    type = models.CharField(max_length=20, choices=ConfigEntry.TYPE_CHOICES, default="string")
+    is_secret = models.BooleanField(default=False)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    version = models.PositiveIntegerField()
+    changed_by = models.EmailField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "config_entry_versions"
+        verbose_name = "Config Entry Version"
+        verbose_name_plural = "Config Entry Versions"
+        unique_together = [["config_entry", "version"]]
+        indexes = [
+            models.Index(fields=["config_entry", "-version"]),
+        ]
+        ordering = ["-version"]
+
+    def __str__(self):
+        return f"{self.config_entry_id} v{self.version} ({self.action})"
+
+
 class FeatureFlag(models.Model):
     """
     Feature flag for controlling features

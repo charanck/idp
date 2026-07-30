@@ -20,10 +20,7 @@ def create_initial_admin_user(sender, **kwargs):
 
     User = get_user_model()
 
-    # The initial admin is provisioned exactly once. On every subsequent
-    # startup/migrate (e.g. container restarts) we must not touch the
-    # existing user's password or flags - an admin may have already changed
-    # them, and resetting on restart would silently undo that.
+    # Provisioned once; never touch an existing user's password/flags on later restarts.
     if User.objects.filter(email=email).exists():
         logger.info("[AdminSetup] Admin user %s already exists, skipping.", email)
         return

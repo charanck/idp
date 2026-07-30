@@ -49,6 +49,8 @@ urlpatterns = [
     path('configs/<uuid:pk>/clone/', views.config_clone, name='config_clone'),
     path('configs/<uuid:pk>/edit/', views.config_edit, name='config_edit'),
     path('configs/<uuid:pk>/delete/', views.config_delete, name='config_delete'),
+    path('configs/<uuid:pk>/history/', views.config_history, name='config_history'),
+    path('configs/<uuid:pk>/rollback/<int:version>/', views.config_rollback, name='config_rollback'),
     
     # Feature Flags
     path('flags/', views.flags_list, name='flags_list'),

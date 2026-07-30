@@ -523,7 +523,15 @@ def environment_delete(request, pk):
 
 
 # Configs Management (includes secrets via is_secret field)
-def _upsert_config_from_form(form):
+def _environments_by_application():
+    """All environments grouped by application id, for config_form.html's cascading dropdown JS."""
+    grouped = defaultdict(list)
+    for env in Environment.objects.select_related('application').order_by('name'):
+        grouped[str(env.application_id)].append({'id': str(env.id), 'name': env.name})
+    return grouped
+
+
+def _upsert_config_from_form(form, changed_by=None):
     """Persist a single config entry from cleaned form data."""
     cleaned = form.cleaned_data
     return config_service.upsert_config(
@@ -533,10 +541,11 @@ def _upsert_config_from_form(form):
         value=cleaned['value'],
         is_secret=cleaned['is_secret'],
         config_type=cleaned['type'],
+        changed_by=changed_by,
     )
 
 
-def _upsert_config_for_all_environments(form):
+def _upsert_config_for_all_environments(form, changed_by=None):
     """Persist config entry for all environments in selected application."""
     cleaned = form.cleaned_data
     application = cleaned['application']
@@ -551,6 +560,7 @@ def _upsert_config_for_all_environments(form):
             value=cleaned['value'],
             is_secret=cleaned['is_secret'],
             config_type=cleaned['type'],
+            changed_by=changed_by,
         )
         created_or_updated += 1
 
@@ -650,7 +660,7 @@ def config_create(request):
             form.fields['environment'].required = False
         if form.is_valid():
             if submit_action == 'create_all_env':
-                count = _upsert_config_for_all_environments(form)
+                count = _upsert_config_for_all_environments(form, changed_by=request.user.email)
                 cleaned = form.cleaned_data
                 log_create(
                     'config',
@@ -661,17 +671,18 @@ def config_create(request):
                 )
                 messages.success(request, f'Config/secret created or updated in {count} environments.')
             else:
-                config = _upsert_config_from_form(form)
+                config = _upsert_config_from_form(form, changed_by=request.user.email)
                 config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
                 log_create('config', str(config.id), config_name, request, details={'is_secret': config.is_secret})
                 messages.success(request, 'Config created successfully.')
             return redirect('web_ui:configs_list')
     else:
         form = ConfigEntryForm()
-    
+
     return render(request, 'web_ui/config_form.html', {
         'form': form,
-        'action': 'Create'
+        'action': 'Create',
+        'environments_by_application': _environments_by_application(),
     })
 
 
@@ -687,7 +698,7 @@ def config_clone(request, pk):
             form.fields['environment'].required = False
         if form.is_valid():
             if submit_action == 'create_all_env':
-                count = _upsert_config_for_all_environments(form)
+                count = _upsert_config_for_all_environments(form, changed_by=request.user.email)
                 cleaned = form.cleaned_data
                 log_create(
                     'config',
@@ -703,7 +714,7 @@ def config_clone(request, pk):
                 )
                 messages.success(request, f'Cloned to {count} environments successfully.')
             else:
-                config = _upsert_config_from_form(form)
+                config = _upsert_config_from_form(form, changed_by=request.user.email)
                 config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
                 log_create(
                     'config',
@@ -730,6 +741,7 @@ def config_clone(request, pk):
         'form': form,
         'action': 'Clone',
         'source_config': source,
+        'environments_by_application': _environments_by_application(),
     })
 
 
@@ -749,6 +761,7 @@ def config_edit(request, pk):
             config.type = cleaned['type']
             config.is_secret = cleaned['is_secret']
             config.save()
+            config_service.record_config_version(config, action='update', changed_by=request.user.email)
             config_service.invalidate_scope_cache(
                 service=config.application.name,
                 environment=config.environment.name,
@@ -768,7 +781,8 @@ def config_edit(request, pk):
     return render(request, 'web_ui/config_form.html', {
         'form': form,
         'action': 'Edit',
-        'config': config
+        'config': config,
+        'environments_by_application': _environments_by_application(),
     })
 
 
@@ -776,22 +790,59 @@ def config_edit(request, pk):
 def config_delete(request, pk):
     """Delete config"""
     config = get_object_or_404(ConfigEntry, pk=pk)
-    
+
     if request.method == 'POST':
-        service_name = config.application.name
-        environment_name = config.environment.name
         config_key = config.key
         config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
-        config.delete()
-        config_service.invalidate_scope_cache(
-            service=service_name,
-            environment=environment_name,
-        )
+        config_service.delete_config(str(pk))
         log_delete('config', str(pk), config_name, request)
         messages.success(request, f'Config {config_key} deleted successfully.')
         return redirect('web_ui:configs_list')
-    
+
     return render(request, 'web_ui/config_confirm_delete.html', {'config': config})
+
+
+@login_required
+def config_history(request, pk):
+    """View version history for a config entry."""
+    config = get_object_or_404(ConfigEntry, pk=pk)
+    versions = config_service.get_config_history(str(pk))
+
+    for version in versions:
+        version.display_value = (
+            '***ENCRYPTED***' if version.is_secret else config_service.decrypt_version_value(version)
+        )
+
+    return render(request, 'web_ui/config_history.html', {
+        'config': config,
+        'versions': versions,
+    })
+
+
+@login_required
+def config_rollback(request, pk, version):
+    """Roll back a config entry to a prior version."""
+    config = get_object_or_404(ConfigEntry, pk=pk)
+
+    if request.method == 'POST':
+        try:
+            updated = config_service.rollback_config(str(pk), version, changed_by=request.user.email)
+        except ValueError as e:
+            messages.error(request, str(e))
+            return redirect('web_ui:config_history', pk=pk)
+
+        if updated is None:
+            messages.error(request, 'That version could not be found.')
+            return redirect('web_ui:config_history', pk=pk)
+
+        config_name = f"{updated.application.name}/{updated.environment.name}/{updated.key}"
+        log_update(
+            'config', str(updated.id), config_name, request,
+            details={'is_secret': updated.is_secret, 'rolled_back_to_version': version},
+        )
+        messages.success(request, f'Rolled back {config_name} to version {version}.')
+
+    return redirect('web_ui:config_history', pk=pk)
 
 
 # Feature Flags Management
@@ -900,7 +951,7 @@ def flag_create(request):
             return redirect('web_ui:flags_list')
     else:
         form = FeatureFlagForm()
-    
+
     return render(request, 'web_ui/flag_form.html', {'form': form})
 
 

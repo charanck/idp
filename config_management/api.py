@@ -11,6 +11,8 @@ from typing import List
 from config_management.schemas import (
     ConfigUpsertRequest,
     ConfigResponse,
+    ConfigRollbackRequest,
+    ConfigVersionResponse,
     FeatureFlagCreateRequest,
     FeatureFlagResponse,
 )
@@ -63,6 +65,60 @@ def upsert_config(request: HttpRequest, payload: ConfigUpsertRequest):
         value="***ENCRYPTED***",
         is_secret=entry.is_secret,
         type=entry.type
+    )
+
+
+@router.get("/configs/{config_id}/history", response=List[ConfigVersionResponse], auth=jwt_auth, tags=["config"])
+def get_config_history(request: HttpRequest, config_id: str):
+    """List version history for a config entry, newest first."""
+    versions = config_service.get_config_history(config_id)
+
+    return [
+        ConfigVersionResponse(
+            version=v.version,
+            action=v.action,
+            value=None if v.is_secret else config_service.decrypt_version_value(v),
+            is_secret=v.is_secret,
+            type=v.type,
+            changed_by=v.changed_by,
+            created_at=v.created_at.isoformat(),
+        )
+        for v in versions
+    ]
+
+
+@router.post("/configs/{config_id}/rollback", response=ConfigResponse, auth=jwt_auth, tags=["config"])
+def rollback_config(request: HttpRequest, config_id: str, payload: ConfigRollbackRequest):
+    """Roll back a config entry to a prior version, recorded as a new version."""
+    try:
+        entry = config_service.rollback_config(
+            config_id,
+            payload.version,
+            changed_by=getattr(request.auth, "email", None),
+        )
+    except ValueError as e:
+        raise HttpError(409, str(e))
+    except Exception:
+        logger.exception("Unexpected error rolling back config %s to version %s", config_id, payload.version)
+        raise HttpError(500, "Failed to roll back configuration")
+
+    if entry is None:
+        raise HttpError(404, "Config or version not found")
+
+    config_name = f"{entry.application.name}/{entry.environment.name}/{entry.key}"
+    log_update(
+        'config', str(entry.id), config_name, request=request,
+        details={'is_secret': entry.is_secret, 'rolled_back_to_version': payload.version},
+    )
+
+    return ConfigResponse(
+        id=str(entry.id),
+        service=entry.application.name,
+        environment=entry.environment.name,
+        key=entry.key,
+        value="***ENCRYPTED***",
+        is_secret=entry.is_secret,
+        type=entry.type,
     )
 
 

@@ -130,6 +130,8 @@ class ConfigEntryForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["application"].queryset = Application.objects.all().order_by("name")
         self.fields["environment"].queryset = Environment.objects.none()
+        # Plain env name (not "app/env") to match the JS-rebuilt options in config_form.html
+        self.fields["environment"].label_from_instance = lambda env: env.name
 
         selected_application_id = None
         if self.instance and self.instance.pk:
@@ -169,14 +171,13 @@ class ConfigEntryForm(forms.ModelForm):
 
 
 class FeatureFlagForm(forms.ModelForm):
-    """Feature flag form"""
+    """Feature flag form. Always created across every environment of the selected application."""
 
     class Meta:
         model = FeatureFlag
-        fields = ["application", "environment", "name", "description", "is_enabled"]
+        fields = ["application", "name", "description", "is_enabled"]
         widgets = {
             "application": forms.Select(attrs={"class": "form-select"}),
-            "environment": forms.Select(attrs={"class": "form-select"}),
             "name": forms.TextInput(attrs={"class": "form-control"}),
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 2}),
             "is_enabled": forms.CheckboxInput(attrs={"class": "form-check-input"}),
@@ -185,41 +186,6 @@ class FeatureFlagForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["application"].queryset = Application.objects.all().order_by("name")
-        self.fields["environment"].queryset = Environment.objects.none()
-        self.fields["environment"].required = False
-        self.fields["environment"].help_text = "Optional. New flags are created for all environments in the selected application."
-
-        selected_application_id = None
-        if self.instance and self.instance.pk:
-            selected_application_id = self.instance.application_id
-        else:
-            selected_application_id = self.data.get("application")
-
-        if selected_application_id:
-            self.fields["environment"].queryset = Environment.objects.filter(
-                application_id=selected_application_id
-            ).order_by("name")
-        elif self.is_bound:
-            self.fields["environment"].queryset = Environment.objects.select_related(
-                "application"
-            ).all().order_by("application__name", "name")
-        elif not self.is_bound:
-            first_application = Application.objects.order_by("name").first()
-            if first_application:
-                self.fields["application"].initial = first_application.id
-                self.fields["environment"].queryset = Environment.objects.filter(
-                    application=first_application
-                ).order_by("name")
-
-    def clean(self):
-        cleaned_data = super().clean()
-        application = cleaned_data.get("application")
-        environment = cleaned_data.get("environment")
-
-        if application and environment and environment.application_id != application.id:
-            self.add_error("environment", "Selected environment does not belong to selected application.")
-
-        return cleaned_data
 
 
 class OAuthProviderForm(forms.ModelForm):

@@ -91,6 +91,23 @@ else:
         "Invalid CACHE_BACKEND value. Supported values: redis, locmem."
     )
 
+# Rate limiting needs a real counter store even when CACHE_ENABLED is off (default 'default' is a no-op DummyCache).
+if CACHE_ENABLED and CACHE_BACKEND == 'redis':
+    CACHES['ratelimit'] = {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_URL,
+        'KEY_PREFIX': f'{CACHE_KEY_PREFIX}-ratelimit',
+    }
+else:
+    CACHES['ratelimit'] = {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'idp-ratelimit-cache',
+    }
+
+# Requests allowed per window per client IP for token/register/login endpoints.
+AUTH_RATE_LIMIT = int(os.getenv('AUTH_RATE_LIMIT', '10'))
+AUTH_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv('AUTH_RATE_LIMIT_WINDOW_SECONDS', '60'))
+
 
 # Application definition
 
@@ -111,6 +128,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'common.middleware.RateLimitMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

@@ -26,6 +26,14 @@
 - **OAuth2 / OIDC login** — authorization-code flow via [authlib](https://authlib.org/) for signing
   into the web UI through an external identity provider.
 - **Activity log** — append-only audit trail of who did what, from where.
+- **Config version history & rollback** — every create/update of a config or secret is snapshotted;
+  you can view the diff-free history (secrets never show a decrypted value, even in history) and
+  roll back to a prior version, which itself is recorded as a new version rather than rewriting the
+  past. History is per-entry and deleted along with it — there's nothing to keep once a config is
+  gone.
+- **Rate limiting** on the auth endpoints most exposed to brute-force/credential-stuffing attempts
+  (`POST /api/v1/auth/token`, `POST /api/v1/auth/register`, and the web UI `POST /login/`) — capped
+  per client IP, configurable via `AUTH_RATE_LIMIT` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`.
 - **Optional Redis (or in-memory) caching** for the read-heavy config/flag list endpoints, with
   version-based invalidation.
 
@@ -221,6 +229,22 @@ curl -X POST http://localhost:8000/api/v1/config/configs/upsert \
 curl "http://localhost:8000/api/v1/config/configs/list?service=my-app&environment=prod" \
   -H "X-API-Key: <key_id>.<secret>"
 ```
+
+### View history and roll back a config/secret (admin JWT required)
+
+```bash
+curl http://localhost:8000/api/v1/config/configs/<config-id>/history \
+  -H "Authorization: Bearer <admin-jwt>"
+
+curl -X POST http://localhost:8000/api/v1/config/configs/<config-id>/rollback \
+  -H "Authorization: Bearer <admin-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{"version": 3}'
+```
+
+History for secrets shows the same metadata (version, action, who, when) but never the decrypted
+value. Rolling back writes a new version rather than mutating history in place, so the rollback
+itself is auditable. The same views are available in the web UI from a config's history icon.
 
 Full endpoint reference is available at `/api/v1/docs` once the server is running.
 

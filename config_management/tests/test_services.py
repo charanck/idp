@@ -8,7 +8,7 @@ import pytest
 from django.utils import timezone
 
 from common.encryption import generate_encryption_key
-from config_management.models import Application, ConfigEntry, Environment, FeatureFlag
+from config_management.models import Application, ConfigEntry, ConfigEntryVersion, Environment, FeatureFlag
 from config_management.services import ConfigService, FeatureFlagService
 
 pytestmark = pytest.mark.django_db
@@ -103,6 +103,71 @@ class TestDeleteConfig:
 
     def test_returns_false_for_malformed_id(self):
         assert config_service.delete_config("not-a-uuid") is False
+
+
+class TestConfigHistoryAndRollback:
+    def test_upsert_records_create_then_update_versions(self):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1.example.com")
+        config_service.upsert_config("payments", "prod", "API_URL", "https://v2.example.com")
+
+        history = config_service.get_config_history(str(entry.id))
+
+        assert [v.action for v in history] == ["update", "create"]
+        assert [v.version for v in history] == [2, 1]
+        assert config_service.decrypt_version_value(history[0]) == "https://v2.example.com"
+        assert config_service.decrypt_version_value(history[1]) == "https://v1.example.com"
+
+    def test_upsert_records_changed_by(self):
+        entry = config_service.upsert_config(
+            "payments", "prod", "API_URL", "https://v1.example.com", changed_by="admin@example.com"
+        )
+
+        history = config_service.get_config_history(str(entry.id))
+
+        assert history[0].changed_by == "admin@example.com"
+
+    def test_deleting_config_deletes_its_history(self):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1.example.com")
+        config_service.upsert_config("payments", "prod", "API_URL", "https://v2.example.com")
+        entry_id = entry.id
+
+        config_service.delete_config(str(entry_id))
+
+        assert config_service.get_config_history(str(entry_id)) == []
+        assert not ConfigEntryVersion.objects.filter(config_entry_id=entry_id).exists()
+
+    def test_recreating_a_deleted_key_starts_a_fresh_history(self):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1.example.com")
+        config_service.delete_config(str(entry.id))
+        recreated = config_service.upsert_config("payments", "prod", "API_URL", "https://v2.example.com")
+
+        history = config_service.get_config_history(str(recreated.id))
+
+        assert [v.action for v in history] == ["create"]
+        assert [v.version for v in history] == [1]
+
+    def test_rollback_restores_prior_value_as_new_version(self):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1.example.com")
+        config_service.upsert_config("payments", "prod", "API_URL", "https://v2.example.com")
+
+        rolled_back = config_service.rollback_config(str(entry.id), version=1, changed_by="admin@example.com")
+
+        assert config_service.decrypt_config_value(rolled_back) == "https://v1.example.com"
+        history = config_service.get_config_history(str(entry.id))
+        assert [v.action for v in history] == ["rollback", "update", "create"]
+        assert history[0].version == 3
+        assert history[0].changed_by == "admin@example.com"
+
+    def test_rollback_returns_none_for_unknown_version(self):
+        entry = config_service.upsert_config("payments", "prod", "API_URL", "https://v1.example.com")
+
+        assert config_service.rollback_config(str(entry.id), version=99) is None
+
+    def test_rollback_returns_none_for_unknown_config_id(self):
+        assert config_service.rollback_config(str(uuid.uuid4()), version=1) is None
+
+    def test_get_config_history_returns_empty_for_unknown_id(self):
+        assert config_service.get_config_history(str(uuid.uuid4())) == []
 
 
 class TestClientFacingConfigAccess:
