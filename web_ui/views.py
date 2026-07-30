@@ -12,19 +12,20 @@ from authentication.models import User, ServiceClient
 from authentication.oauth_models import OAuthProvider
 from authentication.services import AuthService
 from authentication.oauth_service import OAuthService
-from config_management.models import ConfigEntry, FeatureFlag, Activity
+from config_management.models import Application, ConfigEntry, Environment, FeatureFlag, Activity
 from config_management.services import ConfigService, FeatureFlagService
 from common.activity_logger import log_create, log_update, log_delete, log_toggle, log_login, log_logout
 
 from .forms import (
-    LoginForm, 
-    UserRegisterForm, 
+    LoginForm,
+    UserRegisterForm,
     UserEditForm,
     ServiceClientForm,
+    ApplicationForm,
+    EnvironmentForm,
     ConfigEntryForm,
     FeatureFlagForm,
-    OAuthProviderForm
-,
+    OAuthProviderForm,
 )
 
 auth_service = AuthService()
@@ -146,6 +147,8 @@ def dashboard(request):
     # Get counts
     users_count = User.objects.filter(is_active=True).count()
     clients_count = ServiceClient.objects.filter(is_active=True).count()
+    applications_count = Application.objects.count()
+    environments_count = Environment.objects.count()
     configs_count = ConfigEntry.objects.count()
     flags_count = FeatureFlag.objects.filter(deleted_at__isnull=True).count()
     oauth_providers_count = OAuthProvider.objects.filter(is_active=True).count()
@@ -156,6 +159,8 @@ def dashboard(request):
     context = {
         'users_count': users_count,
         'clients_count': clients_count,
+        'applications_count': applications_count,
+        'environments_count': environments_count,
         'configs_count': configs_count,
         'flags_count': flags_count,
         'oauth_providers_count': oauth_providers_count,
@@ -308,41 +313,214 @@ def client_toggle(request, pk):
     return redirect('web_ui:clients_list')
 
 
+# Applications Management
+@login_required
+def applications_list(request):
+    """List all applications"""
+    search_query = request.GET.get('search', '')
+    applications = Application.objects.all().order_by('name')
+
+    if search_query:
+        applications = applications.filter(name__icontains=search_query)
+
+    paginator = Paginator(applications, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, 'web_ui/applications_list.html', {
+        'page_obj': page_obj,
+        'search_query': search_query,
+    })
+
+
+@login_required
+def application_create(request):
+    """Create new application"""
+    if request.method == 'POST':
+        form = ApplicationForm(request.POST)
+        if form.is_valid():
+            application = form.save()
+            log_create('application', str(application.id), application.name, request)
+            messages.success(request, f'Application {application.name} created successfully.')
+            return redirect('web_ui:applications_list')
+    else:
+        form = ApplicationForm()
+
+    return render(request, 'web_ui/application_form.html', {
+        'form': form,
+        'action': 'Create',
+    })
+
+
+@login_required
+def application_edit(request, pk):
+    """Edit application"""
+    application = get_object_or_404(Application, pk=pk)
+
+    if request.method == 'POST':
+        form = ApplicationForm(request.POST, instance=application)
+        if form.is_valid():
+            application = form.save()
+            log_update('application', str(application.id), application.name, request)
+            messages.success(request, f'Application {application.name} updated successfully.')
+            return redirect('web_ui:applications_list')
+    else:
+        form = ApplicationForm(instance=application)
+
+    return render(request, 'web_ui/application_form.html', {
+        'form': form,
+        'action': 'Edit',
+        'application': application,
+    })
+
+
+@login_required
+def application_delete(request, pk):
+    """Delete application"""
+    application = get_object_or_404(Application, pk=pk)
+
+    if request.method == 'POST':
+        application_name = application.name
+        application.delete()
+        log_delete('application', str(pk), application_name, request)
+        messages.success(request, f'Application {application_name} deleted successfully.')
+        return redirect('web_ui:applications_list')
+
+    return render(request, 'web_ui/application_confirm_delete.html', {'application': application})
+
+
+# Environments Management
+@login_required
+def environments_list(request):
+    """List all environments"""
+    search_query = request.GET.get('search', '')
+    app_filter = request.GET.get('application', '')
+    environments = Environment.objects.select_related('application').all().order_by('application__name', 'name')
+
+    if search_query:
+        environments = environments.filter(name__icontains=search_query)
+    if app_filter:
+        environments = environments.filter(application_id=app_filter)
+
+    applications = Application.objects.all().order_by('name')
+    paginator = Paginator(environments, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, 'web_ui/environments_list.html', {
+        'page_obj': page_obj,
+        'applications': applications,
+        'app_filter': app_filter,
+        'search_query': search_query,
+    })
+
+
+@login_required
+def environment_create(request):
+    """Create new environment"""
+    if request.method == 'POST':
+        form = EnvironmentForm(request.POST)
+        if form.is_valid():
+            environment = form.save()
+            log_create(
+                'environment',
+                str(environment.id),
+                f'{environment.application.name}/{environment.name}',
+                request,
+            )
+            messages.success(request, f'Environment {environment.name} created successfully.')
+            return redirect('web_ui:environments_list')
+    else:
+        form = EnvironmentForm()
+
+    return render(request, 'web_ui/environment_form.html', {
+        'form': form,
+        'action': 'Create',
+    })
+
+
+@login_required
+def environment_edit(request, pk):
+    """Edit environment"""
+    environment = get_object_or_404(Environment, pk=pk)
+
+    if request.method == 'POST':
+        form = EnvironmentForm(request.POST, instance=environment)
+        if form.is_valid():
+            environment = form.save()
+            log_update(
+                'environment',
+                str(environment.id),
+                f'{environment.application.name}/{environment.name}',
+                request,
+            )
+            messages.success(request, f'Environment {environment.name} updated successfully.')
+            return redirect('web_ui:environments_list')
+    else:
+        form = EnvironmentForm(instance=environment)
+
+    return render(request, 'web_ui/environment_form.html', {
+        'form': form,
+        'action': 'Edit',
+        'environment': environment,
+    })
+
+
+@login_required
+def environment_delete(request, pk):
+    """Delete environment"""
+    environment = get_object_or_404(Environment, pk=pk)
+
+    if request.method == 'POST':
+        environment_name = f'{environment.application.name}/{environment.name}'
+        environment.delete()
+        log_delete('environment', str(pk), environment_name, request)
+        messages.success(request, f'Environment {environment_name} deleted successfully.')
+        return redirect('web_ui:environments_list')
+
+    return render(request, 'web_ui/environment_confirm_delete.html', {'environment': environment})
+
+
 # Configs Management (includes secrets via is_secret field)
 @login_required
 def configs_list(request):
     """List all configs and secrets"""
-    service_filter = request.GET.get('service', '')
+    application_filter = request.GET.get('application', '')
     env_filter = request.GET.get('environment', '')
     search_query = request.GET.get('search', '')
     type_filter = request.GET.get('type', '')  # 'config', 'secret', or empty for all
-    
-    configs = ConfigEntry.objects.all().order_by('service', 'environment', 'key')
-    
-    if service_filter:
-        configs = configs.filter(service=service_filter)
+
+    configs = ConfigEntry.objects.select_related('application', 'environment').all().order_by(
+        'application__name',
+        'environment__name',
+        'key',
+    )
+
+    if application_filter:
+        configs = configs.filter(application_id=application_filter)
     if env_filter:
-        configs = configs.filter(environment=env_filter)
+        configs = configs.filter(environment_id=env_filter)
     if search_query:
         configs = configs.filter(key__icontains=search_query)
     if type_filter == 'secret':
         configs = configs.filter(is_secret=True)
     elif type_filter == 'config':
         configs = configs.filter(is_secret=False)
-    
-    # Get unique services and environments for filters
-    services = ConfigEntry.objects.values_list('service', flat=True).distinct()
-    environments = ConfigEntry.objects.values_list('environment', flat=True).distinct()
-    
+
+    applications = Application.objects.all().order_by('name')
+    environments = Environment.objects.select_related('application').all().order_by('application__name', 'name')
+    if application_filter:
+        environments = environments.filter(application_id=application_filter)
+
     paginator = Paginator(configs, 20)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-    
+
     return render(request, 'web_ui/configs_list.html', {
         'page_obj': page_obj,
-        'services': services,
+        'applications': applications,
         'environments': environments,
-        'service_filter': service_filter,
+        'application_filter': application_filter,
         'env_filter': env_filter,
         'search_query': search_query,
         'type_filter': type_filter,
@@ -356,7 +534,7 @@ def config_create(request):
         form = ConfigEntryForm(request.POST)
         if form.is_valid():
             config = form.save()
-            config_name = f"{config.service}/{config.environment}/{config.key}"
+            config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
             log_create('config', str(config.id), config_name, request, details={'is_secret': config.is_secret})
             messages.success(request, 'Config created successfully.')
             return redirect('web_ui:configs_list')
@@ -378,7 +556,7 @@ def config_edit(request, pk):
         form = ConfigEntryForm(request.POST, instance=config)
         if form.is_valid():
             config = form.save()
-            config_name = f"{config.service}/{config.environment}/{config.key}"
+            config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
             log_update('config', str(config.id), config_name, request, details={'is_secret': config.is_secret})
             messages.success(request, 'Config updated successfully.')
             return redirect('web_ui:configs_list')
@@ -399,7 +577,7 @@ def config_delete(request, pk):
     
     if request.method == 'POST':
         config_key = config.key
-        config_name = f"{config.service}/{config.environment}/{config.key}"
+        config_name = f"{config.application.name}/{config.environment.name}/{config.key}"
         config.delete()
         log_delete('config', str(pk), config_name, request)
         messages.success(request, f'Config {config_key} deleted successfully.')
@@ -667,4 +845,3 @@ def activity_log(request):
         'current_type': type_filter,
         'current_user': user_filter,
     })
-

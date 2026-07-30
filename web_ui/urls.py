@@ -30,6 +30,18 @@ urlpatterns = [
     path('clients/create/', views.client_create, name='client_create'),
     path('clients/<uuid:pk>/', views.client_detail, name='client_detail'),
     path('clients/<uuid:pk>/toggle/', views.client_toggle, name='client_toggle'),
+
+    # Applications
+    path('applications/', views.applications_list, name='applications_list'),
+    path('applications/create/', views.application_create, name='application_create'),
+    path('applications/<uuid:pk>/edit/', views.application_edit, name='application_edit'),
+    path('applications/<uuid:pk>/delete/', views.application_delete, name='application_delete'),
+
+    # Environments
+    path('environments/', views.environments_list, name='environments_list'),
+    path('environments/create/', views.environment_create, name='environment_create'),
+    path('environments/<uuid:pk>/edit/', views.environment_edit, name='environment_edit'),
+    path('environments/<uuid:pk>/delete/', views.environment_delete, name='environment_delete'),
     
     # Configs (includes secrets via is_secret field)
     path('configs/', views.configs_list, name='configs_list'),

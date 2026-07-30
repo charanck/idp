@@ -22,8 +22,8 @@
                             <span class="badge bg-primary">Config</span>
                         {% endif %}
                         <br>
-                        <strong>Service:</strong> <code>{{ config.service }}</code><br>
-                        <strong>Environment:</strong> <code>{{ config.environment }}</code><br>
+                        <strong>Application:</strong> <code>{{ config.application.name }}</code><br>
+                        <strong>Environment:</strong> <code>{{ config.environment.name }}</code><br>
                         <strong>Key:</strong> <code>{{ config.key }}</code><br>
                         <strong>Value:</strong> 
                         {% if config.is_secret %}

@@ -1,0 +1,57 @@
+{% extends 'web_ui/base.html' %}
+
+{% block title %}Applications - Control Plane{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-grid-1x2"></i> Applications</h2>
+    <a href="{% url 'web_ui:application_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> New Application
+    </a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-10">
+                <input type="text" name="search" class="form-control" placeholder="Search applications..." value="{{ search_query }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary w-100">Search</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if page_obj %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for application in page_obj %}
+                    <tr>
+                        <td><code>{{ application.name }}</code></td>
+                        <td>{{ application.created_at|date:"Y-m-d" }}</td>
+                        <td>
+                            <a href="{% url 'web_ui:application_edit' application.id %}" class="btn btn-sm btn-warning"><i class="bi bi-pencil"></i></a>
+                            <a href="{% url 'web_ui:application_delete' application.id %}" class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">No applications found.</div>
+{% endif %}
+{% endblock %}

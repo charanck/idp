@@ -24,12 +24,12 @@
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label for="service" class="form-label">Service</label>
-                    <select name="service" id="service" class="form-select">
-                        <option value="">All Services</option>
-                        {% for service in services %}
-                            <option value="{{ service }}" {% if service_filter == service %}selected{% endif %}>
-                                {{ service }}
+                    <label for="application" class="form-label">Application</label>
+                    <select name="application" id="application" class="form-select">
+                        <option value="">All Applications</option>
+                        {% for application in applications %}
+                            <option value="{{ application.id }}" {% if application_filter == application.id|stringformat:"s" %}selected{% endif %}>
+                                {{ application.name }}
                             </option>
                         {% endfor %}
                     </select>
@@ -39,8 +39,8 @@
                     <select name="environment" id="environment" class="form-select">
                         <option value="">All Environments</option>
                         {% for env in environments %}
-                            <option value="{{ env }}" {% if env_filter == env %}selected{% endif %}>
-                                {{ env }}
+                            <option value="{{ env.id }}" {% if env_filter == env.id|stringformat:"s" %}selected{% endif %}>
+                                {{ env.application.name }} / {{ env.name }}
                             </option>
                         {% endfor %}
                     </select>
@@ -77,7 +77,7 @@
                         <thead>
                             <tr>
                                 <th>Type</th>
-                                <th>Service</th>
+                                <th>Application</th>
                                 <th>Environment</th>
                                 <th>Key</th>
                                 <th>Value</th>
@@ -99,8 +99,8 @@
                                             </span>
                                         {% endif %}
                                     </td>
-                                    <td><code>{{ config.service }}</code></td>
-                                    <td><code>{{ config.environment }}</code></td>
+                                    <td><code>{{ config.application.name }}</code></td>
+                                    <td><code>{{ config.environment.name }}</code></td>
                                     <td><code>{{ config.key }}</code></td>
                                     <td>
                                         {% if config.is_secret %}
@@ -137,12 +137,12 @@
                         <ul class="pagination justify-content-center">
                             {% if page_obj.has_previous %}
                                 <li class="page-item">
-                                    <a class="page-link" href="?page=1{% if service_filter %}&service={{ service_filter }}{% endif %}{% if env_filter %}&environment={{ env_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">
+                                    <a class="page-link" href="?page=1{% if application_filter %}&application={{ application_filter }}{% endif %}{% if env_filter %}&environment={{ env_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">
                                         First
                                     </a>
                                 </li>
                                 <li class="page-item">
-                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if service_filter %}&service={{ service_filter }}{% endif %}{% if env_filter %}&environment={{ env_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if application_filter %}&application={{ application_filter }}{% endif %}{% if env_filter %}&environment={{ env_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">
                                         Previous
                                     </a>
                                 </li>
@@ -156,12 +156,12 @@
 
                             {% if page_obj.has_next %}
                                 <li class="page-item">
-                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if service_filter %}&service={{ service_filter }}{% endif %}{% if env_filter %}&environment={{ env_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if application_filter %}&application={{ application_filter }}{% endif %}{% if env_filter %}&environment={{ env_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">
                                         Next
                                     </a>
                                 </li>
                                 <li class="page-item">
-                                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if service_filter %}&service={{ service_filter }}{% endif %}{% if env_filter %}&environment={{ env_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">
+                                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if application_filter %}&application={{ application_filter }}{% endif %}{% if env_filter %}&environment={{ env_filter }}{% endif %}{% if search_query %}&search={{ search_query }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">
                                         Last
                                     </a>
                                 </li>

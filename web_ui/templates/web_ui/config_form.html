@@ -15,12 +15,12 @@
                         {% csrf_token %}
                         
                         <div class="mb-3">
-                            <label for="{{ form.service.id_for_label }}" class="form-label">Service</label>
-                            {{ form.service }}
-                            {% if form.service.errors %}
-                                <div class="text-danger">{{ form.service.errors }}</div>
+                            <label for="{{ form.application.id_for_label }}" class="form-label">Application</label>
+                            {{ form.application }}
+                            {% if form.application.errors %}
+                                <div class="text-danger">{{ form.application.errors }}</div>
                             {% endif %}
-                            <div class="form-text">Service name (e.g., 'api', 'frontend', 'global')</div>
+                            <div class="form-text">Select the application for this config/secret.</div>
                         </div>
 
                         <div class="mb-3">
@@ -29,7 +29,7 @@
                             {% if form.environment.errors %}
                                 <div class="text-danger">{{ form.environment.errors }}</div>
                             {% endif %}
-                            <div class="form-text">Environment name (e.g., 'production', 'staging', 'global')</div>
+                            <div class="form-text">Select an environment belonging to the chosen application.</div>
                         </div>
 
                         <div class="mb-3">

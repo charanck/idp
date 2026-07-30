@@ -1,0 +1,40 @@
+{% extends 'web_ui/base.html' %}
+
+{% block title %}{{ action }} Environment{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-7">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h4 class="mb-0"><i class="bi bi-diagram-3"></i> {{ action }} Environment</h4>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="{{ form.application.id_for_label }}" class="form-label">Application</label>
+                            {{ form.application }}
+                            {% if form.application.errors %}
+                                <div class="text-danger">{{ form.application.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label for="{{ form.name.id_for_label }}" class="form-label">Environment Name</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}
+                                <div class="text-danger">{{ form.name.errors }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'web_ui:environments_list' %}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">{{ action }}</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

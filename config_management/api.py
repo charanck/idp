@@ -40,8 +40,8 @@ def upsert_config(request: HttpRequest, payload: ConfigUpsertRequest):
     shown_value = "***ENCRYPTED***" if entry.is_secret else "***ENCRYPTED***"
     return ConfigResponse(
         id=str(entry.id),
-        service=entry.service,
-        environment=entry.environment,
+        service=entry.application.name,
+        environment=entry.environment.name,
         key=entry.key,
         value=shown_value,  # Don't return actual value for security
         is_secret=entry.is_secret,
