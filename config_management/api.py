@@ -197,9 +197,9 @@ def create_feature_flag(request: HttpRequest, payload: FeatureFlagCreateRequest)
     )
 
 
-@router.get("/feature-flags", response=List[FeatureFlagResponse], auth=jwt_auth, tags=["feature-flags"])
+@router.get("/feature-flags", response=List[FeatureFlagResponse], auth=[jwt_auth, apikey_auth], tags=["feature-flags"])
 def list_feature_flags(request: HttpRequest, service: str, environment: str):
-    """List feature flags for a specific service/environment"""
+    """List feature flags for a specific service/environment. Accepts a user JWT or a service client API key."""
     try:
         flags = flag_service.list_flags(service=service, environment=environment)
     except Exception:

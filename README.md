@@ -250,6 +250,15 @@ Full endpoint reference is available at `/api/v1/docs` once the server is runnin
 
 ---
 
+## Client examples
+
+Runnable examples for fetching + decrypting configs/secrets and reading feature flags from
+Python, Go, Node.js, and TypeScript are in [`examples/`](./examples). Each language implements the
+same two functions: one that lists configs for a service+environment and decrypts them into a
+plain key/value map, and one that lists feature flags into a name/enabled map.
+
+---
+
 ## Security notes
 
 - Set `MASTER_ENCRYPTION_KEY`, `DJANGO_SECRET_KEY`, and `JWT_SECRET_KEY` explicitly in every

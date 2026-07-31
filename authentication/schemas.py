@@ -40,3 +40,4 @@ class ServiceClientResponse(BaseModel):
     client_id: str
     api_key_id: str
     api_key: str
+    encryption_key: str

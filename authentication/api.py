@@ -100,7 +100,8 @@ def create_service_client(request: HttpRequest, payload: CreateServiceClientRequ
         name=credentials.client.name,
         client_id=str(credentials.client.id),
         api_key_id=credentials.client.api_key_id or '',
-        api_key=credentials.api_key
+        api_key=credentials.api_key,
+        encryption_key=credentials.client.encryption_key,
     )
 
 

@@ -228,3 +228,27 @@ class TestFeatureFlagEndpoints:
             **user_headers,
         )
         assert response.status_code == 404
+
+    def test_list_accepts_service_client_api_key(self, client, user_headers, service_client_credentials):
+        config_service.upsert_config("payments", "prod", "seed", "v")
+        client.post(
+            "/api/v1/config/feature-flags",
+            data={"service": "payments", "environment": "prod", "name": "new-checkout", "is_enabled": True},
+            content_type="application/json",
+            **user_headers,
+        )
+
+        response = client.get(
+            "/api/v1/config/feature-flags",
+            {"service": "payments", "environment": "prod"},
+            HTTP_X_API_KEY=service_client_credentials.api_key,
+        )
+
+        assert response.status_code == 200
+        assert response.json()[0]["name"] == "new-checkout"
+
+    def test_list_rejects_missing_auth(self, client):
+        response = client.get(
+            "/api/v1/config/feature-flags", {"service": "payments", "environment": "prod"}
+        )
+        assert response.status_code == 401

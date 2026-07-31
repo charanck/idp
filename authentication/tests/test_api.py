@@ -133,6 +133,7 @@ class TestServiceClientEndpoints:
         assert response.status_code == 200
         body = response.json()
         assert body["name"] == "billing-service"
+        assert body["encryption_key"]
         api_key = body["api_key"]
 
         ping_response = client.get("/api/v1/auth/s2s/ping", HTTP_X_API_KEY=api_key)
