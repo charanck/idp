@@ -331,10 +331,44 @@ def client_toggle(request, pk):
     client.is_active = not client.is_active
     client.save()
     log_toggle('client', str(client.id), client.name, request, details={'is_active': client.is_active})
-    
+
     status = 'activated' if client.is_active else 'deactivated'
     messages.success(request, f'Service client {client.name} {status}.')
     return redirect('web_ui:clients_list')
+
+
+@admin_required
+def client_delete(request, pk):
+    """Delete service client"""
+    client = get_object_or_404(ServiceClient, pk=pk)
+
+    if request.method == 'POST':
+        client_name = client.name
+        client.delete()
+        log_delete('client', str(pk), client_name, request)
+        messages.success(request, f'Service client {client_name} deleted successfully.')
+        return redirect('web_ui:clients_list')
+
+    return render(request, 'web_ui/client_confirm_delete.html', {'client': client})
+
+
+@admin_required
+def client_regenerate_key(request, pk):
+    """Regenerate a service client's encryption key, invalidating the old one"""
+    client = get_object_or_404(ServiceClient, pk=pk)
+
+    if request.method == 'POST':
+        from common.encryption import generate_encryption_key
+
+        client.encryption_key = generate_encryption_key()
+        client.save()
+        log_update('client', str(client.id), client.name, request, details={'action': 'regenerate_encryption_key'})
+        messages.success(
+            request,
+            f'Encryption key regenerated for {client.name}. The client must be updated with the new key.',
+        )
+
+    return redirect('web_ui:client_detail', pk=pk)
 
 
 # Applications Management
@@ -1180,9 +1214,11 @@ def activity_log(request):
     page = request.GET.get('page', 1)
     activities_page = paginator.get_page(page)
     
-    # Get distinct resource types and action types for filters
-    resource_types = Activity.objects.values_list('resource', flat=True).distinct()
-    action_types = Activity.objects.values_list('type', flat=True).distinct()
+    # Get distinct resource types and action types for filters. order_by() clears
+    # the model's default "-timestamp" ordering, which would otherwise get pulled
+    # into the SELECT DISTINCT and defeat the dedup (each row has a unique timestamp).
+    resource_types = Activity.objects.order_by().values_list('resource', flat=True).distinct()
+    action_types = Activity.objects.order_by().values_list('type', flat=True).distinct()
     
     return render(request, 'web_ui/activity_log.html', {
         'activities': activities_page,

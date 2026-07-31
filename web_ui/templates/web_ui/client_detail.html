@@ -26,6 +26,17 @@
                     <dd class="col-sm-9"><code>{{ client.api_key_id|default:'-' }}</code></dd>
                     <dt class="col-sm-3">ID</dt>
                     <dd class="col-sm-9"><code>{{ client.id }}</code></dd>
+                    <dt class="col-sm-3">Encryption Key</dt>
+                    <dd class="col-sm-9">
+                        <code>{{ client.encryption_key }}</code>
+                        <form method="post" action="{% url 'web_ui:client_regenerate_key' client.id %}" class="d-inline"
+                              onsubmit="return confirm('Regenerate the encryption key for {{ client.name }}? The current key stops working immediately - update the client with the new one.');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-secondary ms-2">
+                                <i class="bi bi-arrow-repeat"></i> Regenerate
+                            </button>
+                        </form>
+                    </dd>
                     <dt class="col-sm-3">Created</dt>
                     <dd class="col-sm-9">{{ client.created_at|date:"Y-m-d H:i" }}</dd>
                     <dt class="col-sm-3">Updated</dt>
@@ -34,7 +45,10 @@
 
                 <div class="d-flex justify-content-between mt-4">
                     <a href="{% url 'web_ui:clients_list' %}" class="btn btn-secondary">Back to Clients</a>
-                    <a href="{% url 'web_ui:client_toggle' client.id %}" class="btn btn-warning">Toggle Status</a>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'web_ui:client_toggle' client.id %}" class="btn btn-warning">Toggle Status</a>
+                        <a href="{% url 'web_ui:client_delete' client.id %}" class="btn btn-danger">Delete</a>
+                    </div>
                 </div>
             </div>
         </div>

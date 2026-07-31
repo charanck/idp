@@ -30,6 +30,8 @@ urlpatterns = [
     path('clients/create/', views.client_create, name='client_create'),
     path('clients/<uuid:pk>/', views.client_detail, name='client_detail'),
     path('clients/<uuid:pk>/toggle/', views.client_toggle, name='client_toggle'),
+    path('clients/<uuid:pk>/delete/', views.client_delete, name='client_delete'),
+    path('clients/<uuid:pk>/regenerate-key/', views.client_regenerate_key, name='client_regenerate_key'),
 
     # Applications
     path('applications/', views.applications_list, name='applications_list'),
