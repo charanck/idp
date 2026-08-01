@@ -24,7 +24,7 @@ class AuthService:
     """Authentication service for users and service clients"""
     
     def register_user(self, email: str, password: str, username: Optional[str] = None) -> User:
-        """Register a new user"""
+        """Register a new user. Inactive until an admin activates the account."""
         if User.objects.filter(email=email).exists():
             logger.warning("User registration rejected: %s already exists", email)
             raise ValueError("User already exists")
@@ -36,11 +36,11 @@ class AuthService:
             id=uuid.uuid4(),
             email=email,
             username=username,
-            is_active=True,
+            is_active=False,
         )
         user.set_password(password)
         user.save()
-        logger.info("Registered new user: %s", email)
+        logger.info("Registered new user (pending activation): %s", email)
         return user
 
     def authenticate_user(self, email: str, password: str) -> Optional[User]:

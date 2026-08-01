@@ -18,7 +18,7 @@ config_service = ConfigService()
 
 @pytest.fixture
 def user():
-    u = User.objects.create(email="user@example.com", username="user")
+    u = User.objects.create(email="user@example.com", username="user", is_active=True)
     u.set_password("password123")
     u.save()
     return u

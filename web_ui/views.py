@@ -1172,7 +1172,12 @@ def oauth_callback(request, provider_id):
         
         # Authenticate or create user
         user, oauth_token = oauth_service.authenticate_or_create_user(provider, token_data, user_info)
-        
+
+        if not user.is_active:
+            log_login_failed(user.email, request, details=f'OAuth login via {provider.name}: account not active')
+            messages.error(request, 'Your account is pending admin approval. Please contact an administrator.')
+            return redirect('web_ui:login')
+
         # Log user in
         login(request, user)
         log_login(user.email, request, details=f'OAuth login via {provider.name}')

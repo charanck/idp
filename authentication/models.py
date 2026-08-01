@@ -12,9 +12,10 @@ class User(AbstractUser):
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True, db_index=True)
-    # Using Django's built-in password field
-    # username field from AbstractUser will be used for authentication
-    # is_active field from AbstractUser replaces disabled
+    is_active = models.BooleanField(
+        default=False,
+        help_text="Unset until an admin activates this user. Inactive users cannot log in.",
+    )
     force_password_reset = models.BooleanField(
         default=False,
         help_text="Force user to reset password on next login"

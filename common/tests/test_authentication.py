@@ -24,7 +24,7 @@ def request_factory():
 
 @pytest.fixture
 def active_user():
-    user = User.objects.create(email="member@example.com", username="member")
+    user = User.objects.create(email="member@example.com", username="member", is_active=True)
     user.set_password("password123")
     user.save()
     return user
@@ -32,7 +32,7 @@ def active_user():
 
 @pytest.fixture
 def staff_user():
-    user = User.objects.create(email="admin@example.com", username="admin", is_staff=True)
+    user = User.objects.create(email="admin@example.com", username="admin", is_staff=True, is_active=True)
     user.set_password("password123")
     user.save()
     return user

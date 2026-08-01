@@ -37,15 +37,23 @@ class UserRegisterForm(UserCreationForm):
 
     class Meta:
         model = User
-        fields = ["email", "username", "password1", "password2"]
+        fields = ["email", "username", "password1", "password2", "is_active"]
         widgets = {
             "username": forms.TextInput(attrs={"class": "form-control"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+        labels = {
+            "is_active": "Activate immediately",
+        }
+        help_texts = {
+            "is_active": "Leave unchecked to require a separate admin activation step before this user can log in.",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["password1"].widget.attrs.update({"class": "form-control"})
         self.fields["password2"].widget.attrs.update({"class": "form-control"})
+        self.fields["is_active"].required = False
 
 
 class UserEditForm(forms.ModelForm):

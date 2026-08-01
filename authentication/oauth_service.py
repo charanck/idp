@@ -121,7 +121,7 @@ class OAuthService:
                 user = User.objects.create(
                     email=email,
                     username=username,
-                    is_active=True
+                    is_active=False
                 )
                 user.set_unusable_password()
                 user.save()

@@ -16,7 +16,7 @@ auth_service = AuthService()
 
 @pytest.fixture
 def admin_user():
-    user = User.objects.create(email="admin@example.com", username="admin", is_staff=True)
+    user = User.objects.create(email="admin@example.com", username="admin", is_staff=True, is_active=True)
     user.set_password("password123")
     user.save()
     return user

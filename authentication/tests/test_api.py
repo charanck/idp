@@ -15,7 +15,7 @@ auth_service = AuthService()
 
 @pytest.fixture
 def admin_user():
-    user = User.objects.create(email="admin@example.com", username="admin", is_staff=True)
+    user = User.objects.create(email="admin@example.com", username="admin", is_staff=True, is_active=True)
     user.set_password("password123")
     user.save()
     return user
@@ -47,7 +47,8 @@ class TestRegisterEndpoint:
         assert response.status_code == 200
         body = response.json()
         assert body["email"] == "new@example.com"
-        assert User.objects.filter(email="new@example.com").exists()
+        assert body["is_active"] is False
+        assert User.objects.filter(email="new@example.com", is_active=False).exists()
 
     def test_conflicts_on_duplicate_email(self, client, admin_headers):
         auth_service.register_user("dup@example.com", "password123")
@@ -74,7 +75,9 @@ class TestRegisterEndpoint:
 
 class TestTokenEndpoint:
     def test_issues_token_for_valid_credentials(self, client):
-        auth_service.register_user("user@example.com", "password123")
+        user = auth_service.register_user("user@example.com", "password123")
+        user.is_active = True
+        user.save()
 
         response = client.post(
             "/api/v1/auth/token",
@@ -101,6 +104,8 @@ class TestTokenEndpoint:
 class TestMeEndpoint:
     def test_returns_current_user(self, client):
         user = auth_service.register_user("user@example.com", "password123")
+        user.is_active = True
+        user.save()
         token = create_access_token(subject=str(user.id), token_type="user")
 
         response = client.get("/api/v1/auth/me", HTTP_AUTHORIZATION=f"Bearer {token}")

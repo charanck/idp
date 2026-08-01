@@ -109,6 +109,7 @@ class TestAuthenticateOrCreateUser:
 
         assert user.email == "newperson@example.com"
         assert user.has_usable_password() is False
+        assert user.is_active is False
         assert oauth_token.provider_user_id == "provider-user-1"
         assert oauth_token.access_token == "tok"
 
@@ -122,7 +123,7 @@ class TestAuthenticateOrCreateUser:
             service.authenticate_or_create_user(provider, token_data, user_info)
 
     def test_links_existing_user_by_email_when_no_oauth_token_yet(self, provider):
-        existing_user = User.objects.create(email="existing@example.com", username="existing")
+        existing_user = User.objects.create(email="existing@example.com", username="existing", is_active=True)
         token_data = {"access_token": "tok"}
         user_info = {"sub": "provider-user-1", "email": "existing@example.com"}
 
@@ -141,7 +142,7 @@ class TestAuthenticateOrCreateUser:
         assert user.username == "newperson1"
 
     def test_reuses_existing_oauth_token_and_updates_it(self, provider):
-        user = User.objects.create(email="existing@example.com", username="existing")
+        user = User.objects.create(email="existing@example.com", username="existing", is_active=True)
         OAuthUserToken.objects.create(
             user=user,
             provider=provider,

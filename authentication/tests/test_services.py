@@ -15,11 +15,11 @@ service = AuthService()
 
 
 class TestRegisterUser:
-    def test_creates_active_user_with_hashed_password(self):
+    def test_creates_inactive_user_with_hashed_password(self):
         user = service.register_user("new@example.com", "password123")
 
         assert user.email == "new@example.com"
-        assert user.is_active is True
+        assert user.is_active is False
         assert user.password != "password123"
         assert user.check_password("password123")
 
@@ -40,7 +40,9 @@ class TestRegisterUser:
 
 class TestAuthenticateUser:
     def test_returns_user_for_correct_credentials(self):
-        service.register_user("login@example.com", "password123")
+        user = service.register_user("login@example.com", "password123")
+        user.is_active = True
+        user.save()
 
         user = service.authenticate_user("login@example.com", "password123")
 
@@ -48,12 +50,19 @@ class TestAuthenticateUser:
         assert user.email == "login@example.com"
 
     def test_returns_none_for_wrong_password(self):
-        service.register_user("login@example.com", "password123")
+        user = service.register_user("login@example.com", "password123")
+        user.is_active = True
+        user.save()
 
         assert service.authenticate_user("login@example.com", "wrong-password") is None
 
     def test_returns_none_for_unknown_email(self):
         assert service.authenticate_user("nobody@example.com", "password123") is None
+
+    def test_returns_none_for_newly_registered_user_pending_activation(self):
+        service.register_user("login@example.com", "password123")
+
+        assert service.authenticate_user("login@example.com", "password123") is None
 
     def test_returns_none_for_inactive_user(self):
         user = service.register_user("login@example.com", "password123")
@@ -66,6 +75,8 @@ class TestAuthenticateUser:
 class TestGetUserById:
     def test_returns_active_user(self):
         user = service.register_user("lookup@example.com", "password123")
+        user.is_active = True
+        user.save()
 
         found = service.get_user_by_id(str(user.id))
 
