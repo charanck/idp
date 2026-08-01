@@ -108,6 +108,11 @@ else:
 AUTH_RATE_LIMIT = int(os.getenv('AUTH_RATE_LIMIT', '10'))
 AUTH_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv('AUTH_RATE_LIMIT_WINDOW_SECONDS', '60'))
 
+# Failed S2S API-key attempts allowed per window per client IP (see common/authentication.py
+# APIKeyAuth). Only failures count, so legitimate high-frequency service traffic using a
+# valid key is never throttled - this only slows down credential guessing.
+S2S_AUTH_RATE_LIMIT = int(os.getenv('S2S_AUTH_RATE_LIMIT', '20'))
+
 
 # Application definition
 

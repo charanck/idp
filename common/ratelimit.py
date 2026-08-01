@@ -21,3 +21,27 @@ def is_rate_limited(request, key: str, limit: int, window_seconds: int) -> bool:
         count = 1
 
     return count > limit
+
+
+def is_failure_limited(request, key: str, limit: int) -> bool:
+    """
+    Check whether this client has already recorded `limit`+ failures for `key`
+    in the current window, without counting this call as an attempt. Unlike
+    is_rate_limited, this only tracks failures (recorded separately via
+    record_failure) so that credentials which are frequently, legitimately
+    used (e.g. a service's API key) never get throttled - only guessing does.
+    """
+    cache = caches['ratelimit']
+    cache_key = f"ratelimit-failures:{key}:{get_client_ip(request)}"
+    return cache.get(cache_key, 0) >= limit
+
+
+def record_failure(request, key: str, window_seconds: int) -> None:
+    """Record one failed attempt for `key` from this client's IP."""
+    cache = caches['ratelimit']
+    cache_key = f"ratelimit-failures:{key}:{get_client_ip(request)}"
+
+    try:
+        cache.incr(cache_key)
+    except ValueError:
+        cache.set(cache_key, 1, window_seconds)

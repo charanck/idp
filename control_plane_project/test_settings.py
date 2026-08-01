@@ -43,6 +43,7 @@ CACHES = {
 # High enough that ordinary test traffic never trips the limiter.
 AUTH_RATE_LIMIT = 100000
 AUTH_RATE_LIMIT_WINDOW_SECONDS = 60
+S2S_AUTH_RATE_LIMIT = 100000
 
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',

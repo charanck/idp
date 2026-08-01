@@ -3,6 +3,7 @@ Django Ninja authentication classes - Simplified
 """
 import logging
 from ninja.security import HttpBearer, APIKeyHeader
+from django.conf import settings
 from django.http import HttpRequest
 from typing import Optional
 import uuid
@@ -10,6 +11,7 @@ import uuid
 from authentication.models import User, ServiceClient
 from authentication.services import AuthService
 from common.jwt_utils import decode_access_token
+from common.ratelimit import is_failure_limited, record_failure
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +62,16 @@ class APIKeyAuth(APIKeyHeader):
 
     param_name = "X-API-Key"
 
+    RATE_LIMIT_BUCKET = "s2s-api-key"
+
     def authenticate(self, request: HttpRequest, key: str) -> Optional[ServiceClient]: # type: ignore
         """Authenticate a request using the <key_id>.<secret> header format."""
         api_key = request.headers.get(self.param_name) or key
         if not api_key:
+            return None
+
+        if is_failure_limited(request, self.RATE_LIMIT_BUCKET, settings.S2S_AUTH_RATE_LIMIT):
+            logger.warning("API key auth blocked: too many failed attempts from this client on %s", request.path)
             return None
 
         client = auth_service.authenticate_service_api_key(api_key)
@@ -74,4 +82,5 @@ class APIKeyAuth(APIKeyHeader):
         else:
             key_id = api_key.split(".", 1)[0] if "." in api_key else "<malformed>"
             logger.warning("API key auth rejected for key_id=%s on %s", key_id, request.path)
+            record_failure(request, self.RATE_LIMIT_BUCKET, settings.AUTH_RATE_LIMIT_WINDOW_SECONDS)
         return client

@@ -5,7 +5,7 @@ Uses the sqlite test database (see control_plane_project/test_settings.py).
 import uuid
 
 import pytest
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 
 from authentication.models import ServiceClient, User
 from authentication.services import AuthService
@@ -115,3 +115,23 @@ class TestAPIKeyAuth:
     def test_authenticate_rejects_empty_key(self, request_factory):
         request = request_factory.get("/api/v1/config/configs/list")
         assert APIKeyAuth().authenticate(request, "") is None
+
+
+class TestAPIKeyAuthRateLimiting:
+    def test_blocks_further_attempts_after_repeated_failures(self, request_factory):
+        with override_settings(S2S_AUTH_RATE_LIMIT=2):
+            for _ in range(2):
+                request = request_factory.get("/api/v1/config/configs/list", REMOTE_ADDR="10.0.0.5")
+                assert APIKeyAuth().authenticate(request, "sk_live_bad.wrong-secret") is None
+
+            # Even a valid key from the same IP is now blocked without being checked.
+            credentials = auth_service.create_service_client("billing-service")
+            request = request_factory.get("/api/v1/config/configs/list", REMOTE_ADDR="10.0.0.5")
+            assert APIKeyAuth().authenticate(request, credentials.api_key) is None
+
+    def test_does_not_throttle_repeated_valid_key_usage(self, request_factory):
+        with override_settings(S2S_AUTH_RATE_LIMIT=2):
+            credentials = auth_service.create_service_client("billing-service")
+            for _ in range(5):
+                request = request_factory.get("/api/v1/config/configs/list", REMOTE_ADDR="10.0.0.9")
+                assert APIKeyAuth().authenticate(request, credentials.api_key) == credentials.client

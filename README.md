@@ -33,7 +33,10 @@
   gone.
 - **Rate limiting** on the auth endpoints most exposed to brute-force/credential-stuffing attempts
   (`POST /api/v1/auth/token`, `POST /api/v1/auth/register`, and the web UI `POST /login/`) — capped
-  per client IP, configurable via `AUTH_RATE_LIMIT` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`.
+  per client IP, configurable via `AUTH_RATE_LIMIT` / `AUTH_RATE_LIMIT_WINDOW_SECONDS`. S2S API-key
+  auth (`X-API-Key`, used by `/api/v1/config/configs/list`, `/api/v1/auth/s2s/ping`, and the
+  feature-flags list endpoint) is separately throttled on failed attempts only, per client IP, via
+  `S2S_AUTH_RATE_LIMIT` — so a valid key is never throttled, only guessing.
 - **Optional Redis (or in-memory) caching** for the read-heavy config/flag list endpoints, with
   version-based invalidation.
 
