@@ -1,6 +1,12 @@
 .git
 .github
 .venv
+.env
+.env.*
+!.env.example
+Dockerfile
+docker-compose*.yml
+.claude/
 __pycache__/
 *.pyc
 *.pyo
