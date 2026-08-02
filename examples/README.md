@@ -36,4 +36,4 @@ example above needs. (`api_key` is stored hashed server-side and can't be recove
 `encryption_key` can be viewed and rotated from that client's detail page in the web UI if you
 lose it.)
 
-See the main [README](../README.md#api-examples) for the full API reference and encryption model.
+See [docs/api.md](../docs/api.md) for the full API reference and encryption model.
