@@ -1,0 +1,95 @@
+package pages
+
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+// LoginData carries the login form's submitted values + CSRF token; there is
+// no logged-in NavUser yet, so the layout renders its unauthenticated shell.
+type LoginData struct {
+	CSRFToken     string
+	Email         string
+	Error         string
+	OAuthProviders []LoginOAuthProvider
+}
+
+type LoginOAuthProvider struct {
+	ID   string
+	Name string
+}
+
+templ Login(flashes []session.Flash, data LoginData) {
+	@layout.Base("Log in", "", layout.NavUser{}, flashes) {
+		<div class="card shadow-sm">
+			<div class="card-body p-4">
+				<h4 class="card-title mb-3">Control Plane</h4>
+				if data.Error != "" {
+					<div class="alert alert-danger">{ data.Error }</div>
+				}
+				<form method="post" action="/login/">
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div class="mb-3">
+						<label class="form-label" for="email">Email</label>
+						<input class="form-control" type="email" id="email" name="username" value={ data.Email } required autofocus/>
+					</div>
+					<div class="mb-3">
+						<label class="form-label" for="password">Password</label>
+						<input class="form-control" type="password" id="password" name="password" required/>
+					</div>
+					<button class="btn btn-primary w-100" type="submit">Log in</button>
+				</form>
+				if len(data.OAuthProviders) > 0 {
+					<div class="mt-4">
+						<div class="text-muted small mb-2">Or continue with an OAuth provider</div>
+						<div class="d-grid gap-2">
+							for _, p := range data.OAuthProviders {
+								<a class="btn btn-outline-secondary" href={ templ.URL("/oauth/login/" + p.ID + "/") }>
+									<i class="bi bi-box-arrow-in-right"></i> Continue with { p.Name }
+								</a>
+							}
+						</div>
+					</div>
+				}
+			</div>
+		</div>
+	}
+}
+
+type PasswordChangeData struct {
+	CSRFToken  string
+	ForceReset bool
+	Errors     []string
+}
+
+templ PasswordChange(flashes []session.Flash, user layout.NavUser, data PasswordChangeData) {
+	@layout.Base("Change Password", "", user, flashes) {
+		<div class="card shadow-sm" style="max-width: 480px;">
+			<div class="card-body p-4">
+				<h4 class="card-title mb-3">Change Password</h4>
+				if data.ForceReset {
+					<div class="alert alert-warning">You must change your password before continuing.</div>
+				}
+				for _, e := range data.Errors {
+					<div class="alert alert-danger">{ e }</div>
+				}
+				<form method="post" action="/password/change/">
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					if !data.ForceReset {
+						<div class="mb-3">
+							<label class="form-label" for="old_password">Current Password</label>
+							<input class="form-control" type="password" id="old_password" name="old_password" required/>
+						</div>
+					}
+					<div class="mb-3">
+						<label class="form-label" for="new_password1">New Password</label>
+						<input class="form-control" type="password" id="new_password1" name="new_password1" required/>
+					</div>
+					<div class="mb-3">
+						<label class="form-label" for="new_password2">Confirm New Password</label>
+						<input class="form-control" type="password" id="new_password2" name="new_password2" required/>
+					</div>
+					<button class="btn btn-primary w-100" type="submit">Change Password</button>
+				</form>
+			</div>
+		</div>
+	}
+}

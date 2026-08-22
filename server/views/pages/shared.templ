@@ -1,0 +1,54 @@
+package pages
+
+import "strconv"
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+type ConfirmDeleteData struct {
+	CSRFToken  string
+	Title      string
+	Message    string
+	Action     string
+	CancelHref string
+}
+
+templ ConfirmDelete(flashes []session.Flash, user layout.NavUser, activeNav string, data ConfirmDeleteData) {
+	@layout.Base(data.Title, activeNav, user, flashes) {
+		<h2 class="mb-4">{ data.Title }</h2>
+		<div class="alert alert-warning">{ data.Message }</div>
+		<form method="post" action={ templ.URL(data.Action) }>
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+			<button class="btn btn-danger" type="submit">Delete</button>
+			<a class="btn btn-secondary ms-2" href={ templ.URL(data.CancelHref) }>Cancel</a>
+		</form>
+	}
+}
+
+// PaginationNav renders page links for a Page[T], preserving any existing
+// filter query string (extraQuery, e.g. "resource=foo&type=bar") alongside
+// the "page" param, mirroring the Django template's pagination controls.
+templ PaginationNav(path string, extraQuery string, page int, numPages int, hasPrev bool, hasNext bool, prevNum int, nextNum int, window []int) {
+	if numPages > 1 {
+		<nav>
+			<ul class="pagination">
+				if hasPrev {
+					<li class="page-item"><a class="page-link" href={ templ.URL(pageHref(path, extraQuery, prevNum)) }>Previous</a></li>
+				} else {
+					<li class="page-item disabled"><span class="page-link">Previous</span></li>
+				}
+				for _, n := range window {
+					if n == page {
+						<li class="page-item active"><span class="page-link">{ strconv.Itoa(n) }</span></li>
+					} else {
+						<li class="page-item"><a class="page-link" href={ templ.URL(pageHref(path, extraQuery, n)) }>{ strconv.Itoa(n) }</a></li>
+					}
+				}
+				if hasNext {
+					<li class="page-item"><a class="page-link" href={ templ.URL(pageHref(path, extraQuery, nextNum)) }>Next</a></li>
+				} else {
+					<li class="page-item disabled"><span class="page-link">Next</span></li>
+				}
+			</ul>
+		</nav>
+	}
+}

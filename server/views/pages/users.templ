@@ -1,0 +1,133 @@
+package pages
+
+import "controlplane/internal/auth"
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+type UsersListData struct {
+	Users    []auth.User
+	Page     int
+	NumPages int
+	HasPrev  bool
+	HasNext  bool
+	PrevNum  int
+	NextNum  int
+	Window   []int
+}
+
+templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData) {
+	@layout.Base("Users", "users", user, flashes) {
+		<div class="d-flex justify-content-between align-items-center mb-4">
+			<h2 class="mb-0">Users</h2>
+			<a class="btn btn-primary" href="/users/create/"><i class="bi bi-plus-lg"></i> New User</a>
+		</div>
+		<div class="card shadow-sm">
+			<table class="table table-hover mb-0">
+				<thead><tr><th>Email</th><th>Username</th><th>Active</th><th>Staff</th><th class="text-end">Actions</th></tr></thead>
+				<tbody>
+					if len(data.Users) == 0 {
+						<tr><td colspan="5" class="text-muted text-center py-4">No users yet.</td></tr>
+					}
+					for _, u := range data.Users {
+						<tr>
+							<td>{ u.Email }</td>
+							<td>{ u.Username }</td>
+							<td>
+								if u.IsActive {
+									<span class="badge bg-success">Active</span>
+								} else {
+									<span class="badge bg-secondary">Inactive</span>
+								}
+							</td>
+							<td>
+								if u.IsStaff {
+									<span class="badge bg-info">Staff</span>
+								}
+							</td>
+							<td class="text-end">
+								<a class="btn btn-sm btn-outline-secondary" href={ templ.URL("/users/" + u.ID.String() + "/edit/") }>Edit</a>
+								<a class="btn btn-sm btn-outline-danger" href={ templ.URL("/users/" + u.ID.String() + "/delete/") }>Delete</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+		@PaginationNav("/users/", "", data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+	}
+}
+
+type UserFormData struct {
+	CSRFToken    string
+	Email        string
+	Username     string
+	IsActive     bool
+	IsStaff      bool
+	Error        string
+	Action       string
+	Title        string
+	IsEdit       bool
+	EditingSelf  bool
+}
+
+templ UserForm(flashes []session.Flash, user layout.NavUser, data UserFormData) {
+	@layout.Base(data.Title, "users", user, flashes) {
+		<h2 class="mb-4">{ data.Title }</h2>
+		<div class="card shadow-sm" style="max-width: 560px;">
+			<div class="card-body p-4">
+				if data.Error != "" {
+					<div class="alert alert-danger">{ data.Error }</div>
+				}
+				if data.IsEdit && data.EditingSelf {
+					<div class="alert alert-info">You cannot change your own active/staff status here — ask another admin.</div>
+				}
+				<form method="post" action={ templ.URL(data.Action) }>
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div class="mb-3">
+						<label class="form-label" for="email">Email</label>
+						<input class="form-control" type="email" id="email" name="email" value={ data.Email } required/>
+					</div>
+					<div class="mb-3">
+						<label class="form-label" for="username">Username</label>
+						<input class="form-control" type="text" id="username" name="username" value={ data.Username } required/>
+					</div>
+					if !data.IsEdit {
+						<div class="mb-3">
+							<label class="form-label" for="password1">Password</label>
+							<input class="form-control" type="password" id="password1" name="password1" required/>
+						</div>
+						<div class="mb-3">
+							<label class="form-label" for="password2">Confirm Password</label>
+							<input class="form-control" type="password" id="password2" name="password2" required/>
+						</div>
+					}
+					<div class="form-check mb-2">
+						if data.IsActive {
+							<input class="form-check-input" type="checkbox" id="is_active" name="is_active" checked/>
+						} else {
+							<input class="form-check-input" type="checkbox" id="is_active" name="is_active"/>
+						}
+						if data.IsEdit {
+							<label class="form-check-label" for="is_active">Active</label>
+						} else {
+							<label class="form-check-label" for="is_active">Activate immediately</label>
+							<div class="form-text">Leave unchecked to require a separate admin activation step before this user can log in.</div>
+						}
+					</div>
+					if data.IsEdit {
+						<div class="form-check mb-3">
+							if data.IsStaff {
+								<input class="form-check-input" type="checkbox" id="is_staff" name="is_staff" checked/>
+							} else {
+								<input class="form-check-input" type="checkbox" id="is_staff" name="is_staff"/>
+							}
+							<label class="form-check-label" for="is_staff">Staff (admin access)</label>
+						</div>
+					}
+					<button class="btn btn-primary" type="submit">Save</button>
+					<a class="btn btn-secondary ms-2" href="/users/">Cancel</a>
+				</form>
+			</div>
+		</div>
+	}
+}
