@@ -129,7 +129,7 @@ func environmentCreateHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Create(&env).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogCreate(c.Request().Context(), "environment", env.ID.String(), env.Name, requestContext(c), nil)
+		deps.Activity.LogCreate(requestContext(c), "environment", env.ID.String(), env.Name, nil)
 		AddFlash(c, "success", "Environment created.")
 		return c.Redirect(http.StatusFound, "/environments/")
 	}
@@ -176,7 +176,7 @@ func environmentEditHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Save(&env).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogUpdate(c.Request().Context(), "environment", env.ID.String(), env.Name, requestContext(c), nil)
+		deps.Activity.LogUpdate(requestContext(c), "environment", env.ID.String(), env.Name, nil)
 		AddFlash(c, "success", "Environment updated.")
 		return c.Redirect(http.StatusFound, "/environments/")
 	}
@@ -209,7 +209,7 @@ func environmentDeleteHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Delete(&env).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogDelete(c.Request().Context(), "environment", env.ID.String(), env.Name, requestContext(c), nil)
+		deps.Activity.LogDelete(requestContext(c), "environment", env.ID.String(), env.Name, nil)
 		AddFlash(c, "success", "Environment deleted.")
 		return c.Redirect(http.StatusFound, "/environments/")
 	}

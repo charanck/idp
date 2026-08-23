@@ -112,7 +112,7 @@ func userCreateHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 
-		deps.Activity.LogCreate(c.Request().Context(), "user", newUser.ID.String(), newUser.Email, requestContext(c), nil)
+		deps.Activity.LogCreate(requestContext(c), "user", newUser.ID.String(), newUser.Email, nil)
 		AddFlash(c, "success", "User "+newUser.Email+" created successfully.")
 		return c.Redirect(http.StatusFound, "/users/")
 	}
@@ -178,7 +178,7 @@ func userEditHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 
-		deps.Activity.LogUpdate(c.Request().Context(), "user", target.ID.String(), target.Email, requestContext(c), nil)
+		deps.Activity.LogUpdate(requestContext(c), "user", target.ID.String(), target.Email, nil)
 		AddFlash(c, "success", "User "+target.Email+" updated successfully.")
 		return c.Redirect(http.StatusFound, "/users/")
 	}
@@ -217,7 +217,7 @@ func userDeleteHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 
-		deps.Activity.LogDelete(c.Request().Context(), "user", target.ID.String(), target.Email, requestContext(c), nil)
+		deps.Activity.LogDelete(requestContext(c), "user", target.ID.String(), target.Email, nil)
 		AddFlash(c, "success", "User "+target.Email+" deleted successfully.")
 		return c.Redirect(http.StatusFound, "/users/")
 	}

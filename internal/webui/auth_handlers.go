@@ -72,7 +72,7 @@ func loginViewHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 		if user == nil {
-			deps.Activity.LogLoginFailed(c.Request().Context(), email, requestContext(c), "Invalid web login attempt")
+			deps.Activity.LogLoginFailed(requestContext(c), email, "Invalid web login attempt")
 			return pages.Login(flashes(c), pages.LoginData{
 				CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
 				Error: "Invalid email or password.",
@@ -82,7 +82,7 @@ func loginViewHandler(deps *Deps) echo.HandlerFunc {
 		sess := session.FromContext(c)
 		sess.Regenerate()
 		sess.SetUserID(user.ID.String())
-		deps.Activity.LogLogin(c.Request().Context(), user.Email, requestContext(c), "Web login")
+		deps.Activity.LogLogin(requestContext(c), user.Email, "Web login")
 
 		if user.ForcePasswordReset {
 			AddFlash(c, "warning", "You must change your password before continuing.")
@@ -109,7 +109,7 @@ func registerViewHandler(_ *Deps) echo.HandlerFunc {
 func logoutViewHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if user := CurrentUser(c); user != nil {
-			deps.Activity.LogLogout(c.Request().Context(), user.Email, requestContext(c))
+			deps.Activity.LogLogout(requestContext(c), user.Email)
 		}
 		session.FromContext(c).Destroy()
 		return c.Redirect(http.StatusFound, "/login/")

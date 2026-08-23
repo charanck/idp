@@ -82,7 +82,7 @@ func clientCreateHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 
-		deps.Activity.LogCreate(c.Request().Context(), "client", creds.Client.ID.String(), creds.Client.Name, requestContext(c), nil)
+		deps.Activity.LogCreate(requestContext(c), "client", creds.Client.ID.String(), creds.Client.Name, nil)
 		AddFlash(c, "success", "Service client created successfully.")
 
 		apiKeyID := ""
@@ -138,7 +138,7 @@ func clientToggleHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Save(client).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogToggle(c.Request().Context(), "client", client.ID.String(), client.Name, requestContext(c), map[string]any{"is_active": client.IsActive})
+		deps.Activity.LogToggle(requestContext(c), "client", client.ID.String(), client.Name, map[string]any{"is_active": client.IsActive})
 
 		status := "deactivated"
 		if client.IsActive {
@@ -168,7 +168,7 @@ func clientDeleteHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Delete(client).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogDelete(c.Request().Context(), "client", client.ID.String(), client.Name, requestContext(c), nil)
+		deps.Activity.LogDelete(requestContext(c), "client", client.ID.String(), client.Name, nil)
 		AddFlash(c, "success", "Service client "+client.Name+" deleted successfully.")
 		return c.Redirect(http.StatusFound, "/clients/")
 	}
@@ -190,7 +190,7 @@ func clientRegenerateKeyHandler(deps *Deps) echo.HandlerFunc {
 			if err := deps.DB.WithContext(c.Request().Context()).Save(client).Error; err != nil {
 				return err
 			}
-			deps.Activity.LogUpdate(c.Request().Context(), "client", client.ID.String(), client.Name, requestContext(c), map[string]any{"action": "regenerate_encryption_key"})
+			deps.Activity.LogUpdate(requestContext(c), "client", client.ID.String(), client.Name, map[string]any{"action": "regenerate_encryption_key"})
 			AddFlash(c, "success", "Encryption key regenerated for "+client.Name+". The client must be updated with the new key.")
 		}
 

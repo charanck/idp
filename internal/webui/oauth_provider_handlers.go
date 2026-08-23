@@ -106,7 +106,7 @@ func oauthProviderCreateHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 
-		deps.Activity.LogCreate(c.Request().Context(), "oauth_provider", p.ID.String(), p.Name, requestContext(c), map[string]any{"scope": p.Scope, "active": p.IsActive})
+		deps.Activity.LogCreate(requestContext(c), "oauth_provider", p.ID.String(), p.Name, map[string]any{"scope": p.Scope, "active": p.IsActive})
 		AddFlash(c, "success", "OAuth provider \""+p.Name+"\" created successfully.")
 		return c.Redirect(http.StatusFound, "/oauth/providers/")
 	}
@@ -163,7 +163,7 @@ func oauthProviderEditHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 
-		deps.Activity.LogUpdate(c.Request().Context(), "oauth_provider", p.ID.String(), p.Name, requestContext(c), map[string]any{"scope": p.Scope, "active": p.IsActive})
+		deps.Activity.LogUpdate(requestContext(c), "oauth_provider", p.ID.String(), p.Name, map[string]any{"scope": p.Scope, "active": p.IsActive})
 		AddFlash(c, "success", "OAuth provider \""+p.Name+"\" updated successfully.")
 		return c.Redirect(http.StatusFound, "/oauth/providers/")
 	}
@@ -188,7 +188,7 @@ func oauthProviderDeleteHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Delete(p).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogDelete(c.Request().Context(), "oauth_provider", p.ID.String(), p.Name, requestContext(c), nil)
+		deps.Activity.LogDelete(requestContext(c), "oauth_provider", p.ID.String(), p.Name, nil)
 		AddFlash(c, "success", "OAuth provider \""+p.Name+"\" deleted successfully.")
 		return c.Redirect(http.StatusFound, "/oauth/providers/")
 	}
@@ -204,7 +204,7 @@ func oauthProviderToggleHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Save(p).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogToggle(c.Request().Context(), "oauth_provider", p.ID.String(), p.Name, requestContext(c), map[string]any{"is_active": p.IsActive})
+		deps.Activity.LogToggle(requestContext(c), "oauth_provider", p.ID.String(), p.Name, map[string]any{"is_active": p.IsActive})
 
 		status := "deactivated"
 		if p.IsActive {

@@ -77,7 +77,7 @@ func applicationCreateHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Create(&app).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogCreate(c.Request().Context(), "application", app.ID.String(), app.Name, requestContext(c), nil)
+		deps.Activity.LogCreate(requestContext(c), "application", app.ID.String(), app.Name, nil)
 		AddFlash(c, "success", "Application created.")
 		return c.Redirect(http.StatusFound, "/applications/")
 	}
@@ -116,7 +116,7 @@ func applicationEditHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Save(&app).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogUpdate(c.Request().Context(), "application", app.ID.String(), app.Name, requestContext(c), nil)
+		deps.Activity.LogUpdate(requestContext(c), "application", app.ID.String(), app.Name, nil)
 		AddFlash(c, "success", "Application updated.")
 		return c.Redirect(http.StatusFound, "/applications/")
 	}
@@ -149,7 +149,7 @@ func applicationDeleteHandler(deps *Deps) echo.HandlerFunc {
 		if err := deps.DB.WithContext(c.Request().Context()).Delete(&app).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogDelete(c.Request().Context(), "application", app.ID.String(), app.Name, requestContext(c), nil)
+		deps.Activity.LogDelete(requestContext(c), "application", app.ID.String(), app.Name, nil)
 		AddFlash(c, "success", "Application deleted.")
 		return c.Redirect(http.StatusFound, "/applications/")
 	}

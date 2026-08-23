@@ -168,7 +168,7 @@ func flagCreateHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		for _, flag := range flags {
-			deps.Activity.LogCreate(c.Request().Context(), "feature_flag", flag.ID.String(), flag.Name, requestContext(c), nil)
+			deps.Activity.LogCreate(requestContext(c), "feature_flag", flag.ID.String(), flag.Name, nil)
 		}
 		AddFlash(c, "success", "Feature flag saved.")
 		return c.Redirect(http.StatusFound, "/flags/")
@@ -200,7 +200,7 @@ func flagToggleHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 
-		deps.Activity.LogToggle(c.Request().Context(), "feature_flag", flag.ID.String(), flag.Name, requestContext(c), map[string]any{"is_enabled": flag.IsEnabled})
+		deps.Activity.LogToggle(requestContext(c), "feature_flag", flag.ID.String(), flag.Name, map[string]any{"is_enabled": flag.IsEnabled})
 		AddFlash(c, "success", "Feature flag toggled.")
 		return c.Redirect(http.StatusFound, "/flags/")
 	}
@@ -241,7 +241,7 @@ func flagDeleteHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 
-		deps.Activity.LogDelete(c.Request().Context(), "feature_flag", flag.ID.String(), flag.Name, requestContext(c), nil)
+		deps.Activity.LogDelete(requestContext(c), "feature_flag", flag.ID.String(), flag.Name, nil)
 		AddFlash(c, "success", "Feature flag deleted.")
 		return c.Redirect(http.StatusFound, "/flags/")
 	}

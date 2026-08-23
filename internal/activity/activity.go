@@ -22,21 +22,38 @@ func NewLogger(db *gorm.DB) *Logger {
 	return &Logger{db: db}
 }
 
-// Context carries the request-derived fields (client IP, current user email)
-// that get attached to every activity row.
-type Context struct {
+// requestInfoKey is the context.Context key under which request-derived
+// fields (client IP, current user email) are stashed, so callers only need
+// to thread a single context.Context through to the logger.
+type requestInfoKey struct{}
+
+// RequestInfo carries the request-derived fields that get attached to every
+// activity row.
+type RequestInfo struct {
 	IPAddress string
 	UserEmail string
 }
 
-func (l *Logger) log(ctx context.Context, typ, resource, resourceID, resourceName, userEmail string, actCtx *Context, details any) {
-	if actCtx != nil && userEmail == "" {
-		userEmail = actCtx.UserEmail
+// WithRequestInfo returns a copy of ctx carrying info for the activity
+// logger to pick up on any Log* call made with it.
+func WithRequestInfo(ctx context.Context, info RequestInfo) context.Context {
+	return context.WithValue(ctx, requestInfoKey{}, info)
+}
+
+func requestInfoFromContext(ctx context.Context) RequestInfo {
+	info, _ := ctx.Value(requestInfoKey{}).(RequestInfo)
+	return info
+}
+
+func (l *Logger) log(ctx context.Context, typ, resource, resourceID, resourceName, userEmail string, details any) {
+	info := requestInfoFromContext(ctx)
+	if userEmail == "" {
+		userEmail = info.UserEmail
 	}
 
 	var ip *string
-	if actCtx != nil && actCtx.IPAddress != "" {
-		ip = &actCtx.IPAddress
+	if info.IPAddress != "" {
+		ip = &info.IPAddress
 	}
 
 	var detailsStr *string
@@ -75,36 +92,36 @@ func (l *Logger) log(ctx context.Context, typ, resource, resourceID, resourceNam
 	}
 }
 
-func (l *Logger) LogCreate(ctx context.Context, resource, resourceID, resourceName string, actCtx *Context, details any) {
-	l.log(ctx, config.ActivityTypeCreate, resource, resourceID, resourceName, "", actCtx, details)
+func (l *Logger) LogCreate(ctx context.Context, resource, resourceID, resourceName string, details any) {
+	l.log(ctx, config.ActivityTypeCreate, resource, resourceID, resourceName, "", details)
 }
 
-func (l *Logger) LogUpdate(ctx context.Context, resource, resourceID, resourceName string, actCtx *Context, details any) {
-	l.log(ctx, config.ActivityTypeUpdate, resource, resourceID, resourceName, "", actCtx, details)
+func (l *Logger) LogUpdate(ctx context.Context, resource, resourceID, resourceName string, details any) {
+	l.log(ctx, config.ActivityTypeUpdate, resource, resourceID, resourceName, "", details)
 }
 
-func (l *Logger) LogDelete(ctx context.Context, resource, resourceID, resourceName string, actCtx *Context, details any) {
-	l.log(ctx, config.ActivityTypeDelete, resource, resourceID, resourceName, "", actCtx, details)
+func (l *Logger) LogDelete(ctx context.Context, resource, resourceID, resourceName string, details any) {
+	l.log(ctx, config.ActivityTypeDelete, resource, resourceID, resourceName, "", details)
 }
 
-func (l *Logger) LogToggle(ctx context.Context, resource, resourceID, resourceName string, actCtx *Context, details any) {
-	l.log(ctx, config.ActivityTypeToggle, resource, resourceID, resourceName, "", actCtx, details)
+func (l *Logger) LogToggle(ctx context.Context, resource, resourceID, resourceName string, details any) {
+	l.log(ctx, config.ActivityTypeToggle, resource, resourceID, resourceName, "", details)
 }
 
-func (l *Logger) LogLogin(ctx context.Context, userEmail string, actCtx *Context, details any) {
-	l.log(ctx, config.ActivityTypeLogin, "user", userEmail, userEmail, userEmail, actCtx, details)
+func (l *Logger) LogLogin(ctx context.Context, userEmail string, details any) {
+	l.log(ctx, config.ActivityTypeLogin, "user", userEmail, userEmail, userEmail, details)
 }
 
-func (l *Logger) LogLogout(ctx context.Context, userEmail string, actCtx *Context) {
-	l.log(ctx, config.ActivityTypeLogout, "user", userEmail, userEmail, userEmail, actCtx, nil)
+func (l *Logger) LogLogout(ctx context.Context, userEmail string) {
+	l.log(ctx, config.ActivityTypeLogout, "user", userEmail, userEmail, userEmail, nil)
 }
 
 // LogLoginFailed records a failed authentication attempt (bad password, unknown user, etc.).
-func (l *Logger) LogLoginFailed(ctx context.Context, identifier string, actCtx *Context, details any) {
-	l.log(ctx, config.ActivityTypeLoginFailed, "user", identifier, identifier, identifier, actCtx, details)
+func (l *Logger) LogLoginFailed(ctx context.Context, identifier string, details any) {
+	l.log(ctx, config.ActivityTypeLoginFailed, "user", identifier, identifier, identifier, details)
 }
 
 // LogAuthFailed records a failed non-user authentication attempt (e.g. an invalid S2S API key).
-func (l *Logger) LogAuthFailed(ctx context.Context, resource, identifier string, actCtx *Context, details any) {
-	l.log(ctx, config.ActivityTypeAuthFailed, resource, identifier, identifier, "", actCtx, details)
+func (l *Logger) LogAuthFailed(ctx context.Context, resource, identifier string, details any) {
+	l.log(ctx, config.ActivityTypeAuthFailed, resource, identifier, identifier, "", details)
 }

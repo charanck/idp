@@ -115,14 +115,14 @@ func oauthCallbackHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		if !user.IsActive {
-			deps.Activity.LogLoginFailed(c.Request().Context(), user.Email, requestContext(c), "OAuth login via "+provider.Name+": account not active")
+			deps.Activity.LogLoginFailed(requestContext(c), user.Email, "OAuth login via "+provider.Name+": account not active")
 			AddFlash(c, "error", "Your account is pending admin approval. Please contact an administrator.")
 			return c.Redirect(http.StatusFound, "/login/")
 		}
 
 		sess.Regenerate()
 		sess.SetUserID(user.ID.String())
-		deps.Activity.LogLogin(c.Request().Context(), user.Email, requestContext(c), "OAuth login via "+provider.Name)
+		deps.Activity.LogLogin(requestContext(c), user.Email, "OAuth login via "+provider.Name)
 
 		AddFlash(c, "success", "Successfully logged in with "+provider.Name+"!")
 		return c.Redirect(http.StatusFound, "/dashboard/")

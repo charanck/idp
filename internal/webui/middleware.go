@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
@@ -102,14 +103,16 @@ func AddFlash(c echo.Context, tag, text string) {
 	}
 }
 
-// requestContext builds the activity.Context for the current request,
-// mirroring log_activity's request.user.email fallback.
-func requestContext(c echo.Context) *activity.Context {
-	ctx := &activity.Context{
+// requestContext returns the request's context.Context carrying the
+// request-derived fields (client IP, current user email) that the activity
+// logger attaches to every row, mirroring log_activity's request.user.email
+// fallback.
+func requestContext(c echo.Context) context.Context {
+	info := activity.RequestInfo{
 		IPAddress: ratelimit.ClientIP(c.Request().Header.Get("X-Forwarded-For"), c.RealIP()),
 	}
 	if user := CurrentUser(c); user != nil {
-		ctx.UserEmail = user.Email
+		info.UserEmail = user.Email
 	}
-	return ctx
+	return activity.WithRequestInfo(c.Request().Context(), info)
 }

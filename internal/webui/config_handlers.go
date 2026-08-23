@@ -416,7 +416,7 @@ func configDeleteHandler(deps *Deps) echo.HandlerFunc {
 		if !ok {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		deps.Activity.LogDelete(c.Request().Context(), "config", id, entry.Key, requestContext(c), nil)
+		deps.Activity.LogDelete(requestContext(c), "config", id, entry.Key, nil)
 		AddFlash(c, "success", "Config deleted.")
 		return c.Redirect(http.StatusFound, "/configs/")
 	}
@@ -482,7 +482,7 @@ func configRollbackHandler(deps *Deps) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
-		deps.Activity.LogUpdate(c.Request().Context(), "config", id, updated.Key, requestContext(c), map[string]any{"rolled_back_to_version": version})
+		deps.Activity.LogUpdate(requestContext(c), "config", id, updated.Key, map[string]any{"rolled_back_to_version": version})
 		AddFlash(c, "success", "Rolled back to version "+strconv.Itoa(version)+".")
 		return c.Redirect(http.StatusFound, "/configs/"+id+"/history/")
 	}
