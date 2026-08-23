@@ -1,0 +1,252 @@
+package pages
+
+import "controlplane/internal/config"
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+// ConfigGroup mirrors configs_list.html's grouping: one row per
+// (application, key, is_secret, type), holding every environment's entry for
+// that key so the table can show all environments side by side.
+type ConfigGroup struct {
+	ApplicationID   string
+	ApplicationName string
+	Key             string
+	IsSecret        bool
+	Type            string
+	Entries         []ConfigGroupEntry
+}
+
+type ConfigGroupEntry struct {
+	ID              string
+	EnvironmentName string
+	DisplayValue    string
+}
+
+type ConfigsListData struct {
+	Groups   []ConfigGroup
+	Page     int
+	NumPages int
+	HasPrev  bool
+	HasNext  bool
+	PrevNum  int
+	NextNum  int
+	Window   []int
+}
+
+templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsListData) {
+	@layout.Base("Configs & Secrets", "configs", user, flashes) {
+		<div class="d-flex justify-content-between align-items-center mb-4">
+			<h2 class="mb-0">Configs &amp; Secrets</h2>
+			<a class="btn btn-primary" href="/configs/create/"><i class="bi bi-plus-lg"></i> New Config</a>
+		</div>
+		if len(data.Groups) == 0 {
+			<div class="alert alert-secondary">No configs yet.</div>
+		}
+		for _, group := range data.Groups {
+			<div class="card shadow-sm mb-3">
+				<div class="card-header d-flex justify-content-between align-items-center">
+					<span>
+						<strong>{ group.ApplicationName }</strong> / { group.Key }
+						if group.IsSecret {
+							<span class="badge bg-warning text-dark ms-2">Secret</span>
+						} else {
+							<span class="badge bg-secondary ms-2">Config</span>
+						}
+						<span class="badge bg-info ms-1">{ group.Type }</span>
+					</span>
+				</div>
+				<table class="table table-hover mb-0">
+					<tbody>
+						for _, entry := range group.Entries {
+							<tr>
+								<td style="width: 160px;">{ entry.EnvironmentName }</td>
+								<td class="text-truncate" style="max-width: 320px;">
+									if group.IsSecret {
+										<code>••••••••</code>
+									} else {
+										<code>{ entry.DisplayValue }</code>
+									}
+								</td>
+								<td class="text-end" style="width: 260px;">
+									<a class="btn btn-sm btn-outline-secondary" href={ templ.URL("/configs/" + entry.ID + "/history/") }>History</a>
+									<a class="btn btn-sm btn-outline-secondary" href={ templ.URL("/configs/" + entry.ID + "/clone/") }>Clone</a>
+									<a class="btn btn-sm btn-outline-secondary" href={ templ.URL("/configs/" + entry.ID + "/edit/") }>Edit</a>
+									<a class="btn btn-sm btn-outline-danger" href={ templ.URL("/configs/" + entry.ID + "/delete/") }>Delete</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+		@PaginationNav("/configs/", "", data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+	}
+}
+
+type ConfigFormData struct {
+	CSRFToken             string
+	Applications          []config.Application
+	EnvironmentsByAppJSON string
+	ApplicationID         string
+	EnvironmentID         string
+	Key                   string
+	Value                 string
+	Type                  string
+	IsSecret              bool
+	Error                 string
+	Action                string
+	Title                 string
+	ShowSubmitAction      bool // create_single vs create_all_env, only on create/clone
+	IsEdit                bool
+}
+
+templ ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormData) {
+	@layout.Base(data.Title, "configs", user, flashes) {
+		<h2 class="mb-4">{ data.Title }</h2>
+		<div class="card shadow-sm" style="max-width: 640px;">
+			<div class="card-body p-4">
+				if data.Error != "" {
+					<div class="alert alert-danger">{ data.Error }</div>
+				}
+				<form method="post" action={ templ.URL(data.Action) }>
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div class="mb-3">
+						<label class="form-label" for="application">Application</label>
+						<select class="form-select" id="application" name="application_id" required>
+							for _, app := range data.Applications {
+								if app.ID.String() == data.ApplicationID {
+									<option value={ app.ID.String() } selected>{ app.Name }</option>
+								} else {
+									<option value={ app.ID.String() }>{ app.Name }</option>
+								}
+							}
+						</select>
+					</div>
+					<div class="mb-3">
+						<label class="form-label" for="environment">Environment</label>
+						<select class="form-select" id="environment" name="environment_id" required></select>
+					</div>
+					<div class="mb-3">
+						<label class="form-label" for="key">Key</label>
+						<input class="form-control" type="text" id="key" name="key" value={ data.Key } required/>
+					</div>
+					<div class="mb-3">
+						<label class="form-label" for="value">Value</label>
+						<textarea class="form-control" id="value" name="value" rows="3">{ data.Value }</textarea>
+					</div>
+					<div class="mb-3">
+						<label class="form-label" for="type">Type</label>
+						<select class="form-select" id="type" name="type">
+							@typeOption(data.Type, config.TypeString, "String")
+							@typeOption(data.Type, config.TypeBoolean, "Boolean")
+							@typeOption(data.Type, config.TypeNumber, "Number")
+							@typeOption(data.Type, config.TypeObject, "Object")
+							@typeOption(data.Type, config.TypeArray, "Array")
+						</select>
+					</div>
+					<div class="form-check mb-3">
+						if data.IsSecret {
+							<input class="form-check-input" type="checkbox" id="is_secret" name="is_secret" checked/>
+						} else {
+							<input class="form-check-input" type="checkbox" id="is_secret" name="is_secret"/>
+						}
+						<label class="form-check-label" for="is_secret">This is a secret</label>
+					</div>
+					if data.ShowSubmitAction {
+						<div class="mb-3">
+							<div class="form-check">
+								<input class="form-check-input" type="radio" name="submit_action" id="submit_single" value="create_single" checked/>
+								<label class="form-check-label" for="submit_single">Save to selected environment only</label>
+							</div>
+							<div class="form-check">
+								<input class="form-check-input" type="radio" name="submit_action" id="submit_all" value="create_all_env"/>
+								<label class="form-check-label" for="submit_all">Save to all environments of this application</label>
+							</div>
+						</div>
+					}
+					<button class="btn btn-primary" type="submit">Save</button>
+					<a class="btn btn-secondary ms-2" href="/configs/">Cancel</a>
+				</form>
+			</div>
+		</div>
+		<script id="environments-by-application" type="application/json">{ templ.Raw(data.EnvironmentsByAppJSON) }</script>
+		<script>
+			(function() {
+				var envByApp = JSON.parse(document.getElementById('environments-by-application').textContent || '{}');
+				var appSelect = document.getElementById('application');
+				var envSelect = document.getElementById('environment');
+				var selectedEnvId = { templ.Raw(jsQuote(data.EnvironmentID)) };
+
+				function repopulate() {
+					var envs = envByApp[appSelect.value] || [];
+					envSelect.innerHTML = '';
+					envs.forEach(function(env) {
+						var opt = document.createElement('option');
+						opt.value = env.id;
+						opt.textContent = env.name;
+						if (env.id === selectedEnvId) { opt.selected = true; }
+						envSelect.appendChild(opt);
+					});
+				}
+				appSelect.addEventListener('change', function() { selectedEnvId = ''; repopulate(); });
+				repopulate();
+			})();
+		</script>
+	}
+}
+
+templ typeOption(current, value, label string) {
+	if current == value {
+		<option value={ value } selected>{ label }</option>
+	} else {
+		<option value={ value }>{ label }</option>
+	}
+}
+
+type ConfigHistoryData struct {
+	ConfigID    string
+	Application string
+	Environment string
+	Key         string
+	Versions    []ConfigHistoryVersion
+	CSRFToken   string
+}
+
+type ConfigHistoryVersion struct {
+	Version   string
+	Action    string
+	ChangedBy string
+	CreatedAt string
+}
+
+templ ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHistoryData) {
+	@layout.Base("Config History", "configs", user, flashes) {
+		<h2 class="mb-1">{ data.Application } / { data.Environment } / { data.Key }</h2>
+		<p class="text-muted mb-4">Version history</p>
+		<div class="card shadow-sm">
+			<table class="table table-hover mb-0">
+				<thead><tr><th>Version</th><th>Action</th><th>Changed By</th><th>When</th><th class="text-end">Actions</th></tr></thead>
+				<tbody>
+					if len(data.Versions) == 0 {
+						<tr><td colspan="5" class="text-muted text-center py-4">No history yet.</td></tr>
+					}
+					for _, v := range data.Versions {
+						<tr>
+							<td>{ v.Version }</td>
+							<td>{ v.Action }</td>
+							<td>{ v.ChangedBy }</td>
+							<td>{ v.CreatedAt }</td>
+							<td class="text-end">
+								<form method="post" action={ templ.URL("/configs/" + data.ConfigID + "/rollback/" + v.Version + "/") } class="d-inline">
+									<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+									<button class="btn btn-sm btn-outline-warning" type="submit" onclick="return confirm('Roll back to this version?')">Rollback</button>
+								</form>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+		<a class="btn btn-secondary mt-3" href="/configs/">Back to Configs</a>
+	}
+}

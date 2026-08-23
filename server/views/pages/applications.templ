@@ -1,0 +1,71 @@
+package pages
+
+import "controlplane/internal/config"
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+templ ApplicationsList(flashes []session.Flash, user layout.NavUser, apps []config.Application) {
+	@layout.Base("Applications", "applications", user, flashes) {
+		<div class="d-flex justify-content-between align-items-center mb-4">
+			<h2 class="mb-0">Applications</h2>
+			<a class="btn btn-primary" href="/applications/create/"><i class="bi bi-plus-lg"></i> New Application</a>
+		</div>
+		<div class="card shadow-sm">
+			<table class="table table-hover mb-0">
+				<thead>
+					<tr><th>Name</th><th class="text-end">Actions</th></tr>
+				</thead>
+				<tbody>
+					if len(apps) == 0 {
+						<tr><td colspan="2" class="text-muted text-center py-4">No applications yet.</td></tr>
+					}
+					for _, app := range apps {
+						<tr>
+							<td>{ app.Name }</td>
+							<td class="text-end">
+								<a class="btn btn-sm btn-outline-secondary" href={ templ.URL("/applications/" + app.ID.String() + "/edit/") }>Edit</a>
+								<a class="btn btn-sm btn-outline-danger" href={ templ.URL("/applications/" + app.ID.String() + "/delete/") }>Delete</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+type ApplicationFormData struct {
+	CSRFToken string
+	Name      string
+	Error     string
+	IsEdit    bool
+	Action    string
+}
+
+templ ApplicationForm(flashes []session.Flash, user layout.NavUser, data ApplicationFormData) {
+	@layout.Base("Application", "applications", user, flashes) {
+		<h2 class="mb-4">
+			if data.IsEdit {
+				Edit Application
+			} else {
+				New Application
+			}
+		</h2>
+		<div class="card shadow-sm" style="max-width: 480px;">
+			<div class="card-body p-4">
+				if data.Error != "" {
+					<div class="alert alert-danger">{ data.Error }</div>
+				}
+				<form method="post" action={ templ.URL(data.Action) }>
+					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+					<div class="mb-3">
+						<label class="form-label" for="name">Name</label>
+						<input class="form-control" type="text" id="name" name="name" value={ data.Name } required autofocus/>
+					</div>
+					<button class="btn btn-primary" type="submit">Save</button>
+					<a class="btn btn-secondary ms-2" href="/applications/">Cancel</a>
+				</form>
+			</div>
+		</div>
+	}
+}
