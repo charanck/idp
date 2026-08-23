@@ -98,9 +98,10 @@ func splitCSV(v string) []string {
 // settings.py does - that behavior is dev-convenience, and a Go binary
 // running in production must always be given real secrets explicitly.
 func Load() (*Config, error) {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
+	// .env is a local-dev convenience only; production supplies env vars
+	// directly, so a missing file here is expected and not an error.
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		log.Printf("Error loading .env file: %v", err)
 	}
 	cfg := &Config{
 		Debug: getenvBool("DEBUG", false),
