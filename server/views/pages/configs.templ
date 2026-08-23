@@ -1,5 +1,6 @@
 package pages
 
+import "encoding/json"
 import "controlplane/internal/config"
 import "controlplane/internal/session"
 import "controlplane/views/layout"
@@ -23,39 +24,78 @@ type ConfigGroupEntry struct {
 }
 
 type ConfigsListData struct {
-	Groups   []ConfigGroup
-	Page     int
-	NumPages int
-	HasPrev  bool
-	HasNext  bool
-	PrevNum  int
-	NextNum  int
-	Window   []int
+	Groups                []ConfigGroup
+	Applications          []config.Application
+	EnvironmentsByAppJSON string
+	CurrentAppID          string
+	CurrentEnvID          string
+	CurrentQ              string
+	CurrentSecret         string
+	Page                  int
+	NumPages              int
+	HasPrev               bool
+	HasNext               bool
+	PrevNum               int
+	NextNum               int
+	Window                []int
+	ExtraQuery            string
 }
 
 templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsListData) {
 	@layout.Base("Configs & Secrets", "configs", user, flashes) {
-		<div class="d-flex justify-content-between align-items-center mb-4">
-			<h2 class="mb-0">Configs &amp; Secrets</h2>
-			<a class="btn btn-primary" href="/configs/create/"><i class="bi bi-plus-lg"></i> New Config</a>
+		<div class="toolbar">
+			<h2>Configs &amp; Secrets</h2>
+			<a role="button" href="/configs/create/"><i class="bi bi-plus-lg"></i> New Config</a>
 		</div>
+		<form method="get" class="filter-bar">
+			<div>
+				<label for="filter_application">Application</label>
+				<select id="filter_application" name="application_id">
+					<option value="">All applications</option>
+					for _, app := range data.Applications {
+						if app.ID.String() == data.CurrentAppID {
+							<option value={ app.ID.String() } selected>{ app.Name }</option>
+						} else {
+							<option value={ app.ID.String() }>{ app.Name }</option>
+						}
+					}
+				</select>
+			</div>
+			<div>
+				<label for="filter_environment">Environment</label>
+				<select id="filter_environment" name="environment_id" data-selected-env-id={ data.CurrentEnvID }>
+					<option value="">All environments</option>
+				</select>
+			</div>
+			<div>
+				<label for="secret">Type</label>
+				<select id="secret" name="secret">
+					<option value="" selected?={ data.CurrentSecret == "" }>All</option>
+					<option value="secret" selected?={ data.CurrentSecret == "secret" }>Secrets only</option>
+					<option value="config" selected?={ data.CurrentSecret == "config" }>Configs only</option>
+				</select>
+			</div>
+			<div>
+				<label for="q">Key</label>
+				<input type="text" id="q" name="q" placeholder="Key" value={ data.CurrentQ }/>
+			</div>
+			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+		</form>
 		if len(data.Groups) == 0 {
-			<div class="alert alert-secondary">No configs yet.</div>
+			<div class="alert alert-secondary">No configs found.</div>
 		}
 		for _, group := range data.Groups {
-			<div class="card shadow-sm mb-3">
-				<div class="card-header d-flex justify-content-between align-items-center">
-					<span>
-						<strong>{ group.ApplicationName }</strong> / { group.Key }
-						if group.IsSecret {
-							<span class="badge bg-warning text-dark ms-2">Secret</span>
-						} else {
-							<span class="badge bg-secondary ms-2">Config</span>
-						}
-						<span class="badge bg-info ms-1">{ group.Type }</span>
-					</span>
-				</div>
-				<table class="table table-hover mb-0">
+			<article class="card">
+				<header>
+					<strong>{ group.ApplicationName }</strong> / { group.Key }
+					if group.IsSecret {
+						<span class="badge badge-warning">Secret</span>
+					} else {
+						<span class="badge badge-secondary">Config</span>
+					}
+					<span class="badge badge-info">{ group.Type }</span>
+				</header>
+				<table>
 					<tbody>
 						for _, entry := range group.Entries {
 							<tr>
@@ -67,19 +107,42 @@ templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsList
 										<code>{ entry.DisplayValue }</code>
 									}
 								</td>
-								<td class="text-end" style="width: 260px;">
-									<a class="btn btn-sm btn-outline-secondary" href={ templ.URL("/configs/" + entry.ID + "/history/") }>History</a>
-									<a class="btn btn-sm btn-outline-secondary" href={ templ.URL("/configs/" + entry.ID + "/clone/") }>Clone</a>
-									<a class="btn btn-sm btn-outline-secondary" href={ templ.URL("/configs/" + entry.ID + "/edit/") }>Edit</a>
-									<a class="btn btn-sm btn-outline-danger" href={ templ.URL("/configs/" + entry.ID + "/delete/") }>Delete</a>
+								<td class="actions" style="width: 300px;">
+									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/history/") }>History</a>
+									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/clone/") }>Clone</a>
+									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/edit/") }>Edit</a>
+									<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/configs/" + entry.ID + "/delete/") }>Delete</a>
 								</td>
 							</tr>
 						}
 					</tbody>
 				</table>
-			</div>
+			</article>
 		}
-		@PaginationNav("/configs/", "", data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		@PaginationNav("/configs/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		@templ.JSONScript("environments-by-application", json.RawMessage(data.EnvironmentsByAppJSON))
+		<script>
+			(function() {
+				var envByApp = JSON.parse(document.getElementById('environments-by-application').textContent || '{}');
+				var appSelect = document.getElementById('filter_application');
+				var envSelect = document.getElementById('filter_environment');
+				var selectedEnvId = envSelect.dataset.selectedEnvId || '';
+
+				function repopulate() {
+					var envs = envByApp[appSelect.value] || [];
+					envSelect.innerHTML = '<option value="">All environments</option>';
+					envs.forEach(function(env) {
+						var opt = document.createElement('option');
+						opt.value = env.id;
+						opt.textContent = env.name;
+						if (env.id === selectedEnvId) { opt.selected = true; }
+						envSelect.appendChild(opt);
+					});
+				}
+				appSelect.addEventListener('change', function() { selectedEnvId = ''; repopulate(); });
+				repopulate();
+			})();
+		</script>
 	}
 }
 
@@ -102,96 +165,94 @@ type ConfigFormData struct {
 
 templ ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormData) {
 	@layout.Base(data.Title, "configs", user, flashes) {
-		<h2 class="mb-4">{ data.Title }</h2>
-		<div class="card shadow-sm" style="max-width: 640px;">
-			<div class="card-body p-4">
-				if data.Error != "" {
-					<div class="alert alert-danger">{ data.Error }</div>
-				}
-				<form method="post" action={ templ.URL(data.Action) }>
-					<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-					<div class="mb-3">
-						<label class="form-label" for="application">Application</label>
-						<select class="form-select" id="application" name="application_id" required>
-							for _, app := range data.Applications {
-								if app.ID.String() == data.ApplicationID {
-									<option value={ app.ID.String() } selected>{ app.Name }</option>
-								} else {
-									<option value={ app.ID.String() }>{ app.Name }</option>
-								}
+		<h2>{ data.Title }</h2>
+		<article style="max-width: 640px;">
+			if data.Error != "" {
+				<div class="alert alert-danger">{ data.Error }</div>
+			}
+			<form method="post" action={ templ.URL(data.Action) }>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<label for="application">
+					Application
+					<select id="application" name="application_id" required>
+						for _, app := range data.Applications {
+							if app.ID.String() == data.ApplicationID {
+								<option value={ app.ID.String() } selected>{ app.Name }</option>
+							} else {
+								<option value={ app.ID.String() }>{ app.Name }</option>
 							}
-						</select>
-					</div>
-					<div class="mb-3">
-						<label class="form-label" for="environment">Environment</label>
-						<select class="form-select" id="environment" name="environment_id" required></select>
-					</div>
-					<div class="mb-3">
-						<label class="form-label" for="key">Key</label>
-						<input class="form-control" type="text" id="key" name="key" value={ data.Key } required/>
-					</div>
-					<div class="mb-3">
-						<label class="form-label" for="value">Value</label>
-						<textarea class="form-control" id="value" name="value" rows="3">{ data.Value }</textarea>
-					</div>
-					<div class="mb-3">
-						<label class="form-label" for="type">Type</label>
-						<select class="form-select" id="type" name="type">
-							@typeOption(data.Type, config.TypeString, "String")
-							@typeOption(data.Type, config.TypeBoolean, "Boolean")
-							@typeOption(data.Type, config.TypeNumber, "Number")
-							@typeOption(data.Type, config.TypeObject, "Object")
-							@typeOption(data.Type, config.TypeArray, "Array")
-						</select>
-					</div>
-					<div class="form-check mb-3">
-						if data.IsSecret {
-							<input class="form-check-input" type="checkbox" id="is_secret" name="is_secret" checked/>
-						} else {
-							<input class="form-check-input" type="checkbox" id="is_secret" name="is_secret"/>
 						}
-						<label class="form-check-label" for="is_secret">This is a secret</label>
-					</div>
-					if data.ShowSubmitAction {
-						<div class="mb-3">
-							<div class="form-check">
-								<input class="form-check-input" type="radio" name="submit_action" id="submit_single" value="create_single" checked/>
-								<label class="form-check-label" for="submit_single">Save to selected environment only</label>
-							</div>
-							<div class="form-check">
-								<input class="form-check-input" type="radio" name="submit_action" id="submit_all" value="create_all_env"/>
-								<label class="form-check-label" for="submit_all">Save to all environments of this application</label>
-							</div>
-						</div>
+					</select>
+				</label>
+				<label for="environment">
+					Environment
+					<select id="environment" name="environment_id" required data-selected-env-id={ data.EnvironmentID }></select>
+				</label>
+				<label for="key">
+					Key
+					<input type="text" id="key" name="key" value={ data.Key } required/>
+				</label>
+				<label for="value">
+					Value
+					<textarea id="value" name="value" rows="3">{ data.Value }</textarea>
+				</label>
+				<label for="type">
+					Type
+					<select id="type" name="type">
+						@typeOption(data.Type, config.TypeString, "String")
+						@typeOption(data.Type, config.TypeBoolean, "Boolean")
+						@typeOption(data.Type, config.TypeNumber, "Number")
+						@typeOption(data.Type, config.TypeObject, "Object")
+						@typeOption(data.Type, config.TypeArray, "Array")
+					</select>
+				</label>
+				<label for="is_secret">
+					if data.IsSecret {
+						<input type="checkbox" id="is_secret" name="is_secret" checked/>
+					} else {
+						<input type="checkbox" id="is_secret" name="is_secret"/>
 					}
-					<button class="btn btn-primary" type="submit">Save</button>
-					<a class="btn btn-secondary ms-2" href="/configs/">Cancel</a>
-				</form>
-			</div>
-		</div>
-		<script id="environments-by-application" type="application/json">{ templ.Raw(data.EnvironmentsByAppJSON) }</script>
-		<script>
-			(function() {
-				var envByApp = JSON.parse(document.getElementById('environments-by-application').textContent || '{}');
-				var appSelect = document.getElementById('application');
-				var envSelect = document.getElementById('environment');
-				var selectedEnvId = { templ.Raw(jsQuote(data.EnvironmentID)) };
-
-				function repopulate() {
-					var envs = envByApp[appSelect.value] || [];
-					envSelect.innerHTML = '';
-					envs.forEach(function(env) {
-						var opt = document.createElement('option');
-						opt.value = env.id;
-						opt.textContent = env.name;
-						if (env.id === selectedEnvId) { opt.selected = true; }
-						envSelect.appendChild(opt);
-					});
+					This is a secret
+				</label>
+				if data.ShowSubmitAction {
+					<fieldset>
+						<label for="submit_single">
+							<input type="radio" name="submit_action" id="submit_single" value="create_single" checked/>
+							Save to selected environment only
+						</label>
+						<label for="submit_all">
+							<input type="radio" name="submit_action" id="submit_all" value="create_all_env"/>
+							Save to all environments of this application
+						</label>
+					</fieldset>
 				}
-				appSelect.addEventListener('change', function() { selectedEnvId = ''; repopulate(); });
-				repopulate();
-			})();
-		</script>
+				<button type="submit" style="width: auto;">Save</button>
+				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/configs/">Cancel</a>
+			</form>
+			@templ.JSONScript("environments-by-application", json.RawMessage(data.EnvironmentsByAppJSON))
+			<script>
+				(function() {
+					var envByApp = JSON.parse(document.getElementById('environments-by-application').textContent || '{}');
+					var appSelect = document.getElementById('application');
+					var envSelect = document.getElementById('environment');
+					var selectedEnvId = envSelect.dataset.selectedEnvId || '';
+
+					function repopulate() {
+						var envs = envByApp[appSelect.value] || [];
+						envSelect.innerHTML = '';
+						envs.forEach(function(env) {
+							var opt = document.createElement('option');
+							opt.value = env.id;
+							opt.textContent = env.name;
+							if (env.id === selectedEnvId) { opt.selected = true; }
+							envSelect.appendChild(opt);
+						});
+					}
+					appSelect.addEventListener('change', function() { selectedEnvId = ''; repopulate(); });
+					repopulate();
+				})();
+			</script>
+		</article>
 	}
 }
 
@@ -221,14 +282,14 @@ type ConfigHistoryVersion struct {
 
 templ ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHistoryData) {
 	@layout.Base("Config History", "configs", user, flashes) {
-		<h2 class="mb-1">{ data.Application } / { data.Environment } / { data.Key }</h2>
-		<p class="text-muted mb-4">Version history</p>
-		<div class="card shadow-sm">
-			<table class="table table-hover mb-0">
-				<thead><tr><th>Version</th><th>Action</th><th>Changed By</th><th>When</th><th class="text-end">Actions</th></tr></thead>
+		<h2>{ data.Application } / { data.Environment } / { data.Key }</h2>
+		<p>Version history</p>
+		<article class="card">
+			<table>
+				<thead><tr><th>Version</th><th>Action</th><th>Changed By</th><th>When</th><th class="actions">Actions</th></tr></thead>
 				<tbody>
 					if len(data.Versions) == 0 {
-						<tr><td colspan="5" class="text-muted text-center py-4">No history yet.</td></tr>
+						<tr><td colspan="5">No history yet.</td></tr>
 					}
 					for _, v := range data.Versions {
 						<tr>
@@ -236,17 +297,17 @@ templ ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHis
 							<td>{ v.Action }</td>
 							<td>{ v.ChangedBy }</td>
 							<td>{ v.CreatedAt }</td>
-							<td class="text-end">
-								<form method="post" action={ templ.URL("/configs/" + data.ConfigID + "/rollback/" + v.Version + "/") } class="d-inline">
+							<td class="actions">
+								<form method="post" action={ templ.URL("/configs/" + data.ConfigID + "/rollback/" + v.Version + "/") }>
 									<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-									<button class="btn btn-sm btn-outline-warning" type="submit" onclick="return confirm('Roll back to this version?')">Rollback</button>
+									<button type="submit" class="btn-sm outline" style="width: auto;" onclick="return confirm('Roll back to this version?')">Rollback</button>
 								</form>
 							</td>
 						</tr>
 					}
 				</tbody>
 			</table>
-		</div>
-		<a class="btn btn-secondary mt-3" href="/configs/">Back to Configs</a>
+		</article>
+		<a role="button" class="secondary outline" style="width: auto;" href="/configs/">Back to Configs</a>
 	}
 }

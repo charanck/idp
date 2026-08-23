@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -44,11 +45,36 @@ func environmentsByApplicationJSON(deps *Deps) (string, error) {
 
 func configsListHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		var entries []config.ConfigEntry
-		if err := deps.DB.Preload("Application").Preload("Environment").
+		appIDFilter := c.QueryParam("application_id")
+		envIDFilter := c.QueryParam("environment_id")
+		secretFilter := c.QueryParam("secret")
+		q := strings.TrimSpace(c.QueryParam("q"))
+
+		query := deps.DB.Preload("Application").Preload("Environment").
 			Joins("JOIN applications ON applications.id = config_entries.application_id").
-			Order("applications.name, config_entries.key, config_entries.is_secret, config_entries.type").
-			Find(&entries).Error; err != nil {
+			Order("applications.name, config_entries.key, config_entries.is_secret, config_entries.type")
+		if appIDFilter != "" {
+			if _, err := uuid.Parse(appIDFilter); err == nil {
+				query = query.Where("config_entries.application_id = ?", appIDFilter)
+			}
+		}
+		if envIDFilter != "" {
+			if _, err := uuid.Parse(envIDFilter); err == nil {
+				query = query.Where("config_entries.environment_id = ?", envIDFilter)
+			}
+		}
+		switch secretFilter {
+		case "secret":
+			query = query.Where("config_entries.is_secret = true")
+		case "config":
+			query = query.Where("config_entries.is_secret = false")
+		}
+		if q != "" {
+			query = query.Where("config_entries.key ILIKE ?", "%"+q+"%")
+		}
+
+		var entries []config.ConfigEntry
+		if err := query.Find(&entries).Error; err != nil {
 			return err
 		}
 
@@ -87,12 +113,34 @@ func configsListHandler(deps *Deps) echo.HandlerFunc {
 			groups = append(groups, *groupsByKey[k])
 		}
 
+		apps, envJSON, err := loadConfigFormApps(deps)
+		if err != nil {
+			return err
+		}
+
 		page := Paginate(groups, configsPageSize, PageParam(c))
+
+		extra := url.Values{}
+		if appIDFilter != "" {
+			extra.Set("application_id", appIDFilter)
+		}
+		if envIDFilter != "" {
+			extra.Set("environment_id", envIDFilter)
+		}
+		if secretFilter != "" {
+			extra.Set("secret", secretFilter)
+		}
+		if q != "" {
+			extra.Set("q", q)
+		}
+
 		return pages.ConfigsList(flashes(c), navUser(c), pages.ConfigsListData{
-			Groups: page.Items, Page: page.Number, NumPages: page.NumPages,
+			Groups: page.Items, Applications: apps, EnvironmentsByAppJSON: envJSON,
+			CurrentAppID: appIDFilter, CurrentEnvID: envIDFilter, CurrentQ: q, CurrentSecret: secretFilter,
+			Page: page.Number, NumPages: page.NumPages,
 			HasPrev: page.HasPrevious, HasNext: page.HasNext,
 			PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
-			Window: page.PageRange(),
+			Window: page.PageRange(), ExtraQuery: extra.Encode(),
 		}).Render(c.Request().Context(), c.Response())
 	}
 }

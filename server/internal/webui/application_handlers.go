@@ -3,6 +3,7 @@ package webui
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,13 +14,35 @@ import (
 	"controlplane/views/pages"
 )
 
+const applicationsPageSize = 20
+
 func applicationsListHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		q := strings.TrimSpace(c.QueryParam("q"))
+
+		query := deps.DB.Order("name")
+		if q != "" {
+			query = query.Where("name ILIKE ?", "%"+q+"%")
+		}
+
 		var apps []config.Application
-		if err := deps.DB.Order("name").Find(&apps).Error; err != nil {
+		if err := query.Find(&apps).Error; err != nil {
 			return err
 		}
-		return pages.ApplicationsList(flashes(c), navUser(c), apps).Render(c.Request().Context(), c.Response())
+
+		page := Paginate(apps, applicationsPageSize, PageParam(c))
+
+		extra := url.Values{}
+		if q != "" {
+			extra.Set("q", q)
+		}
+
+		return pages.ApplicationsList(flashes(c), navUser(c), pages.ApplicationsListData{
+			Apps: page.Items, CurrentQ: q, Page: page.Number, NumPages: page.NumPages,
+			HasPrev: page.HasPrevious, HasNext: page.HasNext,
+			PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
+			Window: page.PageRange(), ExtraQuery: extra.Encode(),
+		}).Render(c.Request().Context(), c.Response())
 	}
 }
 

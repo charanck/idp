@@ -3,6 +3,7 @@ package webui
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -18,12 +19,33 @@ const flagsPageSize = 20
 
 func flagsListHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		var flags []config.FeatureFlag
-		if err := deps.DB.Preload("Application").Preload("Environment").
+		appIDFilter := c.QueryParam("application_id")
+		envIDFilter := c.QueryParam("environment_id")
+		statusFilter := c.QueryParam("status")
+
+		query := deps.DB.Preload("Application").Preload("Environment").
 			Joins("JOIN applications ON applications.id = feature_flags.application_id").
 			Where("feature_flags.deleted_at IS NULL").
-			Order("applications.name, feature_flags.name, feature_flags.description").
-			Find(&flags).Error; err != nil {
+			Order("applications.name, feature_flags.name, feature_flags.description")
+		if appIDFilter != "" {
+			if _, err := uuid.Parse(appIDFilter); err == nil {
+				query = query.Where("feature_flags.application_id = ?", appIDFilter)
+			}
+		}
+		if envIDFilter != "" {
+			if _, err := uuid.Parse(envIDFilter); err == nil {
+				query = query.Where("feature_flags.environment_id = ?", envIDFilter)
+			}
+		}
+		switch statusFilter {
+		case "enabled":
+			query = query.Where("feature_flags.is_enabled = true")
+		case "disabled":
+			query = query.Where("feature_flags.is_enabled = false")
+		}
+
+		var flags []config.FeatureFlag
+		if err := query.Find(&flags).Error; err != nil {
 			return err
 		}
 
@@ -60,12 +82,31 @@ func flagsListHandler(deps *Deps) echo.HandlerFunc {
 			groups = append(groups, *groupsByKey[k])
 		}
 
+		apps, envJSON, err := loadConfigFormApps(deps)
+		if err != nil {
+			return err
+		}
+
 		page := Paginate(groups, flagsPageSize, PageParam(c))
+
+		extra := url.Values{}
+		if appIDFilter != "" {
+			extra.Set("application_id", appIDFilter)
+		}
+		if envIDFilter != "" {
+			extra.Set("environment_id", envIDFilter)
+		}
+		if statusFilter != "" {
+			extra.Set("status", statusFilter)
+		}
+
 		return pages.FlagsList(flashes(c), navUser(c), pages.FlagsListData{
-			Groups: page.Items, CSRFToken: csrfToken(c), Page: page.Number, NumPages: page.NumPages,
+			Groups: page.Items, CSRFToken: csrfToken(c), Applications: apps, EnvironmentsByAppJSON: envJSON,
+			CurrentAppID: appIDFilter, CurrentEnvID: envIDFilter, CurrentStatus: statusFilter,
+			Page: page.Number, NumPages: page.NumPages,
 			HasPrev: page.HasPrevious, HasNext: page.HasNext,
 			PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
-			Window: page.PageRange(),
+			Window: page.PageRange(), ExtraQuery: extra.Encode(),
 		}).Render(c.Request().Context(), c.Response())
 	}
 }

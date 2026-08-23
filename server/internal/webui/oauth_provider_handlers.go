@@ -3,6 +3,7 @@ package webui
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -17,13 +18,37 @@ const oauthProvidersPageSize = 10
 
 func oauthProvidersListHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		q := strings.TrimSpace(c.QueryParam("q"))
+		statusFilter := c.QueryParam("status")
+
+		query := deps.DB.Order("created_at DESC")
+		if q != "" {
+			query = query.Where("name ILIKE ?", "%"+q+"%")
+		}
+		switch statusFilter {
+		case "active":
+			query = query.Where("is_active = true")
+		case "inactive":
+			query = query.Where("is_active = false")
+		}
+
 		var providers []auth.OAuthProvider
-		if err := deps.DB.Order("created_at DESC").Find(&providers).Error; err != nil {
+		if err := query.Find(&providers).Error; err != nil {
 			return err
 		}
+
+		extra := url.Values{}
+		if q != "" {
+			extra.Set("q", q)
+		}
+		if statusFilter != "" {
+			extra.Set("status", statusFilter)
+		}
+
 		page := Paginate(providers, oauthProvidersPageSize, PageParam(c))
 		return pages.OAuthProvidersList(flashes(c), navUser(c), pages.OAuthProvidersListData{
-			Providers: page.Items, Page: page.Number, NumPages: page.NumPages,
+			Providers: page.Items, CurrentQ: q, CurrentStatus: statusFilter, ExtraQuery: extra.Encode(),
+			Page: page.Number, NumPages: page.NumPages,
 			HasPrev: page.HasPrevious, HasNext: page.HasNext,
 			PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
 			Window: page.PageRange(), CSRFToken: csrfToken(c),

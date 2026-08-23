@@ -16,8 +16,8 @@ type DashboardData struct {
 
 templ Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData) {
 	@layout.Base("Dashboard", "dashboard", user, flashes) {
-		<h2 class="mb-4">Dashboard</h2>
-		<div class="row g-3 mb-4">
+		<h2>Dashboard</h2>
+		<div class="stat-grid">
 			@statCard("Applications", data.ApplicationCount, "bi-grid-3x3-gap")
 			@statCard("Environments", data.EnvironmentCount, "bi-layers")
 			@statCard("Configs", data.ConfigCount, "bi-sliders")
@@ -25,37 +25,37 @@ templ Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData
 			@statCard("Feature Flags", data.FlagCount, "bi-toggle-on")
 			@statCard("Service Clients", data.ClientCount, "bi-hdd-network")
 		</div>
-		<div class="card shadow-sm">
-			<div class="card-header">Recently Updated Configs</div>
-			<ul class="list-group list-group-flush">
-				if len(data.RecentConfigs) == 0 {
-					<li class="list-group-item text-muted">No configs yet.</li>
-				}
-				for _, entry := range data.RecentConfigs {
-					<li class="list-group-item d-flex justify-content-between align-items-center">
-						<span>
-							<strong>{ entry.Application.Name }</strong> / { entry.Environment.Name } / { entry.Key }
-						</span>
-						if entry.IsSecret {
-							<span class="badge bg-warning text-dark">Secret</span>
-						} else {
-							<span class="badge bg-secondary">Config</span>
-						}
-					</li>
-				}
-			</ul>
-		</div>
+		<article class="card">
+			<header>Recently Updated Configs</header>
+			<table>
+				<tbody>
+					if len(data.RecentConfigs) == 0 {
+						<tr><td>No configs yet.</td></tr>
+					}
+					for _, entry := range data.RecentConfigs {
+						<tr>
+							<td>
+								<strong>{ entry.Application.Name }</strong> / { entry.Environment.Name } / { entry.Key }
+							</td>
+							<td style="text-align: right;">
+								if entry.IsSecret {
+									<span class="badge badge-warning">Secret</span>
+								} else {
+									<span class="badge badge-secondary">Config</span>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</article>
 	}
 }
 
 templ statCard(label string, count int64, icon string) {
-	<div class="col-md-4 col-lg-2">
-		<div class="card shadow-sm text-center">
-			<div class="card-body">
-				<i class={ "bi", icon, "fs-3", "text-primary" }></i>
-				<h3 class="mt-2 mb-0">{ formatCount(count) }</h3>
-				<div class="text-muted small">{ label }</div>
-			</div>
-		</div>
-	</div>
+	<article class="stat-card">
+		<i class={ "bi", icon, "stat-icon" }></i>
+		<div class="stat-count">{ formatCount(count) }</div>
+		<div class="stat-label">{ label }</div>
+	</article>
 }

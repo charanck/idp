@@ -3,6 +3,7 @@ package webui
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -18,8 +19,21 @@ const environmentsPageSize = 20
 
 func environmentsListHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		appIDFilter := c.QueryParam("application_id")
+		q := strings.TrimSpace(c.QueryParam("q"))
+
+		query := deps.DB.Preload("Application").Order("name")
+		if appIDFilter != "" {
+			if _, err := uuid.Parse(appIDFilter); err == nil {
+				query = query.Where("application_id = ?", appIDFilter)
+			}
+		}
+		if q != "" {
+			query = query.Where("name ILIKE ?", "%"+q+"%")
+		}
+
 		var envs []config.Environment
-		if err := deps.DB.Preload("Application").Order("name").Find(&envs).Error; err != nil {
+		if err := query.Find(&envs).Error; err != nil {
 			return err
 		}
 
@@ -43,8 +57,23 @@ func environmentsListHandler(deps *Deps) echo.HandlerFunc {
 			groups = append(groups, *groupsByApp[id])
 		}
 
+		apps, err := listApplications(deps)
+		if err != nil {
+			return err
+		}
+
 		page := Paginate(groups, environmentsPageSize, PageParam(c))
+
+		extra := url.Values{}
+		if appIDFilter != "" {
+			extra.Set("application_id", appIDFilter)
+		}
+		if q != "" {
+			extra.Set("q", q)
+		}
+
 		return pages.EnvironmentsList(flashes(c), navUser(c), pages.EnvironmentsListData{
+			Applications: apps, CurrentAppID: appIDFilter, CurrentQ: q, ExtraQuery: extra.Encode(),
 			Groups: page.Items, Page: page.Number, NumPages: page.NumPages,
 			HasPrev: page.HasPrevious, HasNext: page.HasNext,
 			PrevNum: page.PreviousNumber, NextNum: page.NextNumber,

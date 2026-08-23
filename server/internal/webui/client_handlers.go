@@ -3,6 +3,7 @@ package webui
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -18,13 +19,37 @@ const clientsPageSize = 20
 
 func clientsListHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		q := strings.TrimSpace(c.QueryParam("q"))
+		statusFilter := c.QueryParam("status")
+
+		query := deps.DB.Order("created_at DESC")
+		if q != "" {
+			query = query.Where("name ILIKE ?", "%"+q+"%")
+		}
+		switch statusFilter {
+		case "active":
+			query = query.Where("is_active = true")
+		case "inactive":
+			query = query.Where("is_active = false")
+		}
+
 		var clients []auth.ServiceClient
-		if err := deps.DB.Order("created_at DESC").Find(&clients).Error; err != nil {
+		if err := query.Find(&clients).Error; err != nil {
 			return err
 		}
+
+		extra := url.Values{}
+		if q != "" {
+			extra.Set("q", q)
+		}
+		if statusFilter != "" {
+			extra.Set("status", statusFilter)
+		}
+
 		page := Paginate(clients, clientsPageSize, PageParam(c))
 		return pages.ClientsList(flashes(c), navUser(c), pages.ClientsListData{
-			Clients: page.Items, Page: page.Number, NumPages: page.NumPages,
+			Clients: page.Items, CurrentQ: q, CurrentStatus: statusFilter, ExtraQuery: extra.Encode(),
+			Page: page.Number, NumPages: page.NumPages,
 			HasPrev: page.HasPrevious, HasNext: page.HasNext,
 			PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
 			Window: page.PageRange(),

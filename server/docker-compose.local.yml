@@ -1,15 +1,8 @@
-# Local development stack for the Go rewrite of the control plane - a drop-in
-# alternative to ../docker-compose.local.yml (the Django stack). Reads the
-# exact same .env, exposes the same port, and stands up the same Postgres/
-# Redis sidecars, so either stack can be pointed at the same database.
+# Local development stack for the control plane. Reads .env from the repo
+# root and stands up Postgres/Redis sidecars for the app.
 #
 # Run from the repo root:
 #   docker compose -f server/docker-compose.local.yml --env-file .env up --build
-#
-# Only one of the two "idp" containers should run against a given Postgres/
-# Redis pair at a time in practice, but both use the same schema (see
-# internal/db/migrations/00001_baseline.sql), so either can migrate/reconcile
-# against a database the other created.
 
 services:
   postgres:

@@ -1,0 +1,321 @@
+/* Control Plane — Tailwind source. Compiled with `npm run build:css` into
+   /static/app.css, which is committed (no Node dependency at runtime — same
+   pattern as the generated templ files). Corporate/dashboard theme: neutral
+   slate grays, a single navy accent, dense tables, minimal chrome. */
+
+@import "tailwindcss";
+@source "../../views";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --color-brand-50: #eef2f8;
+  --color-brand-100: #dbe4f0;
+  --color-brand-600: #1e3a5f;
+  --color-brand-700: #17304f;
+  --color-brand-900: #0c1a2e;
+
+  --color-success-bg: #ecfdf3;
+  --color-success-text: #146c43;
+  --color-success-border: #a6e9c3;
+
+  --color-danger-bg: #fdecec;
+  --color-danger-text: #b3261e;
+  --color-danger-border: #f3b7b3;
+
+  --color-warning-bg: #fef6e7;
+  --color-warning-text: #92660a;
+  --color-warning-border: #f5dda3;
+
+  --color-info-bg: #eaf2fb;
+  --color-info-text: #1e4d8c;
+  --color-info-border: #b9d3ef;
+
+  --color-secondary-bg: #f1f3f5;
+  --color-secondary-text: #495057;
+  --color-secondary-border: #dee2e6;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+
+  body {
+    @apply m-0 bg-slate-50 text-slate-800 text-[0.9rem] leading-normal;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-semibold text-slate-900 tracking-tight;
+  }
+
+  h2 {
+    @apply text-lg mb-4;
+  }
+
+  a {
+    @apply text-brand-600 no-underline hover:underline;
+  }
+
+  table {
+    @apply w-full border-collapse text-sm;
+  }
+
+  thead th {
+    @apply bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 px-4 py-2.5 border-b border-slate-200;
+  }
+
+  tbody td {
+    @apply px-4 py-2.5 border-b border-slate-100 align-middle text-slate-700;
+  }
+
+  tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  tbody tr:hover {
+    @apply bg-slate-50;
+  }
+
+  label {
+    @apply block text-xs font-medium text-slate-600 mb-1;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    @apply w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 shadow-sm;
+    @apply focus:outline-none focus:ring-2 focus:ring-brand-600/30 focus:border-brand-600;
+  }
+
+  input[type="checkbox"] {
+    @apply rounded border-slate-300 text-brand-600 focus:ring-brand-600/30;
+  }
+
+  form > label,
+  form > div {
+    @apply mb-3.5;
+  }
+
+  button,
+  a[role="button"] {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-brand-600 bg-brand-600 px-3.5 py-1.5 text-sm font-medium text-white cursor-pointer;
+    @apply hover:bg-brand-700 hover:border-brand-700 no-underline transition-colors;
+  }
+
+  button.secondary,
+  a[role="button"].secondary,
+  button.outline,
+  a[role="button"].outline {
+    @apply bg-white text-slate-700 border-slate-300;
+    @apply hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900;
+  }
+
+  fieldset {
+    @apply border-0 p-0 m-0;
+  }
+
+  article {
+    @apply bg-white border border-slate-200 rounded-lg p-5 shadow-sm;
+  }
+
+  code {
+    @apply bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 text-[0.85em];
+  }
+
+  small {
+    @apply text-xs text-slate-500;
+  }
+}
+
+@layer components {
+  /* App shell ------------------------------------------------------------ */
+
+  .app-shell {
+    @apply flex min-h-screen items-stretch;
+  }
+
+  .sidebar {
+    @apply flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white px-3 py-4;
+  }
+
+  .sidebar .brand {
+    @apply block px-2 mb-6 text-[0.95rem] font-semibold text-slate-900 no-underline hover:no-underline;
+  }
+
+  .sidebar nav ul {
+    @apply list-none m-0 p-0 flex flex-col gap-0.5;
+  }
+
+  .sidebar nav a {
+    @apply flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[0.85rem] font-medium text-slate-600 no-underline border-l-2 border-transparent;
+    @apply hover:bg-slate-50 hover:text-slate-900 hover:no-underline;
+  }
+
+  .sidebar nav a.active {
+    @apply bg-brand-50 text-brand-700 border-l-2 border-brand-600;
+  }
+
+  .sidebar-group {
+    @apply mt-5;
+  }
+
+  .sidebar-group summary {
+    @apply list-none cursor-pointer select-none px-2.5 py-1.5 text-[0.68rem] font-semibold uppercase tracking-wider text-slate-400;
+  }
+
+  .sidebar-group summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .content {
+    @apply flex min-w-0 flex-1 flex-col;
+  }
+
+  .topbar {
+    @apply flex items-center justify-end gap-3 border-b border-slate-200 bg-white px-6 py-3;
+  }
+
+  .topbar .user-email {
+    @apply mr-auto text-sm text-slate-500;
+  }
+
+  main.page {
+    @apply flex-1 p-6;
+  }
+
+  .auth-shell {
+    @apply mx-auto mt-24 max-w-sm px-4;
+  }
+
+  /* Toolbar / page header -------------------------------------------------- */
+
+  .toolbar {
+    @apply flex items-center justify-between gap-4 mb-5;
+  }
+
+  .toolbar h2 {
+    @apply m-0;
+  }
+
+  /* Filter bars ------------------------------------------------------------ */
+
+  .filter-bar {
+    @apply flex flex-wrap items-end gap-3 mb-5 rounded-lg border border-slate-200 bg-white p-3.5;
+  }
+
+  .filter-bar > div {
+    @apply mb-0;
+  }
+
+  .filter-bar label {
+    @apply mb-1;
+  }
+
+  .filter-bar input,
+  .filter-bar select {
+    @apply mb-0;
+  }
+
+  /* Buttons / actions -------------------------------------------------------- */
+
+  .actions {
+    @apply flex flex-wrap justify-end gap-1.5;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1 text-[0.78rem];
+  }
+
+  .btn-danger {
+    @apply border-danger-text bg-danger-text text-white hover:bg-red-800 hover:border-red-800;
+  }
+
+  .btn-danger.outline {
+    @apply bg-white text-danger-text border-danger-border hover:bg-danger-bg hover:border-danger-text;
+  }
+
+  /* Badges -------------------------------------------------------------------- */
+
+  .badge {
+    @apply inline-block rounded-full px-2.5 py-0.5 text-[0.72rem] font-semibold leading-normal bg-secondary-bg text-secondary-text;
+  }
+
+  .badge-success { @apply bg-success-bg text-success-text; }
+  .badge-danger { @apply bg-danger-bg text-danger-text; }
+  .badge-warning { @apply bg-warning-bg text-warning-text; }
+  .badge-info { @apply bg-info-bg text-info-text; }
+  .badge-secondary { @apply bg-secondary-bg text-secondary-text; }
+
+  /* Alerts ---------------------------------------------------------------------- */
+
+  .alert {
+    @apply relative rounded-md border-l-4 px-4 py-2.5 pr-9 mb-3 text-sm;
+  }
+
+  .alert-success { @apply bg-success-bg border-success-text text-success-text; }
+  .alert-danger { @apply bg-danger-bg border-danger-text text-danger-text; }
+  .alert-warning { @apply bg-warning-bg border-warning-text text-warning-text; }
+  .alert-info { @apply bg-info-bg border-info-text text-info-text; }
+  .alert-secondary { @apply bg-secondary-bg border-secondary-border text-secondary-text; }
+
+  .alert .alert-close {
+    @apply absolute right-2.5 top-2 border-0 bg-transparent text-base leading-none cursor-pointer opacity-50 hover:opacity-100 px-1;
+  }
+
+  /* Cards / grouped tables ------------------------------------------------------- */
+
+  article.card {
+    @apply p-0 overflow-x-auto;
+  }
+
+  article.card > header {
+    @apply border-b border-slate-200 px-4 py-3 font-semibold text-sm text-slate-700;
+  }
+
+  article.card table {
+    @apply mb-0;
+  }
+
+  /* Pagination -------------------------------------------------------------------- */
+
+  .pagination {
+    @apply flex flex-wrap gap-1 list-none p-0 mt-4;
+  }
+
+  .pagination a,
+  .pagination span {
+    @apply inline-block rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[0.8rem] text-slate-600 no-underline hover:bg-slate-50 hover:no-underline;
+  }
+
+  .pagination .active span {
+    @apply bg-brand-600 border-brand-600 text-white;
+  }
+
+  .pagination .disabled span {
+    @apply opacity-40 hover:bg-white;
+  }
+
+  /* Dashboard stat cards -------------------------------------------------------------- */
+
+  .stat-grid {
+    @apply grid gap-3 mb-6;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+
+  .stat-card {
+    @apply p-4 text-center;
+  }
+
+  .stat-card .stat-icon {
+    @apply text-xl text-brand-600;
+  }
+
+  .stat-card .stat-count {
+    @apply text-2xl font-bold text-slate-900 mt-1;
+  }
+
+  .stat-card .stat-label {
+    @apply text-xs text-slate-500 mt-0.5;
+  }
+}

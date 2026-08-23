@@ -3,6 +3,7 @@ package webui
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -18,13 +19,37 @@ const usersPageSize = 20
 
 func usersListHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		q := strings.TrimSpace(c.QueryParam("q"))
+		staffFilter := c.QueryParam("staff")
+
+		query := deps.DB.Order("created_at DESC")
+		if q != "" {
+			query = query.Where("email ILIKE ?", "%"+q+"%")
+		}
+		switch staffFilter {
+		case "yes":
+			query = query.Where("is_staff = true")
+		case "no":
+			query = query.Where("is_staff = false")
+		}
+
 		var users []auth.User
-		if err := deps.DB.Order("created_at DESC").Find(&users).Error; err != nil {
+		if err := query.Find(&users).Error; err != nil {
 			return err
 		}
+
+		extra := url.Values{}
+		if q != "" {
+			extra.Set("q", q)
+		}
+		if staffFilter != "" {
+			extra.Set("staff", staffFilter)
+		}
+
 		page := Paginate(users, usersPageSize, PageParam(c))
 		return pages.UsersList(flashes(c), navUser(c), pages.UsersListData{
-			Users: page.Items, Page: page.Number, NumPages: page.NumPages,
+			Users: page.Items, CurrentQ: q, CurrentStaff: staffFilter, ExtraQuery: extra.Encode(),
+			Page: page.Number, NumPages: page.NumPages,
 			HasPrev: page.HasPrevious, HasNext: page.HasNext,
 			PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
 			Window: page.PageRange(),
