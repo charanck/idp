@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Django + Django Ninja control plane for configuration/secret management and feature flags, with JWT user auth, API-key service-to-service (S2S) auth, OAuth2/OIDC login, and a server-rendered Bootstrap web UI. Configs and secrets are the same model (`ConfigEntry` with `is_secret=true`) and are encrypted at rest with a master key, then re-encrypted per-client on read.
 
+The repo root is this Django app. `server/` is an in-progress **Go rewrite** of the same system (Echo + GORM + templ, same Postgres schema, same env var names) — see [Go rewrite (`server/`)](#go-rewrite-server) below and `server/README.md` before editing anything under `server/`.
+
 ## Commands
 
 Dependency management uses `uv` (see `pyproject.toml` / `uv.lock`).
@@ -65,3 +67,13 @@ Every `ConfigEntry` write path (API `upsert_config`, web UI create/clone/edit) c
 ### Rate limiting
 
 `common/middleware.py`'s `RateLimitMiddleware` throttles a fixed set of `(method, path)` routes — `POST /api/v1/auth/token`, `POST /api/v1/auth/register`, `POST /login/` — per client IP, via a fixed-window counter in the dedicated `'ratelimit'` cache alias (`common/ratelimit.py`). That cache alias always exists and always stores real counters regardless of the app-level `CACHE_ENABLED` flag (which may leave `'default'` as a no-op `DummyCache`): Redis when `CACHE_ENABLED`/`CACHE_BACKEND=redis`, otherwise an in-process `locmem` cache. Limits are configured via `AUTH_RATE_LIMIT`/`AUTH_RATE_LIMIT_WINDOW_SECONDS`; `test_settings.py` sets these very high so ordinary test traffic never trips the limiter.
+
+## Go rewrite (`server/`)
+
+`server/` is a from-scratch Go port of this app, built up incrementally alongside the Django code — not a generated or transpiled copy. Full details (commands, package-by-package mapping to the Django apps above, migration status, and how it differs from Django) are in `server/README.md`; keep that file current when you change anything under `server/`. The short version:
+
+- **Stack**: [Echo](https://echo.labstack.com/) (HTTP), [GORM](https://gorm.io/) over Postgres (query layer only — [goose](https://github.com/pressly/goose) owns the schema via `server/internal/db/migrations/`), [templ](https://templ.guide/) for server-rendered HTML, all against **the same Postgres schema** Django's migrations create — either implementation can run against a database the other created/manages.
+- **Env vars are shared with Django** — `server/internal/appconfig/config.go` reads the same names (`MASTER_ENCRYPTION_KEY`, `DB_*`, `ADMIN_EMAIL`/`ADMIN_PASSWORD`, `AUTH_RATE_LIMIT*`, etc.) as `control_plane_project/settings.py`, so one `.env` drives either stack. Two hard requirements the Django app doesn't have: **Postgres** (no SQLite) and **Redis** (mandatory, not optional via `CACHE_ENABLED`) — see `server/README.md` for why.
+- **Not ported yet**: the JWT user/service auth API (`/api/v1/auth/...`) — only S2S API-key auth (`/api/v1/config/...`) exists in Go today — and Django admin. The full session-authenticated web UI *is* ported route-for-route (`server/internal/webui/router.go` mirrors `web_ui/urls.py`).
+- **Container config**: `server/Dockerfile` + `server/docker-compose.local.yml` mirror the root `Dockerfile`/`docker-compose.local.yml` — same port (8000), same env var names, same Postgres/Redis sidecars — so they're a drop-in alternative, not a parallel deployment model to learn.
+- When changing a Django service method (`AuthService`, `ConfigService`, `FeatureFlagService`, etc.), check whether `server/internal/{auth,config}` has an equivalent to keep in sync, and vice versa.
