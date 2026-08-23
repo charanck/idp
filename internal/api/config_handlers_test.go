@@ -78,7 +78,7 @@ func TestListConfigsForClientEndpoint_RequiresAPIKeyAuth(t *testing.T) {
 
 func TestListConfigsForClientEndpoint_ReturnsConfigsEncryptedWithClientKey(t *testing.T) {
 	_, e, deps := setupConfigAPI(t)
-	creds, err := deps.AuthService.CreateServiceClient("billing-service")
+	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestListConfigsForClientEndpoint_ReturnsConfigsEncryptedWithClientKey(t *te
 
 func TestListConfigsForClientEndpoint_ReturnsEmptyListForUnknownScope(t *testing.T) {
 	_, e, deps := setupConfigAPI(t)
-	creds, err := deps.AuthService.CreateServiceClient("billing-service")
+	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestListConfigsForClientEndpoint_ReturnsEmptyListForUnknownScope(t *testing
 
 func TestListFeatureFlagsEndpoint_AcceptsServiceClientAPIKey(t *testing.T) {
 	_, e, deps := setupConfigAPI(t)
-	creds, err := deps.AuthService.CreateServiceClient("billing-service")
+	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}
@@ -166,7 +166,7 @@ func TestListFeatureFlagsEndpoint_RejectsMissingAuth(t *testing.T) {
 func TestAPIKeyAuth_FixedWindowThrottlesRepeatedRequests(t *testing.T) {
 	_, e, deps := setupConfigAPI(t)
 	deps.S2SAuthRateLimit = 2
-	creds, err := deps.AuthService.CreateServiceClient("billing-service")
+	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}

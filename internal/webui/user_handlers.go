@@ -22,7 +22,7 @@ func usersListHandler(deps *Deps) echo.HandlerFunc {
 		q := strings.TrimSpace(c.QueryParam("q"))
 		staffFilter := c.QueryParam("staff")
 
-		query := deps.DB.Order("created_at DESC")
+		query := deps.DB.WithContext(c.Request().Context()).Order("created_at DESC")
 		if q != "" {
 			query = query.Where("email ILIKE ?", "%"+q+"%")
 		}
@@ -89,7 +89,7 @@ func userCreateHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		var existing auth.User
-		err := deps.DB.Where("email = ?", email).First(&existing).Error
+		err := deps.DB.WithContext(c.Request().Context()).Where("email = ?", email).First(&existing).Error
 		if err == nil {
 			return reRender("A user with that email already exists.")
 		}
@@ -108,11 +108,11 @@ func userCreateHandler(deps *Deps) echo.HandlerFunc {
 			Password: hashed,
 			IsActive: c.FormValue("is_active") != "",
 		}
-		if err := deps.DB.Create(&newUser).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Create(&newUser).Error; err != nil {
 			return err
 		}
 
-		deps.Activity.LogCreate("user", newUser.ID.String(), newUser.Email, requestContext(c), nil)
+		deps.Activity.LogCreate(c.Request().Context(), "user", newUser.ID.String(), newUser.Email, requestContext(c), nil)
 		AddFlash(c, "success", "User "+newUser.Email+" created successfully.")
 		return c.Redirect(http.StatusFound, "/users/")
 	}
@@ -128,7 +128,7 @@ func userEditHandler(deps *Deps) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
 		var target auth.User
-		if err := deps.DB.First(&target, "id = ?", id).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).First(&target, "id = ?", id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return echo.NewHTTPError(http.StatusNotFound)
 			}
@@ -174,11 +174,11 @@ func userEditHandler(deps *Deps) echo.HandlerFunc {
 		target.Username = username
 		target.IsActive = newIsActive
 		target.IsStaff = newIsStaff
-		if err := deps.DB.Save(&target).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Save(&target).Error; err != nil {
 			return err
 		}
 
-		deps.Activity.LogUpdate("user", target.ID.String(), target.Email, requestContext(c), nil)
+		deps.Activity.LogUpdate(c.Request().Context(), "user", target.ID.String(), target.Email, requestContext(c), nil)
 		AddFlash(c, "success", "User "+target.Email+" updated successfully.")
 		return c.Redirect(http.StatusFound, "/users/")
 	}
@@ -191,7 +191,7 @@ func userDeleteHandler(deps *Deps) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
 		var target auth.User
-		if err := deps.DB.First(&target, "id = ?", id).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).First(&target, "id = ?", id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return echo.NewHTTPError(http.StatusNotFound)
 			}
@@ -213,11 +213,11 @@ func userDeleteHandler(deps *Deps) echo.HandlerFunc {
 			return c.Redirect(http.StatusFound, "/users/")
 		}
 
-		if err := deps.DB.Delete(&target).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Delete(&target).Error; err != nil {
 			return err
 		}
 
-		deps.Activity.LogDelete("user", target.ID.String(), target.Email, requestContext(c), nil)
+		deps.Activity.LogDelete(c.Request().Context(), "user", target.ID.String(), target.Email, requestContext(c), nil)
 		AddFlash(c, "success", "User "+target.Email+" deleted successfully.")
 		return c.Redirect(http.StatusFound, "/users/")
 	}

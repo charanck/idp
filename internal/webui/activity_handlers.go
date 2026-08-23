@@ -17,7 +17,7 @@ func activityLogHandler(deps *Deps) echo.HandlerFunc {
 		typeFilter := c.QueryParam("type")
 		userFilter := c.QueryParam("user")
 
-		query := deps.DB.Model(&config.Activity{}).Order("timestamp DESC")
+		query := deps.DB.WithContext(c.Request().Context()).Model(&config.Activity{}).Order("timestamp DESC")
 		if resourceFilter != "" {
 			query = query.Where("resource = ?", resourceFilter)
 		}
@@ -55,11 +55,11 @@ func activityLogHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		var resourceTypes []string
-		if err := deps.DB.Model(&config.Activity{}).Order("resource").Distinct("resource").Pluck("resource", &resourceTypes).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Model(&config.Activity{}).Order("resource").Distinct("resource").Pluck("resource", &resourceTypes).Error; err != nil {
 			return err
 		}
 		var actionTypes []string
-		if err := deps.DB.Model(&config.Activity{}).Order("type").Distinct("type").Pluck("type", &actionTypes).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Model(&config.Activity{}).Order("type").Distinct("type").Pluck("type", &actionTypes).Error; err != nil {
 			return err
 		}
 

@@ -4,6 +4,7 @@
 package activity
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 
@@ -28,14 +29,14 @@ type Context struct {
 	UserEmail string
 }
 
-func (l *Logger) log(typ, resource, resourceID, resourceName, userEmail string, ctx *Context, details any) {
-	if ctx != nil && userEmail == "" {
-		userEmail = ctx.UserEmail
+func (l *Logger) log(ctx context.Context, typ, resource, resourceID, resourceName, userEmail string, actCtx *Context, details any) {
+	if actCtx != nil && userEmail == "" {
+		userEmail = actCtx.UserEmail
 	}
 
 	var ip *string
-	if ctx != nil && ctx.IPAddress != "" {
-		ip = &ctx.IPAddress
+	if actCtx != nil && actCtx.IPAddress != "" {
+		ip = &actCtx.IPAddress
 	}
 
 	var detailsStr *string
@@ -69,41 +70,41 @@ func (l *Logger) log(typ, resource, resourceID, resourceName, userEmail string, 
 		IPAddress:    ip,
 	}
 
-	if err := l.db.Create(&a).Error; err != nil {
+	if err := l.db.WithContext(ctx).Create(&a).Error; err != nil {
 		slog.Error("failed to record activity", "type", typ, "resource", resource, "resource_id", resourceID, "user", userEmail, "err", err)
 	}
 }
 
-func (l *Logger) LogCreate(resource, resourceID, resourceName string, ctx *Context, details any) {
-	l.log(config.ActivityTypeCreate, resource, resourceID, resourceName, "", ctx, details)
+func (l *Logger) LogCreate(ctx context.Context, resource, resourceID, resourceName string, actCtx *Context, details any) {
+	l.log(ctx, config.ActivityTypeCreate, resource, resourceID, resourceName, "", actCtx, details)
 }
 
-func (l *Logger) LogUpdate(resource, resourceID, resourceName string, ctx *Context, details any) {
-	l.log(config.ActivityTypeUpdate, resource, resourceID, resourceName, "", ctx, details)
+func (l *Logger) LogUpdate(ctx context.Context, resource, resourceID, resourceName string, actCtx *Context, details any) {
+	l.log(ctx, config.ActivityTypeUpdate, resource, resourceID, resourceName, "", actCtx, details)
 }
 
-func (l *Logger) LogDelete(resource, resourceID, resourceName string, ctx *Context, details any) {
-	l.log(config.ActivityTypeDelete, resource, resourceID, resourceName, "", ctx, details)
+func (l *Logger) LogDelete(ctx context.Context, resource, resourceID, resourceName string, actCtx *Context, details any) {
+	l.log(ctx, config.ActivityTypeDelete, resource, resourceID, resourceName, "", actCtx, details)
 }
 
-func (l *Logger) LogToggle(resource, resourceID, resourceName string, ctx *Context, details any) {
-	l.log(config.ActivityTypeToggle, resource, resourceID, resourceName, "", ctx, details)
+func (l *Logger) LogToggle(ctx context.Context, resource, resourceID, resourceName string, actCtx *Context, details any) {
+	l.log(ctx, config.ActivityTypeToggle, resource, resourceID, resourceName, "", actCtx, details)
 }
 
-func (l *Logger) LogLogin(userEmail string, ctx *Context, details any) {
-	l.log(config.ActivityTypeLogin, "user", userEmail, userEmail, userEmail, ctx, details)
+func (l *Logger) LogLogin(ctx context.Context, userEmail string, actCtx *Context, details any) {
+	l.log(ctx, config.ActivityTypeLogin, "user", userEmail, userEmail, userEmail, actCtx, details)
 }
 
-func (l *Logger) LogLogout(userEmail string, ctx *Context) {
-	l.log(config.ActivityTypeLogout, "user", userEmail, userEmail, userEmail, ctx, nil)
+func (l *Logger) LogLogout(ctx context.Context, userEmail string, actCtx *Context) {
+	l.log(ctx, config.ActivityTypeLogout, "user", userEmail, userEmail, userEmail, actCtx, nil)
 }
 
 // LogLoginFailed records a failed authentication attempt (bad password, unknown user, etc.).
-func (l *Logger) LogLoginFailed(identifier string, ctx *Context, details any) {
-	l.log(config.ActivityTypeLoginFailed, "user", identifier, identifier, identifier, ctx, details)
+func (l *Logger) LogLoginFailed(ctx context.Context, identifier string, actCtx *Context, details any) {
+	l.log(ctx, config.ActivityTypeLoginFailed, "user", identifier, identifier, identifier, actCtx, details)
 }
 
 // LogAuthFailed records a failed non-user authentication attempt (e.g. an invalid S2S API key).
-func (l *Logger) LogAuthFailed(resource, identifier string, ctx *Context, details any) {
-	l.log(config.ActivityTypeAuthFailed, resource, identifier, identifier, "", ctx, details)
+func (l *Logger) LogAuthFailed(ctx context.Context, resource, identifier string, actCtx *Context, details any) {
+	l.log(ctx, config.ActivityTypeAuthFailed, resource, identifier, identifier, "", actCtx, details)
 }

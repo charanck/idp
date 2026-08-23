@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"context"
 	"testing"
 
 	"gorm.io/gorm"
@@ -19,7 +20,7 @@ func setup(t *testing.T) (*gorm.DB, *auth.AuthService) {
 func TestRegisterUser_CreatesInactiveUser(t *testing.T) {
 	_, svc := setup(t)
 
-	user, err := svc.RegisterUser("alice@example.com", "hunter22222", "")
+	user, err := svc.RegisterUser(context.Background(), "alice@example.com", "hunter22222", "")
 	if err != nil {
 		t.Fatalf("RegisterUser: %v", err)
 	}
@@ -37,10 +38,10 @@ func TestRegisterUser_CreatesInactiveUser(t *testing.T) {
 func TestRegisterUser_RejectsDuplicateEmail(t *testing.T) {
 	_, svc := setup(t)
 
-	if _, err := svc.RegisterUser("bob@example.com", "pw123456", ""); err != nil {
+	if _, err := svc.RegisterUser(context.Background(), "bob@example.com", "pw123456", ""); err != nil {
 		t.Fatalf("first RegisterUser: %v", err)
 	}
-	if _, err := svc.RegisterUser("bob@example.com", "different-pw", ""); err == nil {
+	if _, err := svc.RegisterUser(context.Background(), "bob@example.com", "different-pw", ""); err == nil {
 		t.Fatal("expected error for duplicate email")
 	}
 }
@@ -48,13 +49,13 @@ func TestRegisterUser_RejectsDuplicateEmail(t *testing.T) {
 func TestAuthenticateUser_RequiresActiveAndCorrectPassword(t *testing.T) {
 	gdb, svc := setup(t)
 
-	user, err := svc.RegisterUser("carol@example.com", "correct-password", "")
+	user, err := svc.RegisterUser(context.Background(), "carol@example.com", "correct-password", "")
 	if err != nil {
 		t.Fatalf("RegisterUser: %v", err)
 	}
 
 	// Inactive users can't authenticate yet.
-	got, err := svc.AuthenticateUser("carol@example.com", "correct-password")
+	got, err := svc.AuthenticateUser(context.Background(), "carol@example.com", "correct-password")
 	if err != nil {
 		t.Fatalf("AuthenticateUser: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestAuthenticateUser_RequiresActiveAndCorrectPassword(t *testing.T) {
 		t.Fatalf("activate user: %v", err)
 	}
 
-	got, err = svc.AuthenticateUser("carol@example.com", "wrong-password")
+	got, err = svc.AuthenticateUser(context.Background(), "carol@example.com", "wrong-password")
 	if err != nil {
 		t.Fatalf("AuthenticateUser: %v", err)
 	}
@@ -75,7 +76,7 @@ func TestAuthenticateUser_RequiresActiveAndCorrectPassword(t *testing.T) {
 		t.Fatal("expected nil for wrong password")
 	}
 
-	got, err = svc.AuthenticateUser("carol@example.com", "correct-password")
+	got, err = svc.AuthenticateUser(context.Background(), "carol@example.com", "correct-password")
 	if err != nil {
 		t.Fatalf("AuthenticateUser: %v", err)
 	}
@@ -87,7 +88,7 @@ func TestAuthenticateUser_RequiresActiveAndCorrectPassword(t *testing.T) {
 func TestCreateServiceClient_AndAuthenticateAPIKey(t *testing.T) {
 	_, svc := setup(t)
 
-	creds, err := svc.CreateServiceClient("payments-service")
+	creds, err := svc.CreateServiceClient(context.Background(), "payments-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}
@@ -95,7 +96,7 @@ func TestCreateServiceClient_AndAuthenticateAPIKey(t *testing.T) {
 		t.Fatal("expected a client encryption key to be generated")
 	}
 
-	client, err := svc.AuthenticateServiceAPIKey(creds.APIKey)
+	client, err := svc.AuthenticateServiceAPIKey(context.Background(), creds.APIKey)
 	if err != nil {
 		t.Fatalf("AuthenticateServiceAPIKey: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestCreateServiceClient_AndAuthenticateAPIKey(t *testing.T) {
 		t.Fatalf("expected authenticated client, got %+v", client)
 	}
 
-	client, err = svc.AuthenticateServiceAPIKey(*creds.Client.APIKeyID + ".wrong-secret")
+	client, err = svc.AuthenticateServiceAPIKey(context.Background(), *creds.Client.APIKeyID + ".wrong-secret")
 	if err != nil {
 		t.Fatalf("AuthenticateServiceAPIKey: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestCreateServiceClient_AndAuthenticateAPIKey(t *testing.T) {
 		t.Fatal("expected nil for wrong secret")
 	}
 
-	client, err = svc.AuthenticateServiceAPIKey("malformed-no-dot")
+	client, err = svc.AuthenticateServiceAPIKey(context.Background(), "malformed-no-dot")
 	if err != nil {
 		t.Fatalf("AuthenticateServiceAPIKey: %v", err)
 	}
@@ -123,10 +124,10 @@ func TestCreateServiceClient_AndAuthenticateAPIKey(t *testing.T) {
 func TestCreateServiceClient_RejectsDuplicateName(t *testing.T) {
 	_, svc := setup(t)
 
-	if _, err := svc.CreateServiceClient("dup-service"); err != nil {
+	if _, err := svc.CreateServiceClient(context.Background(), "dup-service"); err != nil {
 		t.Fatalf("first CreateServiceClient: %v", err)
 	}
-	if _, err := svc.CreateServiceClient("dup-service"); err == nil {
+	if _, err := svc.CreateServiceClient(context.Background(), "dup-service"); err == nil {
 		t.Fatal("expected error for duplicate service client name")
 	}
 }

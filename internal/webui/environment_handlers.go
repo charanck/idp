@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
@@ -22,7 +23,7 @@ func environmentsListHandler(deps *Deps) echo.HandlerFunc {
 		appIDFilter := c.QueryParam("application_id")
 		q := strings.TrimSpace(c.QueryParam("q"))
 
-		query := deps.DB.Preload("Application").Order("name")
+		query := deps.DB.WithContext(c.Request().Context()).Preload("Application").Order("name")
 		if appIDFilter != "" {
 			if _, err := uuid.Parse(appIDFilter); err == nil {
 				query = query.Where("application_id = ?", appIDFilter)
@@ -57,7 +58,7 @@ func environmentsListHandler(deps *Deps) echo.HandlerFunc {
 			groups = append(groups, *groupsByApp[id])
 		}
 
-		apps, err := listApplications(deps)
+		apps, err := listApplications(c.Request().Context(), deps)
 		if err != nil {
 			return err
 		}
@@ -82,15 +83,15 @@ func environmentsListHandler(deps *Deps) echo.HandlerFunc {
 	}
 }
 
-func listApplications(deps *Deps) ([]config.Application, error) {
+func listApplications(ctx context.Context, deps *Deps) ([]config.Application, error) {
 	var apps []config.Application
-	err := deps.DB.Order("name").Find(&apps).Error
+	err := deps.DB.WithContext(ctx).Order("name").Find(&apps).Error
 	return apps, err
 }
 
 func environmentCreateHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		apps, err := listApplications(deps)
+		apps, err := listApplications(c.Request().Context(), deps)
 		if err != nil {
 			return err
 		}
@@ -113,7 +114,7 @@ func environmentCreateHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		var existing config.Environment
-		err = deps.DB.Where("application_id = ? AND name = ?", appID, name).First(&existing).Error
+		err = deps.DB.WithContext(c.Request().Context()).Where("application_id = ? AND name = ?", appID, name).First(&existing).Error
 		if err == nil {
 			return pages.EnvironmentForm(flashes(c), navUser(c), pages.EnvironmentFormData{
 				CSRFToken: csrfToken(c), Applications: apps, Action: "/environments/create/",
@@ -125,10 +126,10 @@ func environmentCreateHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		env := config.Environment{ApplicationID: appID, Name: name}
-		if err := deps.DB.Create(&env).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Create(&env).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogCreate("environment", env.ID.String(), env.Name, requestContext(c), nil)
+		deps.Activity.LogCreate(c.Request().Context(), "environment", env.ID.String(), env.Name, requestContext(c), nil)
 		AddFlash(c, "success", "Environment created.")
 		return c.Redirect(http.StatusFound, "/environments/")
 	}
@@ -141,13 +142,13 @@ func environmentEditHandler(deps *Deps) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
 		var env config.Environment
-		if err := deps.DB.First(&env, "id = ?", id).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).First(&env, "id = ?", id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return echo.NewHTTPError(http.StatusNotFound)
 			}
 			return err
 		}
-		apps, err := listApplications(deps)
+		apps, err := listApplications(c.Request().Context(), deps)
 		if err != nil {
 			return err
 		}
@@ -172,10 +173,10 @@ func environmentEditHandler(deps *Deps) echo.HandlerFunc {
 
 		env.ApplicationID = appID
 		env.Name = name
-		if err := deps.DB.Save(&env).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Save(&env).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogUpdate("environment", env.ID.String(), env.Name, requestContext(c), nil)
+		deps.Activity.LogUpdate(c.Request().Context(), "environment", env.ID.String(), env.Name, requestContext(c), nil)
 		AddFlash(c, "success", "Environment updated.")
 		return c.Redirect(http.StatusFound, "/environments/")
 	}
@@ -188,7 +189,7 @@ func environmentDeleteHandler(deps *Deps) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
 		var env config.Environment
-		if err := deps.DB.Preload("Application").First(&env, "id = ?", id).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Preload("Application").First(&env, "id = ?", id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return echo.NewHTTPError(http.StatusNotFound)
 			}
@@ -205,10 +206,10 @@ func environmentDeleteHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		if err := deps.DB.Delete(&env).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Delete(&env).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogDelete("environment", env.ID.String(), env.Name, requestContext(c), nil)
+		deps.Activity.LogDelete(c.Request().Context(), "environment", env.ID.String(), env.Name, requestContext(c), nil)
 		AddFlash(c, "success", "Environment deleted.")
 		return c.Redirect(http.StatusFound, "/environments/")
 	}

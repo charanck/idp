@@ -151,7 +151,7 @@ func TestGetFlag_ReturnsNilWhenMissing(t *testing.T) {
 	gdb, svc := setupFlagService(t)
 	seedPaymentsWithEnvs(t, gdb, "prod")
 
-	got, err := svc.GetFlag("payments", "prod", "missing-flag")
+	got, err := svc.GetFlag(context.Background(), "payments", "prod", "missing-flag")
 	if err != nil {
 		t.Fatalf("GetFlag: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestGetFlag_ReturnsNilWhenSoftDeleted(t *testing.T) {
 	now := time.Now().UTC()
 	gdb.Model(&config.FeatureFlag{}).Where("name = ?", "my-flag").Update("deleted_at", now)
 
-	got, err := svc.GetFlag("payments", "prod", "my-flag")
+	got, err := svc.GetFlag(ctx, "payments", "prod", "my-flag")
 	if err != nil {
 		t.Fatalf("GetFlag: %v", err)
 	}

@@ -133,7 +133,7 @@ func TestAuthenticateOrCreateUser_RaisesWhenProviderUserIDMissing(t *testing.T) 
 	gdb, svc := setupOAuth(t)
 	provider := makeProvider(t, gdb, nil)
 
-	_, _, err := svc.AuthenticateOrCreateUser(provider, &oauth2.Token{}, map[string]any{"email": "a@example.com"})
+	_, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, &oauth2.Token{}, map[string]any{"email": "a@example.com"})
 	if err == nil {
 		t.Fatal("expected error when provider user ID missing")
 	}
@@ -143,7 +143,7 @@ func TestAuthenticateOrCreateUser_RaisesWhenEmailMissing(t *testing.T) {
 	gdb, svc := setupOAuth(t)
 	provider := makeProvider(t, gdb, nil)
 
-	_, _, err := svc.AuthenticateOrCreateUser(provider, &oauth2.Token{}, map[string]any{"sub": "123"})
+	_, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, &oauth2.Token{}, map[string]any{"sub": "123"})
 	if err == nil {
 		t.Fatal("expected error when email missing")
 	}
@@ -156,7 +156,7 @@ func TestAuthenticateOrCreateUser_CreatesNewUserWhenNoneExists(t *testing.T) {
 	token := &oauth2.Token{AccessToken: "tok", RefreshToken: "rtok", Expiry: time.Now().Add(time.Hour)}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "newperson@example.com"}
 
-	user, oauthToken, err := svc.AuthenticateOrCreateUser(provider, token, userInfo)
+	user, oauthToken, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
 	if err != nil {
 		t.Fatalf("AuthenticateOrCreateUser: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestAuthenticateOrCreateUser_RaisesWhenAutoCreateDisabledAndUserUnknown(t *
 	token := &oauth2.Token{AccessToken: "tok"}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "newperson@example.com"}
 
-	_, _, err := svc.AuthenticateOrCreateUser(provider, token, userInfo)
+	_, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
 	if err == nil {
 		t.Fatal("expected error when auto-creation is disabled and user is unknown")
 	}
@@ -208,7 +208,7 @@ func TestAuthenticateOrCreateUser_LinksExistingUserByEmailWhenNoOAuthTokenYet(t 
 	token := &oauth2.Token{AccessToken: "tok"}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "existing@example.com"}
 
-	user, oauthToken, err := svc.AuthenticateOrCreateUser(provider, token, userInfo)
+	user, oauthToken, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
 	if err != nil {
 		t.Fatalf("AuthenticateOrCreateUser: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestAuthenticateOrCreateUser_ResolvesUsernameCollisionWhenCreatingUser(t *t
 	token := &oauth2.Token{AccessToken: "tok"}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "newperson@example.com"}
 
-	user, _, err := svc.AuthenticateOrCreateUser(provider, token, userInfo)
+	user, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
 	if err != nil {
 		t.Fatalf("AuthenticateOrCreateUser: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestAuthenticateOrCreateUser_ReusesExistingOAuthTokenAndUpdatesIt(t *testin
 	token := &oauth2.Token{AccessToken: "new-token", RefreshToken: "new-refresh", Expiry: time.Now().Add(2 * time.Hour)}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "existing@example.com"}
 
-	returnedUser, oauthToken, err := svc.AuthenticateOrCreateUser(provider, token, userInfo)
+	returnedUser, oauthToken, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
 	if err != nil {
 		t.Fatalf("AuthenticateOrCreateUser: %v", err)
 	}

@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -13,9 +14,9 @@ import (
 	"controlplane/views/pages"
 )
 
-func activeOAuthProviders(deps *Deps) ([]pages.LoginOAuthProvider, error) {
+func activeOAuthProviders(ctx context.Context, deps *Deps) ([]pages.LoginOAuthProvider, error) {
 	var providers []auth.OAuthProvider
-	if err := deps.DB.Where("is_active = ?", true).Find(&providers).Error; err != nil {
+	if err := deps.DB.WithContext(ctx).Where("is_active = ?", true).Find(&providers).Error; err != nil {
 		return nil, err
 	}
 	out := make([]pages.LoginOAuthProvider, 0, len(providers))
@@ -41,7 +42,7 @@ func loginViewHandler(deps *Deps) echo.HandlerFunc {
 		if CurrentUser(c) != nil {
 			return c.Redirect(http.StatusFound, "/dashboard/")
 		}
-		providers, err := activeOAuthProviders(deps)
+		providers, err := activeOAuthProviders(c.Request().Context(), deps)
 		if err != nil {
 			return err
 		}
@@ -66,12 +67,12 @@ func loginViewHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		user, err := deps.AuthService.AuthenticateUser(email, password)
+		user, err := deps.AuthService.AuthenticateUser(c.Request().Context(), email, password)
 		if err != nil {
 			return err
 		}
 		if user == nil {
-			deps.Activity.LogLoginFailed(email, requestContext(c), "Invalid web login attempt")
+			deps.Activity.LogLoginFailed(c.Request().Context(), email, requestContext(c), "Invalid web login attempt")
 			return pages.Login(flashes(c), pages.LoginData{
 				CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
 				Error: "Invalid email or password.",
@@ -81,7 +82,7 @@ func loginViewHandler(deps *Deps) echo.HandlerFunc {
 		sess := session.FromContext(c)
 		sess.Regenerate()
 		sess.SetUserID(user.ID.String())
-		deps.Activity.LogLogin(user.Email, requestContext(c), "Web login")
+		deps.Activity.LogLogin(c.Request().Context(), user.Email, requestContext(c), "Web login")
 
 		if user.ForcePasswordReset {
 			AddFlash(c, "warning", "You must change your password before continuing.")
@@ -108,7 +109,7 @@ func registerViewHandler(_ *Deps) echo.HandlerFunc {
 func logoutViewHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if user := CurrentUser(c); user != nil {
-			deps.Activity.LogLogout(user.Email, requestContext(c))
+			deps.Activity.LogLogout(c.Request().Context(), user.Email, requestContext(c))
 		}
 		session.FromContext(c).Destroy()
 		return c.Redirect(http.StatusFound, "/login/")
@@ -151,7 +152,7 @@ func passwordChangeViewHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		if err := deps.AuthService.SetPassword(user.ID, hashed); err != nil {
+		if err := deps.AuthService.SetPassword(c.Request().Context(), user.ID, hashed); err != nil {
 			return err
 		}
 

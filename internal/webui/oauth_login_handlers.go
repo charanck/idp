@@ -35,7 +35,7 @@ func oauthLoginHandler(deps *Deps) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
 		var provider auth.OAuthProvider
-		if err := deps.DB.First(&provider, "id = ? AND is_active = ?", id, true).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).First(&provider, "id = ? AND is_active = ?", id, true).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return echo.NewHTTPError(http.StatusNotFound)
 			}
@@ -67,7 +67,7 @@ func oauthCallbackHandler(deps *Deps) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
 		var provider auth.OAuthProvider
-		if err := deps.DB.First(&provider, "id = ?", id).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).First(&provider, "id = ?", id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return echo.NewHTTPError(http.StatusNotFound)
 			}
@@ -108,21 +108,21 @@ func oauthCallbackHandler(deps *Deps) echo.HandlerFunc {
 			return c.Redirect(http.StatusFound, "/login/")
 		}
 
-		user, _, err := deps.OAuthService.AuthenticateOrCreateUser(&provider, token, userInfo)
+		user, _, err := deps.OAuthService.AuthenticateOrCreateUser(ctx, &provider, token, userInfo)
 		if err != nil {
 			AddFlash(c, "error", "OAuth login failed: "+err.Error())
 			return c.Redirect(http.StatusFound, "/login/")
 		}
 
 		if !user.IsActive {
-			deps.Activity.LogLoginFailed(user.Email, requestContext(c), "OAuth login via "+provider.Name+": account not active")
+			deps.Activity.LogLoginFailed(c.Request().Context(), user.Email, requestContext(c), "OAuth login via "+provider.Name+": account not active")
 			AddFlash(c, "error", "Your account is pending admin approval. Please contact an administrator.")
 			return c.Redirect(http.StatusFound, "/login/")
 		}
 
 		sess.Regenerate()
 		sess.SetUserID(user.ID.String())
-		deps.Activity.LogLogin(user.Email, requestContext(c), "OAuth login via "+provider.Name)
+		deps.Activity.LogLogin(c.Request().Context(), user.Email, requestContext(c), "OAuth login via "+provider.Name)
 
 		AddFlash(c, "success", "Successfully logged in with "+provider.Name+"!")
 		return c.Redirect(http.StatusFound, "/dashboard/")

@@ -36,7 +36,7 @@ func APIKeyAuth(deps *Deps) echo.MiddlewareFunc {
 				return c.String(http.StatusTooManyRequests, "Too many requests. Please try again later.")
 			}
 
-			client, err := deps.AuthService.AuthenticateServiceAPIKey(apiKey)
+			client, err := deps.AuthService.AuthenticateServiceAPIKey(c.Request().Context(), apiKey)
 			if err != nil {
 				return err
 			}

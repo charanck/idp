@@ -30,10 +30,6 @@ func NewConfigService(db *gorm.DB, encryption *crypto.EncryptionService, c cache
 	return &ConfigService{db: db, encryption: encryption, cache: c, cacheTimeout: cacheTimeout}
 }
 
-func (s *ConfigService) getOrCreateScope(service, environment string) (*Application, *Environment, error) {
-	return getOrCreateScopeTx(s.db, service, environment)
-}
-
 func getOrCreateScopeTx(tx *gorm.DB, service, environment string) (*Application, *Environment, error) {
 	var app Application
 	if err := tx.Where("name = ?", service).First(&app).Error; err != nil {
@@ -77,9 +73,11 @@ func advisoryLockKey(parts ...string) int64 {
 
 // getScope looks up an existing Application/Environment without creating
 // them; either return value is nil if not found.
-func (s *ConfigService) getScope(service, environment string) (*Application, *Environment, error) {
+func (s *ConfigService) getScope(ctx context.Context, service, environment string) (*Application, *Environment, error) {
+	db := s.db.WithContext(ctx)
+
 	var app Application
-	err := s.db.Where("name = ?", service).First(&app).Error
+	err := db.Where("name = ?", service).First(&app).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil, nil
 	}
@@ -88,7 +86,7 @@ func (s *ConfigService) getScope(service, environment string) (*Application, *En
 	}
 
 	var env Environment
-	err = s.db.Where("application_id = ? AND name = ?", app.ID, environment).First(&env).Error
+	err = db.Where("application_id = ? AND name = ?", app.ID, environment).First(&env).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return &app, nil, nil
 	}
@@ -114,9 +112,9 @@ func (s *ConfigService) InvalidateScopeCache(ctx context.Context, service, envir
 
 // RecordConfigVersion snapshots a ConfigEntry's current (encrypted) value
 // into history. Not called on delete - history cascades away with the entry.
-func (s *ConfigService) RecordConfigVersion(config *ConfigEntry, action string, changedBy string) (*ConfigEntryVersion, error) {
+func (s *ConfigService) RecordConfigVersion(ctx context.Context, config *ConfigEntry, action string, changedBy string) (*ConfigEntryVersion, error) {
 	var version *ConfigEntryVersion
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		v, err := recordConfigVersionTx(tx, config, action, changedBy)
 		if err != nil {
 			return err
@@ -262,8 +260,8 @@ func (s *ConfigService) UpsertConfig(ctx context.Context, service, environment, 
 }
 
 // GetConfig returns a specific configuration or secret, or nil if not found.
-func (s *ConfigService) GetConfig(service, environment, key string) (*ConfigEntry, error) {
-	app, env, err := s.getScope(service, environment)
+func (s *ConfigService) GetConfig(ctx context.Context, service, environment, key string) (*ConfigEntry, error) {
+	app, env, err := s.getScope(ctx, service, environment)
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +270,7 @@ func (s *ConfigService) GetConfig(service, environment, key string) (*ConfigEntr
 	}
 
 	var entry ConfigEntry
-	err = s.db.Where("application_id = ? AND environment_id = ? AND key = ?", app.ID, env.ID, key).First(&entry).Error
+	err = s.db.WithContext(ctx).Where("application_id = ? AND environment_id = ? AND key = ?", app.ID, env.ID, key).First(&entry).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -283,8 +281,8 @@ func (s *ConfigService) GetConfig(service, environment, key string) (*ConfigEntr
 }
 
 // GetConfigWithScope returns a specific config entry with its Application/Environment preloaded.
-func (s *ConfigService) GetConfigWithScope(service, environment, key string) (*ConfigEntry, error) {
-	app, env, err := s.getScope(service, environment)
+func (s *ConfigService) GetConfigWithScope(ctx context.Context, service, environment, key string) (*ConfigEntry, error) {
+	app, env, err := s.getScope(ctx, service, environment)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +291,7 @@ func (s *ConfigService) GetConfigWithScope(service, environment, key string) (*C
 	}
 
 	var entry ConfigEntry
-	err = s.db.Preload("Application").Preload("Environment").
+	err = s.db.WithContext(ctx).Preload("Application").Preload("Environment").
 		Where("application_id = ? AND environment_id = ? AND key = ?", app.ID, env.ID, key).
 		First(&entry).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -306,8 +304,8 @@ func (s *ConfigService) GetConfigWithScope(service, environment, key string) (*C
 }
 
 // ListConfigs lists all configurations for a service/environment.
-func (s *ConfigService) ListConfigs(service, environment string) ([]ConfigEntry, error) {
-	app, env, err := s.getScope(service, environment)
+func (s *ConfigService) ListConfigs(ctx context.Context, service, environment string) ([]ConfigEntry, error) {
+	app, env, err := s.getScope(ctx, service, environment)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +314,7 @@ func (s *ConfigService) ListConfigs(service, environment string) ([]ConfigEntry,
 	}
 
 	var entries []ConfigEntry
-	err = s.db.Preload("Application").Preload("Environment").
+	err = s.db.WithContext(ctx).Preload("Application").Preload("Environment").
 		Where("application_id = ? AND environment_id = ?", app.ID, env.ID).
 		Find(&entries).Error
 	if err != nil {
@@ -353,7 +351,7 @@ func (s *ConfigService) DeleteConfig(ctx context.Context, configID string) (bool
 	}
 
 	var entry ConfigEntry
-	err = s.db.Preload("Application").Preload("Environment").First(&entry, "id = ?", id).Error
+	err = s.db.WithContext(ctx).Preload("Application").Preload("Environment").First(&entry, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Warn("config delete failed: not found", "id", configID)
 		return false, nil
@@ -362,7 +360,7 @@ func (s *ConfigService) DeleteConfig(ctx context.Context, configID string) (bool
 		return false, err
 	}
 
-	if err := s.db.Delete(&entry).Error; err != nil {
+	if err := s.db.WithContext(ctx).Delete(&entry).Error; err != nil {
 		return false, err
 	}
 	if err := s.InvalidateScopeCache(ctx, entry.Application.Name, entry.Environment.Name); err != nil {
@@ -373,14 +371,16 @@ func (s *ConfigService) DeleteConfig(ctx context.Context, configID string) (bool
 }
 
 // GetConfigHistory lists version history for a config entry, newest first.
-func (s *ConfigService) GetConfigHistory(configID string) ([]ConfigEntryVersion, error) {
+func (s *ConfigService) GetConfigHistory(ctx context.Context, configID string) ([]ConfigEntryVersion, error) {
 	id, err := uuid.Parse(configID)
 	if err != nil {
 		return []ConfigEntryVersion{}, nil
 	}
 
+	db := s.db.WithContext(ctx)
+
 	var entry ConfigEntry
-	if err := s.db.First(&entry, "id = ?", id).Error; err != nil {
+	if err := db.First(&entry, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return []ConfigEntryVersion{}, nil
 		}
@@ -388,7 +388,7 @@ func (s *ConfigService) GetConfigHistory(configID string) ([]ConfigEntryVersion,
 	}
 
 	var versions []ConfigEntryVersion
-	if err := s.db.Where("config_entry_id = ?", id).Order("version DESC").Find(&versions).Error; err != nil {
+	if err := db.Where("config_entry_id = ?", id).Order("version DESC").Find(&versions).Error; err != nil {
 		return nil, err
 	}
 	return versions, nil
@@ -408,7 +408,7 @@ func (s *ConfigService) RollbackConfig(ctx context.Context, configID string, ver
 	}
 
 	var entry ConfigEntry
-	err = s.db.Preload("Application").Preload("Environment").First(&entry, "id = ?", id).Error
+	err = s.db.WithContext(ctx).Preload("Application").Preload("Environment").First(&entry, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -417,7 +417,7 @@ func (s *ConfigService) RollbackConfig(ctx context.Context, configID string, ver
 	}
 
 	var target ConfigEntryVersion
-	err = s.db.Where("config_entry_id = ? AND version = ?", entry.ID, version).First(&target).Error
+	err = s.db.WithContext(ctx).Where("config_entry_id = ? AND version = ?", entry.ID, version).First(&target).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -457,8 +457,8 @@ type ClientConfig struct {
 }
 
 // GetConfigForClient returns a single config encrypted for a specific client.
-func (s *ConfigService) GetConfigForClient(service, environment, key, clientEncryptionKey string) (*ClientConfig, error) {
-	entry, err := s.GetConfigWithScope(service, environment, key)
+func (s *ConfigService) GetConfigForClient(ctx context.Context, service, environment, key, clientEncryptionKey string) (*ClientConfig, error) {
+	entry, err := s.GetConfigWithScope(ctx, service, environment, key)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +509,7 @@ func (s *ConfigService) ListConfigsForClient(ctx context.Context, service, envir
 		}
 	}
 
-	entries, err := s.ListConfigs(service, environment)
+	entries, err := s.ListConfigs(ctx, service, environment)
 	if err != nil {
 		return nil, err
 	}
@@ -550,9 +550,9 @@ func (s *ConfigService) ListConfigsForClient(ctx context.Context, service, envir
 }
 
 // ListServices lists all unique application names used by configs.
-func (s *ConfigService) ListServices() ([]string, error) {
+func (s *ConfigService) ListServices(ctx context.Context) ([]string, error) {
 	var names []string
-	err := s.db.Model(&Application{}).Distinct().Order("name").Pluck("name", &names).Error
+	err := s.db.WithContext(ctx).Model(&Application{}).Distinct().Order("name").Pluck("name", &names).Error
 	if err != nil {
 		return nil, err
 	}
@@ -560,9 +560,11 @@ func (s *ConfigService) ListServices() ([]string, error) {
 }
 
 // ListEnvironments lists all environments for a service/application.
-func (s *ConfigService) ListEnvironments(service string) ([]string, error) {
+func (s *ConfigService) ListEnvironments(ctx context.Context, service string) ([]string, error) {
+	db := s.db.WithContext(ctx)
+
 	var app Application
-	err := s.db.Where("name = ?", service).First(&app).Error
+	err := db.Where("name = ?", service).First(&app).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return []string{}, nil
 	}
@@ -571,7 +573,7 @@ func (s *ConfigService) ListEnvironments(service string) ([]string, error) {
 	}
 
 	var names []string
-	err = s.db.Model(&Environment{}).Where("application_id = ?", app.ID).Distinct().Order("name").Pluck("name", &names).Error
+	err = db.Model(&Environment{}).Where("application_id = ?", app.ID).Distinct().Order("name").Pluck("name", &names).Error
 	if err != nil {
 		return nil, err
 	}

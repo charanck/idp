@@ -22,7 +22,7 @@ func clientsListHandler(deps *Deps) echo.HandlerFunc {
 		q := strings.TrimSpace(c.QueryParam("q"))
 		statusFilter := c.QueryParam("status")
 
-		query := deps.DB.Order("created_at DESC")
+		query := deps.DB.WithContext(c.Request().Context()).Order("created_at DESC")
 		if q != "" {
 			query = query.Where("name ILIKE ?", "%"+q+"%")
 		}
@@ -72,7 +72,7 @@ func clientCreateHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		creds, err := deps.AuthService.CreateServiceClient(name)
+		creds, err := deps.AuthService.CreateServiceClient(c.Request().Context(), name)
 		if err != nil {
 			if errors.Is(err, auth.ErrAlreadyExists) {
 				return pages.ClientForm(flashes(c), navUser(c), pages.ClientFormData{
@@ -82,7 +82,7 @@ func clientCreateHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 
-		deps.Activity.LogCreate("client", creds.Client.ID.String(), creds.Client.Name, requestContext(c), nil)
+		deps.Activity.LogCreate(c.Request().Context(), "client", creds.Client.ID.String(), creds.Client.Name, requestContext(c), nil)
 		AddFlash(c, "success", "Service client created successfully.")
 
 		apiKeyID := ""
@@ -101,7 +101,7 @@ func loadClient(deps *Deps, c echo.Context) (*auth.ServiceClient, error) {
 		return nil, echo.NewHTTPError(http.StatusNotFound)
 	}
 	var client auth.ServiceClient
-	if err := deps.DB.First(&client, "id = ?", id).Error; err != nil {
+	if err := deps.DB.WithContext(c.Request().Context()).First(&client, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, echo.NewHTTPError(http.StatusNotFound)
 		}
@@ -135,10 +135,10 @@ func clientToggleHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 		client.IsActive = !client.IsActive
-		if err := deps.DB.Save(client).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Save(client).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogToggle("client", client.ID.String(), client.Name, requestContext(c), map[string]any{"is_active": client.IsActive})
+		deps.Activity.LogToggle(c.Request().Context(), "client", client.ID.String(), client.Name, requestContext(c), map[string]any{"is_active": client.IsActive})
 
 		status := "deactivated"
 		if client.IsActive {
@@ -165,10 +165,10 @@ func clientDeleteHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		if err := deps.DB.Delete(client).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Delete(client).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogDelete("client", client.ID.String(), client.Name, requestContext(c), nil)
+		deps.Activity.LogDelete(c.Request().Context(), "client", client.ID.String(), client.Name, requestContext(c), nil)
 		AddFlash(c, "success", "Service client "+client.Name+" deleted successfully.")
 		return c.Redirect(http.StatusFound, "/clients/")
 	}
@@ -187,10 +187,10 @@ func clientRegenerateKeyHandler(deps *Deps) echo.HandlerFunc {
 				return err
 			}
 			client.EncryptionKey = newKey
-			if err := deps.DB.Save(client).Error; err != nil {
+			if err := deps.DB.WithContext(c.Request().Context()).Save(client).Error; err != nil {
 				return err
 			}
-			deps.Activity.LogUpdate("client", client.ID.String(), client.Name, requestContext(c), map[string]any{"action": "regenerate_encryption_key"})
+			deps.Activity.LogUpdate(c.Request().Context(), "client", client.ID.String(), client.Name, requestContext(c), map[string]any{"action": "regenerate_encryption_key"})
 			AddFlash(c, "success", "Encryption key regenerated for "+client.Name+". The client must be updated with the new key.")
 		}
 

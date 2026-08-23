@@ -123,7 +123,7 @@ func TestUpsertConfig_ReusesScopeAcrossMultipleKeys(t *testing.T) {
 
 func TestGetConfig_ReturnsNilForUnknownScope(t *testing.T) {
 	_, svc, _ := setupConfigService(t)
-	got, err := svc.GetConfig("unknown-app", "prod", "KEY")
+	got, err := svc.GetConfig(context.Background(), "unknown-app", "prod", "KEY")
 	if err != nil {
 		t.Fatalf("GetConfig: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestGetConfig_ReturnsNilForUnknownKeyInKnownScope(t *testing.T) {
 	ctx := context.Background()
 	svc.UpsertConfig(ctx, "payments", "prod", "KEY_A", "a", config.UpsertOptions{})
 
-	got, err := svc.GetConfig("payments", "prod", "KEY_B")
+	got, err := svc.GetConfig(ctx, "payments", "prod", "KEY_B")
 	if err != nil {
 		t.Fatalf("GetConfig: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestGetConfig_FindsExistingEntry(t *testing.T) {
 	ctx := context.Background()
 	svc.UpsertConfig(ctx, "payments", "prod", "KEY_A", "a", config.UpsertOptions{})
 
-	found, err := svc.GetConfig("payments", "prod", "KEY_A")
+	found, err := svc.GetConfig(ctx, "payments", "prod", "KEY_A")
 	if err != nil {
 		t.Fatalf("GetConfig: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestListConfigs_ScopesToServiceAndEnvironment(t *testing.T) {
 	svc.UpsertConfig(ctx, "payments", "staging", "KEY_A", "a-staging", config.UpsertOptions{})
 	svc.UpsertConfig(ctx, "other-app", "prod", "KEY_A", "other", config.UpsertOptions{})
 
-	results, err := svc.ListConfigs("payments", "prod")
+	results, err := svc.ListConfigs(ctx, "payments", "prod")
 	if err != nil {
 		t.Fatalf("ListConfigs: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestListConfigs_ScopesToServiceAndEnvironment(t *testing.T) {
 
 func TestListConfigs_ReturnsEmptyForUnknownScope(t *testing.T) {
 	_, svc, _ := setupConfigService(t)
-	results, err := svc.ListConfigs("unknown", "prod")
+	results, err := svc.ListConfigs(context.Background(), "unknown", "prod")
 	if err != nil {
 		t.Fatalf("ListConfigs: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestConfigHistory_UpsertRecordsCreateThenUpdateVersions(t *testing.T) {
 		t.Fatalf("UpsertConfig 2: %v", err)
 	}
 
-	history, err := svc.GetConfigHistory(entry.ID.String())
+	history, err := svc.GetConfigHistory(ctx, entry.ID.String())
 	if err != nil {
 		t.Fatalf("GetConfigHistory: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestConfigHistory_UpsertRecordsChangedBy(t *testing.T) {
 		t.Fatalf("UpsertConfig: %v", err)
 	}
 
-	history, err := svc.GetConfigHistory(entry.ID.String())
+	history, err := svc.GetConfigHistory(ctx, entry.ID.String())
 	if err != nil {
 		t.Fatalf("GetConfigHistory: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestConfigHistory_DeletingConfigDeletesItsHistory(t *testing.T) {
 
 	svc.DeleteConfig(ctx, entry.ID.String())
 
-	history, err := svc.GetConfigHistory(entry.ID.String())
+	history, err := svc.GetConfigHistory(ctx, entry.ID.String())
 	if err != nil {
 		t.Fatalf("GetConfigHistory: %v", err)
 	}
@@ -349,7 +349,7 @@ func TestConfigHistory_RecreatingDeletedKeyStartsFreshHistory(t *testing.T) {
 		t.Fatalf("UpsertConfig recreate: %v", err)
 	}
 
-	history, err := svc.GetConfigHistory(recreated.ID.String())
+	history, err := svc.GetConfigHistory(ctx, recreated.ID.String())
 	if err != nil {
 		t.Fatalf("GetConfigHistory: %v", err)
 	}
@@ -379,7 +379,7 @@ func TestRollbackConfig_RestoresPriorValueAsNewVersion(t *testing.T) {
 		t.Fatalf("decrypted = %q", decrypted)
 	}
 
-	history, err := svc.GetConfigHistory(entry.ID.String())
+	history, err := svc.GetConfigHistory(ctx, entry.ID.String())
 	if err != nil {
 		t.Fatalf("GetConfigHistory: %v", err)
 	}
@@ -424,7 +424,7 @@ func TestRollbackConfig_ReturnsNilForUnknownConfigID(t *testing.T) {
 
 func TestGetConfigHistory_ReturnsEmptyForUnknownID(t *testing.T) {
 	_, svc, _ := setupConfigService(t)
-	history, err := svc.GetConfigHistory(uuid.New().String())
+	history, err := svc.GetConfigHistory(context.Background(), uuid.New().String())
 	if err != nil {
 		t.Fatalf("GetConfigHistory: %v", err)
 	}
@@ -442,7 +442,7 @@ func TestGetConfigForClient_ReencryptsWithClientKey(t *testing.T) {
 		t.Fatalf("GenerateKey: %v", err)
 	}
 
-	result, err := svc.GetConfigForClient("payments", "prod", "API_URL", clientKey)
+	result, err := svc.GetConfigForClient(ctx, "payments", "prod", "API_URL", clientKey)
 	if err != nil {
 		t.Fatalf("GetConfigForClient: %v", err)
 	}
@@ -464,7 +464,7 @@ func TestGetConfigForClient_ReencryptsWithClientKey(t *testing.T) {
 func TestGetConfigForClient_ReturnsNilWhenMissing(t *testing.T) {
 	_, svc, _ := setupConfigService(t)
 	clientKey, _ := crypto.GenerateKey()
-	got, err := svc.GetConfigForClient("payments", "prod", "MISSING", clientKey)
+	got, err := svc.GetConfigForClient(context.Background(), "payments", "prod", "MISSING", clientKey)
 	if err != nil {
 		t.Fatalf("GetConfigForClient: %v", err)
 	}
@@ -563,7 +563,7 @@ func TestListServices_ReturnsDistinctSortedNames(t *testing.T) {
 	svc.UpsertConfig(ctx, "alpha-app", "prod", "K", "v", config.UpsertOptions{})
 	svc.UpsertConfig(ctx, "zeta-app", "prod", "K2", "v", config.UpsertOptions{})
 
-	services, err := svc.ListServices()
+	services, err := svc.ListServices(ctx)
 	if err != nil {
 		t.Fatalf("ListServices: %v", err)
 	}
@@ -593,7 +593,7 @@ func TestListEnvironments_ScopedToApplication(t *testing.T) {
 	svc.UpsertConfig(ctx, "payments", "staging", "K", "v", config.UpsertOptions{})
 	svc.UpsertConfig(ctx, "other-app", "dev", "K", "v", config.UpsertOptions{})
 
-	envs, err := svc.ListEnvironments("payments")
+	envs, err := svc.ListEnvironments(ctx, "payments")
 	if err != nil {
 		t.Fatalf("ListEnvironments: %v", err)
 	}
@@ -604,7 +604,7 @@ func TestListEnvironments_ScopedToApplication(t *testing.T) {
 
 func TestListEnvironments_ReturnsEmptyForUnknownApplication(t *testing.T) {
 	_, svc, _ := setupConfigService(t)
-	envs, err := svc.ListEnvironments("unknown")
+	envs, err := svc.ListEnvironments(context.Background(), "unknown")
 	if err != nil {
 		t.Fatalf("ListEnvironments: %v", err)
 	}

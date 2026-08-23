@@ -20,7 +20,7 @@ func applicationsListHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		q := strings.TrimSpace(c.QueryParam("q"))
 
-		query := deps.DB.Order("name")
+		query := deps.DB.WithContext(c.Request().Context()).Order("name")
 		if q != "" {
 			query = query.Where("name ILIKE ?", "%"+q+"%")
 		}
@@ -62,7 +62,7 @@ func applicationCreateHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		var existing config.Application
-		err := deps.DB.Where("name = ?", name).First(&existing).Error
+		err := deps.DB.WithContext(c.Request().Context()).Where("name = ?", name).First(&existing).Error
 		if err == nil {
 			return pages.ApplicationForm(flashes(c), navUser(c), pages.ApplicationFormData{
 				CSRFToken: csrfToken(c), Action: "/applications/create/", Name: name,
@@ -74,10 +74,10 @@ func applicationCreateHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		app := config.Application{Name: name}
-		if err := deps.DB.Create(&app).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Create(&app).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogCreate("application", app.ID.String(), app.Name, requestContext(c), nil)
+		deps.Activity.LogCreate(c.Request().Context(), "application", app.ID.String(), app.Name, requestContext(c), nil)
 		AddFlash(c, "success", "Application created.")
 		return c.Redirect(http.StatusFound, "/applications/")
 	}
@@ -90,7 +90,7 @@ func applicationEditHandler(deps *Deps) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
 		var app config.Application
-		if err := deps.DB.First(&app, "id = ?", id).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).First(&app, "id = ?", id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return echo.NewHTTPError(http.StatusNotFound)
 			}
@@ -113,10 +113,10 @@ func applicationEditHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		app.Name = name
-		if err := deps.DB.Save(&app).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Save(&app).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogUpdate("application", app.ID.String(), app.Name, requestContext(c), nil)
+		deps.Activity.LogUpdate(c.Request().Context(), "application", app.ID.String(), app.Name, requestContext(c), nil)
 		AddFlash(c, "success", "Application updated.")
 		return c.Redirect(http.StatusFound, "/applications/")
 	}
@@ -129,7 +129,7 @@ func applicationDeleteHandler(deps *Deps) echo.HandlerFunc {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
 		var app config.Application
-		if err := deps.DB.First(&app, "id = ?", id).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).First(&app, "id = ?", id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return echo.NewHTTPError(http.StatusNotFound)
 			}
@@ -146,10 +146,10 @@ func applicationDeleteHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		if err := deps.DB.Delete(&app).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Delete(&app).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogDelete("application", app.ID.String(), app.Name, requestContext(c), nil)
+		deps.Activity.LogDelete(c.Request().Context(), "application", app.ID.String(), app.Name, requestContext(c), nil)
 		AddFlash(c, "success", "Application deleted.")
 		return c.Redirect(http.StatusFound, "/applications/")
 	}

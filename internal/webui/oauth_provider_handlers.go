@@ -21,7 +21,7 @@ func oauthProvidersListHandler(deps *Deps) echo.HandlerFunc {
 		q := strings.TrimSpace(c.QueryParam("q"))
 		statusFilter := c.QueryParam("status")
 
-		query := deps.DB.Order("created_at DESC")
+		query := deps.DB.WithContext(c.Request().Context()).Order("created_at DESC")
 		if q != "" {
 			query = query.Where("name ILIKE ?", "%"+q+"%")
 		}
@@ -102,11 +102,11 @@ func oauthProviderCreateHandler(deps *Deps) echo.HandlerFunc {
 			return reRender("Name, client ID, client secret, authorization URL, and token URL are required.")
 		}
 
-		if err := deps.DB.Create(&p).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Create(&p).Error; err != nil {
 			return err
 		}
 
-		deps.Activity.LogCreate("oauth_provider", p.ID.String(), p.Name, requestContext(c), map[string]any{"scope": p.Scope, "active": p.IsActive})
+		deps.Activity.LogCreate(c.Request().Context(), "oauth_provider", p.ID.String(), p.Name, requestContext(c), map[string]any{"scope": p.Scope, "active": p.IsActive})
 		AddFlash(c, "success", "OAuth provider \""+p.Name+"\" created successfully.")
 		return c.Redirect(http.StatusFound, "/oauth/providers/")
 	}
@@ -118,7 +118,7 @@ func loadOAuthProvider(deps *Deps, c echo.Context) (*auth.OAuthProvider, error) 
 		return nil, echo.NewHTTPError(http.StatusNotFound)
 	}
 	var p auth.OAuthProvider
-	if err := deps.DB.First(&p, "id = ?", id).Error; err != nil {
+	if err := deps.DB.WithContext(c.Request().Context()).First(&p, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, echo.NewHTTPError(http.StatusNotFound)
 		}
@@ -159,11 +159,11 @@ func oauthProviderEditHandler(deps *Deps) echo.HandlerFunc {
 			return reRender("Name, client ID, client secret, authorization URL, and token URL are required.")
 		}
 
-		if err := deps.DB.Save(&p).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Save(&p).Error; err != nil {
 			return err
 		}
 
-		deps.Activity.LogUpdate("oauth_provider", p.ID.String(), p.Name, requestContext(c), map[string]any{"scope": p.Scope, "active": p.IsActive})
+		deps.Activity.LogUpdate(c.Request().Context(), "oauth_provider", p.ID.String(), p.Name, requestContext(c), map[string]any{"scope": p.Scope, "active": p.IsActive})
 		AddFlash(c, "success", "OAuth provider \""+p.Name+"\" updated successfully.")
 		return c.Redirect(http.StatusFound, "/oauth/providers/")
 	}
@@ -185,10 +185,10 @@ func oauthProviderDeleteHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		if err := deps.DB.Delete(p).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Delete(p).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogDelete("oauth_provider", p.ID.String(), p.Name, requestContext(c), nil)
+		deps.Activity.LogDelete(c.Request().Context(), "oauth_provider", p.ID.String(), p.Name, requestContext(c), nil)
 		AddFlash(c, "success", "OAuth provider \""+p.Name+"\" deleted successfully.")
 		return c.Redirect(http.StatusFound, "/oauth/providers/")
 	}
@@ -201,10 +201,10 @@ func oauthProviderToggleHandler(deps *Deps) echo.HandlerFunc {
 			return err
 		}
 		p.IsActive = !p.IsActive
-		if err := deps.DB.Save(p).Error; err != nil {
+		if err := deps.DB.WithContext(c.Request().Context()).Save(p).Error; err != nil {
 			return err
 		}
-		deps.Activity.LogToggle("oauth_provider", p.ID.String(), p.Name, requestContext(c), map[string]any{"is_active": p.IsActive})
+		deps.Activity.LogToggle(c.Request().Context(), "oauth_provider", p.ID.String(), p.Name, requestContext(c), map[string]any{"is_active": p.IsActive})
 
 		status := "deactivated"
 		if p.IsActive {

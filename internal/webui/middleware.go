@@ -31,7 +31,7 @@ func LoadUser(deps *Deps) echo.MiddlewareFunc {
 			if sess != nil {
 				if idStr, ok := sess.UserID(); ok {
 					if id, err := uuid.Parse(idStr); err == nil {
-						if user, err := deps.AuthService.GetUserByID(id); err == nil && user != nil {
+						if user, err := deps.AuthService.GetUserByID(c.Request().Context(), id); err == nil && user != nil {
 							c.Set(contextKeyUser, user)
 						}
 					}

@@ -32,13 +32,15 @@ var (
 	ErrNoEnvironmentsFound = errors.New("no environments found for the selected application")
 )
 
-func (s *FeatureFlagService) getScope(service, environment string) (*Application, *Environment, error) {
+func (s *FeatureFlagService) getScope(ctx context.Context, service, environment string) (*Application, *Environment, error) {
+	db := s.db.WithContext(ctx)
+
 	var app Application
-	if err := s.db.Where("name = ?", service).First(&app).Error; err != nil {
+	if err := db.Where("name = ?", service).First(&app).Error; err != nil {
 		return nil, nil, err
 	}
 	var env Environment
-	if err := s.db.Where("application_id = ? AND name = ?", app.ID, environment).First(&env).Error; err != nil {
+	if err := db.Where("application_id = ? AND name = ?", app.ID, environment).First(&env).Error; err != nil {
 		return nil, nil, err
 	}
 	return &app, &env, nil
@@ -69,15 +71,17 @@ type CreateFlagOptions struct {
 // CreateFlag creates (or updates) a feature flag across one or all
 // environments of an application, mirroring FeatureFlagService.create_flag.
 func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name string, opts CreateFlagOptions) ([]FeatureFlag, error) {
+	db := s.db.WithContext(ctx)
+
 	var app Application
-	if err := s.db.Where("name = ?", service).First(&app).Error; err != nil {
+	if err := db.Where("name = ?", service).First(&app).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("application %q does not exist: %w", service, ErrApplicationNotFound)
 		}
 		return nil, err
 	}
 
-	query := s.db.Where("application_id = ?", app.ID).Order("name")
+	query := db.Where("application_id = ?", app.ID).Order("name")
 	if !opts.CreateAllEnvironments {
 		if opts.Environment == "" {
 			return nil, ErrEnvironmentRequired
@@ -101,7 +105,7 @@ func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name strin
 	flags := make([]FeatureFlag, 0, len(environments))
 	for _, env := range environments {
 		var flag FeatureFlag
-		err := s.db.Where("application_id = ? AND environment_id = ? AND name = ?", app.ID, env.ID, name).First(&flag).Error
+		err := db.Where("application_id = ? AND environment_id = ? AND name = ?", app.ID, env.ID, name).First(&flag).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			flag = FeatureFlag{
 				ApplicationID: app.ID,
@@ -110,7 +114,7 @@ func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name strin
 				Description:   description,
 				IsEnabled:     opts.IsEnabled,
 			}
-			if err := s.db.Create(&flag).Error; err != nil {
+			if err := db.Create(&flag).Error; err != nil {
 				return nil, err
 			}
 		} else if err != nil {
@@ -119,7 +123,7 @@ func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name strin
 			flag.Description = description
 			flag.IsEnabled = opts.IsEnabled
 			flag.DeletedAt = nil
-			if err := s.db.Save(&flag).Error; err != nil {
+			if err := db.Save(&flag).Error; err != nil {
 				return nil, err
 			}
 		}
@@ -138,8 +142,8 @@ func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name strin
 
 // GetFlag returns a feature flag by name, or nil if not found (including if
 // the service/environment scope itself doesn't exist).
-func (s *FeatureFlagService) GetFlag(service, environment, name string) (*FeatureFlag, error) {
-	app, env, err := s.getScope(service, environment)
+func (s *FeatureFlagService) GetFlag(ctx context.Context, service, environment, name string) (*FeatureFlag, error) {
+	app, env, err := s.getScope(ctx, service, environment)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -148,7 +152,7 @@ func (s *FeatureFlagService) GetFlag(service, environment, name string) (*Featur
 	}
 
 	var flag FeatureFlag
-	err = s.db.Where("application_id = ? AND environment_id = ? AND name = ? AND deleted_at IS NULL", app.ID, env.ID, name).First(&flag).Error
+	err = s.db.WithContext(ctx).Where("application_id = ? AND environment_id = ? AND name = ? AND deleted_at IS NULL", app.ID, env.ID, name).First(&flag).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -162,7 +166,7 @@ func (s *FeatureFlagService) GetFlag(service, environment, name string) (*Featur
 
 // ListFlags lists all active (non-deleted) feature flags for a service/environment.
 func (s *FeatureFlagService) ListFlags(ctx context.Context, service, environment string) ([]FeatureFlag, error) {
-	app, env, err := s.getScope(service, environment)
+	app, env, err := s.getScope(ctx, service, environment)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return []FeatureFlag{}, nil
 	}
@@ -186,7 +190,7 @@ func (s *FeatureFlagService) ListFlags(ctx context.Context, service, environment
 	}
 
 	var flags []FeatureFlag
-	err = s.db.Preload("Application").Preload("Environment").
+	err = s.db.WithContext(ctx).Preload("Application").Preload("Environment").
 		Where("application_id = ? AND environment_id = ? AND deleted_at IS NULL", app.ID, env.ID).
 		Find(&flags).Error
 	if err != nil {
@@ -204,7 +208,7 @@ func (s *FeatureFlagService) ListFlags(ctx context.Context, service, environment
 
 // ToggleFlag flips a feature flag's enabled state, returning nil if not found.
 func (s *FeatureFlagService) ToggleFlag(ctx context.Context, service, environment, name string) (*FeatureFlag, error) {
-	app, env, err := s.getScope(service, environment)
+	app, env, err := s.getScope(ctx, service, environment)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Warn("feature flag toggle failed: scope not found", "service", service, "environment", environment, "name", name)
 		return nil, nil
@@ -214,7 +218,7 @@ func (s *FeatureFlagService) ToggleFlag(ctx context.Context, service, environmen
 	}
 
 	var flag FeatureFlag
-	err = s.db.Where("application_id = ? AND environment_id = ? AND name = ? AND deleted_at IS NULL", app.ID, env.ID, name).First(&flag).Error
+	err = s.db.WithContext(ctx).Where("application_id = ? AND environment_id = ? AND name = ? AND deleted_at IS NULL", app.ID, env.ID, name).First(&flag).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Warn("feature flag toggle failed: not found", "service", service, "environment", environment, "name", name)
 		return nil, nil
@@ -224,7 +228,7 @@ func (s *FeatureFlagService) ToggleFlag(ctx context.Context, service, environmen
 	}
 
 	flag.IsEnabled = !flag.IsEnabled
-	if err := s.db.Save(&flag).Error; err != nil {
+	if err := s.db.WithContext(ctx).Save(&flag).Error; err != nil {
 		return nil, err
 	}
 	if err := s.InvalidateScopeCache(ctx, service, environment); err != nil {

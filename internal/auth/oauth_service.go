@@ -100,7 +100,9 @@ func (s *OAuthService) GetUserInfo(ctx context.Context, provider *OAuthProvider,
 // AuthenticateOrCreateUser finds or creates a User + OAuthUserToken from the
 // provider's token/userinfo response, mirroring
 // OAuthService.authenticate_or_create_user().
-func (s *OAuthService) AuthenticateOrCreateUser(provider *OAuthProvider, token *oauth2.Token, userInfo map[string]any) (*User, *OAuthUserToken, error) {
+func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *OAuthProvider, token *oauth2.Token, userInfo map[string]any) (*User, *OAuthUserToken, error) {
+	db := s.db.WithContext(ctx)
+
 	providerUserID, _ := firstNonEmpty(userInfo, "sub", "id")
 	email, _ := stringField(userInfo, "email")
 
@@ -112,12 +114,12 @@ func (s *OAuthService) AuthenticateOrCreateUser(provider *OAuthProvider, token *
 	}
 
 	var existingToken OAuthUserToken
-	err := s.db.Where("provider_id = ? AND provider_user_id = ?", provider.ID, providerUserID).First(&existingToken).Error
+	err := db.Where("provider_id = ? AND provider_user_id = ?", provider.ID, providerUserID).First(&existingToken).Error
 
 	switch {
 	case err == nil:
 		var user User
-		if err := s.db.First(&user, "id = ?", existingToken.UserID).Error; err != nil {
+		if err := db.First(&user, "id = ?", existingToken.UserID).Error; err != nil {
 			return nil, nil, err
 		}
 
@@ -134,19 +136,19 @@ func (s *OAuthService) AuthenticateOrCreateUser(provider *OAuthProvider, token *
 			exp := token.Expiry
 			existingToken.ExpiresAt = &exp
 		}
-		if err := s.db.Save(&existingToken).Error; err != nil {
+		if err := db.Save(&existingToken).Error; err != nil {
 			return nil, nil, err
 		}
 		return &user, &existingToken, nil
 
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		var user User
-		userErr := s.db.Where("email = ?", email).First(&user).Error
+		userErr := db.Where("email = ?", email).First(&user).Error
 		if errors.Is(userErr, gorm.ErrRecordNotFound) {
 			if !provider.AutoCreateUsers {
 				return nil, nil, errors.New("user does not exist and auto-creation is disabled")
 			}
-			username, genErr := uniqueUsernameFromEmail(s.db, email)
+			username, genErr := uniqueUsernameFromEmail(db, email)
 			if genErr != nil {
 				return nil, nil, genErr
 			}
@@ -157,7 +159,7 @@ func (s *OAuthService) AuthenticateOrCreateUser(provider *OAuthProvider, token *
 				IsActive: false,
 				Password: "!unusable", // mirrors Django's set_unusable_password(): no valid hash will ever match this.
 			}
-			if err := s.db.Create(&user).Error; err != nil {
+			if err := db.Create(&user).Error; err != nil {
 				return nil, nil, err
 			}
 		} else if userErr != nil {
@@ -189,7 +191,7 @@ func (s *OAuthService) AuthenticateOrCreateUser(provider *OAuthProvider, token *
 			ProviderUserID:    providerUserID,
 			ProviderUserEmail: &email,
 		}
-		if err := s.db.Create(&newToken).Error; err != nil {
+		if err := db.Create(&newToken).Error; err != nil {
 			return nil, nil, err
 		}
 		return &user, &newToken, nil
