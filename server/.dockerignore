@@ -1,8 +1,0 @@
-.git
-*_test.go
-docker-compose*.yml
-Dockerfile
-.dockerignore
-README.md
-node_modules
-static/app.css

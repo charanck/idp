@@ -2,7 +2,7 @@
 
 ## Packages
 
-Package layout under `server/internal/`, each with a narrow role:
+Package layout under `internal/`, each with a narrow role:
 
 | Package | Responsibility |
 |---|---|

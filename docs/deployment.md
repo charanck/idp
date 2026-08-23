@@ -2,7 +2,7 @@
 
 ## Docker image
 
-The [`server/Dockerfile`](../server/Dockerfile) is a multi-stage, production-ready build:
+The [`Dockerfile`](../Dockerfile) is a multi-stage, production-ready build:
 
 - **Builder stage** compiles a static Go binary (`CGO_ENABLED=0`) — no runtime Go toolchain ships
   in the final image.
@@ -11,13 +11,12 @@ The [`server/Dockerfile`](../server/Dockerfile) is a multi-stage, production-rea
   server).
 - A `HEALTHCHECK` hits `/` with `curl`.
 - Schema migrations and admin user provisioning run automatically on startup, guarded by a
-  Postgres advisory lock (see [`internal/db/db.go`](../server/internal/db/db.go)) — safe for
+  Postgres advisory lock (see [`internal/db/db.go`](../internal/db/db.go)) — safe for
   multiple replicas starting concurrently.
 
 ```bash
-cd server
 docker build -t idp:local .
-docker run --rm -p 8000:8000 --env-file ../.env idp:local
+docker run --rm -p 8000:8000 --env-file .env idp:local
 ```
 
 ## Local stack with Docker Compose
@@ -25,10 +24,10 @@ docker run --rm -p 8000:8000 --env-file ../.env idp:local
 ```bash
 cp .env.example .env
 # then set MASTER_ENCRYPTION_KEY, ADMIN_EMAIL, ADMIN_PASSWORD in .env
-docker compose -f server/docker-compose.local.yml --env-file .env up --build
+docker compose -f docker-compose.local.yml --env-file .env up --build
 ```
 
-This builds the image from [`server/Dockerfile`](../server/Dockerfile) and brings up Postgres and
+This builds the image from [`Dockerfile`](../Dockerfile) and brings up Postgres and
 Redis alongside the app — everything needed to run IDP locally with no other setup. The app is
 available at http://localhost:8000/ once the containers are healthy.
 
@@ -59,4 +58,4 @@ git push origin release-1.0.0
 ```
 
 Published as `ghcr.io/<owner>/<repo>:release-1.0.0` and `ghcr.io/<owner>/<repo>:latest`, built from
-[`server/Dockerfile`](../server/Dockerfile).
+[`Dockerfile`](../Dockerfile).

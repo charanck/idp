@@ -32,7 +32,7 @@
 - **Redis-backed caching** for read-heavy config/flag lookups.
 
 See [`docs/`](./docs) for the full architecture, API reference, configuration, deployment, and
-security docs, and [`server/README.md`](./server/README.md) for Go-specific implementation notes.
+security docs.
 
 ## Quick start
 
@@ -46,9 +46,9 @@ security docs, and [`server/README.md`](./server/README.md) for Go-specific impl
 
 ```bash
 git clone https://github.com/charanck/idp.git
-cd idp/server
+cd idp
 
-cp ../.env.example ../.env
+cp .env.example .env
 # edit .env: set MASTER_ENCRYPTION_KEY, ADMIN_EMAIL, ADMIN_PASSWORD, DB_*, REDIS_URL
 # generate a MASTER_ENCRYPTION_KEY with:
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
@@ -70,7 +70,7 @@ The app is now available at:
 ```bash
 cp .env.example .env
 # then set MASTER_ENCRYPTION_KEY, ADMIN_EMAIL, ADMIN_PASSWORD in .env
-docker compose -f server/docker-compose.local.yml --env-file .env up --build
+docker compose -f docker-compose.local.yml --env-file .env up --build
 ```
 
 See [Deployment](./docs/deployment.md) for the production Docker image, Compose stack, and GHCR
@@ -79,7 +79,6 @@ releases.
 ## Running tests
 
 ```bash
-cd server
 make test
 ```
 

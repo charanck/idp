@@ -4,7 +4,7 @@
    slate grays, a single navy accent, dense tables, minimal chrome. */
 
 @import "tailwindcss";
-@source "../../views";
+@source "../views";
 
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;

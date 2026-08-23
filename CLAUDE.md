@@ -10,8 +10,7 @@ and secrets are the same model (`ConfigEntry` with `is_secret=true`) and are enc
 a master key, then re-encrypted per-client on read. Built on [Echo](https://echo.labstack.com/)
 (HTTP), [GORM](https://gorm.io/) over Postgres (query layer only — [goose](https://github.com/pressly/goose)
 owns the schema via `internal/db/migrations/`), and [templ](https://templ.guide/) for
-server-rendered HTML. The app lives under `server/`; see `server/README.md` for Go-specific setup
-and package-by-package detail.
+server-rendered HTML. See the Architecture section below for package-by-package detail.
 
 There is no JWT-based user/service auth API and no Django-admin-style generic admin — both were
 deliberately not carried over from an earlier Django implementation of this app. Service clients,
@@ -21,7 +20,6 @@ UI; the only programmatic API is S2S API-key auth for reading configs/flags.
 ## Commands
 
 ```bash
-cd server
 go build ./...          # build everything
 go run ./cmd/server      # run the HTTP server
 go run ./cmd/migrate-cutover [--dry-run]   # standalone schema-reconciliation/validation tool
@@ -54,7 +52,7 @@ rate limiting, and caching are all Redis-backed with no fallback), `ADMIN_EMAIL`
 
 ## Architecture
 
-Package layout under `server/internal/`, each with a narrow role:
+Package layout under `internal/`, each with a narrow role:
 
 | Package | Responsibility |
 |---|---|

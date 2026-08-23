@@ -2,7 +2,7 @@
 # root and stands up Postgres/Redis sidecars for the app.
 #
 # Run from the repo root:
-#   docker compose -f server/docker-compose.local.yml --env-file .env up --build
+#   docker compose -f docker-compose.local.yml --env-file .env up --build
 
 services:
   postgres:
