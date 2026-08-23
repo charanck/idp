@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"time"
 
@@ -30,30 +31,48 @@ func NewConfigService(db *gorm.DB, encryption *crypto.EncryptionService, c cache
 }
 
 func (s *ConfigService) getOrCreateScope(service, environment string) (*Application, *Environment, error) {
+	return getOrCreateScopeTx(s.db, service, environment)
+}
+
+func getOrCreateScopeTx(tx *gorm.DB, service, environment string) (*Application, *Environment, error) {
 	var app Application
-	if err := s.db.Where("name = ?", service).First(&app).Error; err != nil {
+	if err := tx.Where("name = ?", service).First(&app).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, err
 		}
 		app = Application{Name: service}
-		if err := s.db.Create(&app).Error; err != nil {
+		if err := tx.Create(&app).Error; err != nil {
 			return nil, nil, err
 		}
 	}
 
 	var env Environment
-	err := s.db.Where("application_id = ? AND name = ?", app.ID, environment).First(&env).Error
+	err := tx.Where("application_id = ? AND name = ?", app.ID, environment).First(&env).Error
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, err
 		}
 		env = Environment{ApplicationID: app.ID, Name: environment}
-		if err := s.db.Create(&env).Error; err != nil {
+		if err := tx.Create(&env).Error; err != nil {
 			return nil, nil, err
 		}
 	}
 
 	return &app, &env, nil
+}
+
+// advisoryLockKey hashes an arbitrary identity into a Postgres advisory-lock
+// key (bigint), used to serialize concurrent writers targeting the same
+// logical row without taking a table-wide lock.
+func advisoryLockKey(parts ...string) int64 {
+	h := fnv.New64a()
+	for i, p := range parts {
+		if i > 0 {
+			h.Write([]byte{0})
+		}
+		h.Write([]byte(p))
+	}
+	return int64(h.Sum64())
 }
 
 // getScope looks up an existing Application/Environment without creating
@@ -96,8 +115,33 @@ func (s *ConfigService) InvalidateScopeCache(ctx context.Context, service, envir
 // RecordConfigVersion snapshots a ConfigEntry's current (encrypted) value
 // into history. Not called on delete - history cascades away with the entry.
 func (s *ConfigService) RecordConfigVersion(config *ConfigEntry, action string, changedBy string) (*ConfigEntryVersion, error) {
+	var version *ConfigEntryVersion
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		v, err := recordConfigVersionTx(tx, config, action, changedBy)
+		if err != nil {
+			return err
+		}
+		version = v
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return version, nil
+}
+
+// recordConfigVersionTx does the actual "read last version, insert next"
+// work within tx, serialized by a per-entry Postgres advisory lock so two
+// concurrent writers to the same config can't both compute the same "next
+// version" number and collide on the (config_entry_id, version) unique
+// constraint.
+func recordConfigVersionTx(tx *gorm.DB, config *ConfigEntry, action, changedBy string) (*ConfigEntryVersion, error) {
+	if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", advisoryLockKey("config-entry-version", config.ID.String())).Error; err != nil {
+		return nil, err
+	}
+
 	var last ConfigEntryVersion
-	err := s.db.Where("config_entry_id = ?", config.ID).Order("version DESC").First(&last).Error
+	err := tx.Where("config_entry_id = ?", config.ID).Order("version DESC").First(&last).Error
 	versionNumber := 1
 	if err == nil {
 		versionNumber = last.Version + 1
@@ -119,7 +163,7 @@ func (s *ConfigService) RecordConfigVersion(config *ConfigEntry, action string, 
 		Version:       versionNumber,
 		ChangedBy:     changedByPtr,
 	}
-	if err := s.db.Create(version).Error; err != nil {
+	if err := tx.Create(version).Error; err != nil {
 		return nil, err
 	}
 	return version, nil
@@ -141,52 +185,71 @@ func (s *ConfigService) UpsertConfig(ctx context.Context, service, environment, 
 		return nil, err
 	}
 
-	app, env, err := s.getOrCreateScope(service, environment)
-	if err != nil {
-		return nil, err
-	}
-
 	configType := opts.ConfigType
 	if configType == "" {
 		configType = TypeString
 	}
 
 	var entry ConfigEntry
-	err = s.db.Where("application_id = ? AND environment_id = ? AND key = ?", app.ID, env.ID, key).First(&entry).Error
-	created := false
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		created = true
-		entry = ConfigEntry{
-			ApplicationID: app.ID,
-			EnvironmentID: env.ID,
-			Key:           key,
-			Value:         encryptedValue,
-			IsSecret:      opts.IsSecret,
-			Type:          configType,
+	var historyAction string
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Serialize concurrent upserts to the same (service, environment,
+		// key) so two writers can't both pass the "not found" check and race
+		// on the entry's unique constraint, or on the version number
+		// assigned in recordConfigVersionTx below.
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", advisoryLockKey("config-upsert", service, environment, key)).Error; err != nil {
+			return err
 		}
-		if err := s.db.Create(&entry).Error; err != nil {
-			return nil, err
-		}
-	} else if err != nil {
-		return nil, err
-	} else {
-		entry.Value = encryptedValue
-		entry.IsSecret = opts.IsSecret
-		entry.Type = configType
-		if err := s.db.Save(&entry).Error; err != nil {
-			return nil, err
-		}
-	}
 
-	historyAction := opts.HistoryAction
-	if historyAction == "" {
-		if created {
-			historyAction = ActionCreate
-		} else {
-			historyAction = ActionUpdate
+		app, env, err := getOrCreateScopeTx(tx, service, environment)
+		if err != nil {
+			return err
 		}
-	}
-	if _, err := s.RecordConfigVersion(&entry, historyAction, opts.ChangedBy); err != nil {
+
+		found := ConfigEntry{}
+		lookupErr := tx.Where("application_id = ? AND environment_id = ? AND key = ?", app.ID, env.ID, key).First(&found).Error
+		created := false
+		switch {
+		case errors.Is(lookupErr, gorm.ErrRecordNotFound):
+			created = true
+			found = ConfigEntry{
+				ApplicationID: app.ID,
+				EnvironmentID: env.ID,
+				Key:           key,
+				Value:         encryptedValue,
+				IsSecret:      opts.IsSecret,
+				Type:          configType,
+			}
+			if err := tx.Create(&found).Error; err != nil {
+				return err
+			}
+		case lookupErr != nil:
+			return lookupErr
+		default:
+			found.Value = encryptedValue
+			found.IsSecret = opts.IsSecret
+			found.Type = configType
+			if err := tx.Save(&found).Error; err != nil {
+				return err
+			}
+		}
+
+		historyAction = opts.HistoryAction
+		if historyAction == "" {
+			if created {
+				historyAction = ActionCreate
+			} else {
+				historyAction = ActionUpdate
+			}
+		}
+		if _, err := recordConfigVersionTx(tx, &found, historyAction, opts.ChangedBy); err != nil {
+			return err
+		}
+
+		entry = found
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 

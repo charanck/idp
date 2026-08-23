@@ -1,9 +1,7 @@
-// Package ratelimit implements fixed-window rate limiting backed by Redis,
-// mirroring common/ratelimit.py. Whether a request counts as an "attempt"
-// (is_rate_limited) or only a recorded "failure" (is_failure_limited/
-// record_failure) is the caller's choice, matching the Python split between
-// throttling every request to an endpoint vs. only throttling repeated
-// credential failures.
+// Package ratelimit implements fixed-window rate limiting backed by Redis.
+// Every caller uses the same IsRateLimited counter - there is no separate
+// failure-only tracking, so a client is throttled purely on request volume
+// per window regardless of whether individual attempts succeed or fail.
 package ratelimit
 
 import (
@@ -30,28 +28,6 @@ func (l *Limiter) IsRateLimited(ctx context.Context, key, clientIP string, limit
 		return false, err
 	}
 	return count > int64(limit), nil
-}
-
-// IsFailureLimited checks whether this client has already recorded `limit`+
-// failures for `key` in the current window, without counting this call as
-// an attempt itself.
-func (l *Limiter) IsFailureLimited(ctx context.Context, key, clientIP string, limit int) (bool, error) {
-	cacheKey := "ratelimit-failures:" + key + ":" + clientIP
-	val, err := l.rdb.Get(ctx, cacheKey).Int64()
-	if err == redis.Nil {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return val >= int64(limit), nil
-}
-
-// RecordFailure records one failed attempt for `key` from this client's IP.
-func (l *Limiter) RecordFailure(ctx context.Context, key, clientIP string, window time.Duration) error {
-	cacheKey := "ratelimit-failures:" + key + ":" + clientIP
-	_, err := l.incrWithExpiry(ctx, cacheKey, window)
-	return err
 }
 
 func (l *Limiter) incrWithExpiry(ctx context.Context, key string, window time.Duration) (int64, error) {

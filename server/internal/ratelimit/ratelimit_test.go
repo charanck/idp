@@ -61,32 +61,6 @@ func TestIsRateLimited_SeparateKeysAndIPsIndependent(t *testing.T) {
 	}
 }
 
-func TestFailureLimiting_OnlyCountsRecordedFailures(t *testing.T) {
-	l := newTestLimiter(t)
-	ctx := context.Background()
-
-	// Not limited before any failures recorded.
-	limited, err := l.IsFailureLimited(ctx, "s2s-api-key", "9.9.9.9", 2)
-	if err != nil {
-		t.Fatalf("IsFailureLimited: %v", err)
-	}
-	if limited {
-		t.Fatal("should not be limited with zero failures")
-	}
-
-	l.RecordFailure(ctx, "s2s-api-key", "9.9.9.9", time.Minute)
-	limited, _ = l.IsFailureLimited(ctx, "s2s-api-key", "9.9.9.9", 2)
-	if limited {
-		t.Fatal("should not be limited after 1 failure with limit 2")
-	}
-
-	l.RecordFailure(ctx, "s2s-api-key", "9.9.9.9", time.Minute)
-	limited, _ = l.IsFailureLimited(ctx, "s2s-api-key", "9.9.9.9", 2)
-	if !limited {
-		t.Fatal("should be limited after 2 failures with limit 2")
-	}
-}
-
 func TestClientIP(t *testing.T) {
 	cases := []struct {
 		xff, remote, want string

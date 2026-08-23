@@ -14,8 +14,11 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
+	otelecho "go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
 	"gorm.io/gorm"
+	gormtracing "gorm.io/plugin/opentelemetry/tracing"
 
 	"controlplane/internal/activity"
 	"controlplane/internal/api"
@@ -25,13 +28,32 @@ import (
 	"controlplane/internal/config"
 	"controlplane/internal/crypto"
 	"controlplane/internal/db"
+	"controlplane/internal/observability"
 	"controlplane/internal/ratelimit"
 	"controlplane/internal/security"
 	"controlplane/internal/session"
 	"controlplane/internal/webui"
 )
 
+// version is the service.version resource attribute reported to OTEL,
+// overridable at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
+	ctx := context.Background()
+
+	otelShutdown, err := observability.Setup(ctx, version)
+	if err != nil {
+		log.Fatalf("setup observability: %v", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelShutdown(shutdownCtx); err != nil {
+			slog.Error("otel shutdown", "err", err)
+		}
+	}()
+
 	cfg, err := appconfig.Load()
 	if err != nil {
 		log.Fatalf("load config: %v", err)
@@ -40,6 +62,11 @@ func main() {
 	gdb, err := db.Open(cfg.DSN(), cfg.Debug)
 	if err != nil {
 		log.Fatalf("connect to postgres: %v", err)
+	}
+	if observability.Enabled() {
+		if err := gdb.Use(gormtracing.NewPlugin(gormtracing.WithDBSystem("postgresql"))); err != nil {
+			log.Fatalf("install gorm otel plugin: %v", err)
+		}
 	}
 	sqlDB, err := gdb.DB()
 	if err != nil {
@@ -54,6 +81,14 @@ func main() {
 		log.Fatalf("parse REDIS_URL: %v", err)
 	}
 	rdb := redis.NewClient(redisOpts)
+	if observability.Enabled() {
+		if err := redisotel.InstrumentTracing(rdb); err != nil {
+			log.Fatalf("install redis otel tracing: %v", err)
+		}
+		if err := redisotel.InstrumentMetrics(rdb); err != nil {
+			log.Fatalf("install redis otel metrics: %v", err)
+		}
+	}
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
 		log.Fatalf("connect to redis: %v", err)
 	}
@@ -78,6 +113,9 @@ func main() {
 	e.HideBanner = true
 	e.HidePort = true
 	e.Use(middleware.Recover())
+	if observability.Enabled() {
+		e.Use(otelecho.Middleware(observability.ServiceName))
+	}
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogStatus: true, LogURI: true, LogMethod: true, LogLatency: true,
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
@@ -115,18 +153,12 @@ func main() {
 		AuthService:   authService,
 		ConfigService: configService,
 		FlagService:   flagService,
-		Activity:      activityLogger,
 		RateLimiter:   limiter,
 
-		JWTSecretKey:     cfg.JWTSecretKey,
-		JWTExpireMinutes: cfg.JWTExpireMinutes,
-
-		AuthRateLimit:              cfg.AuthRateLimit,
 		AuthRateLimitWindowSeconds: cfg.AuthRateLimitWindowSeconds,
 		S2SAuthRateLimit:           cfg.S2SAuthRateLimit,
 	}
 	apiGroup := e.Group("/api/v1")
-	api.RegisterAuthRoutes(apiGroup.Group("/auth"), apiDeps)
 	api.RegisterConfigRoutes(apiGroup.Group("/config"), apiDeps)
 
 	slog.Info("starting server", "port", cfg.Port)

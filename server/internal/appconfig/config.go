@@ -13,8 +13,6 @@ import (
 type Config struct {
 	Debug bool
 
-	JWTSecretKey        string
-	JWTExpireMinutes    int
 	MasterEncryptionKey string
 
 	DBHost     string
@@ -100,8 +98,6 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Debug: getenvBool("DEBUG", false),
 
-		JWTSecretKey:        getenv("JWT_SECRET_KEY", "dev-jwt-secret"),
-		JWTExpireMinutes:    getenvInt("JWT_EXPIRE_MINUTES", 60),
 		MasterEncryptionKey: os.Getenv("MASTER_ENCRYPTION_KEY"),
 
 		DBHost:     getenv("DB_HOST", "localhost"),
