@@ -1,18 +1,10 @@
 # API reference
 
-All endpoints are mounted under `/api/v1/`. Interactive Swagger docs are always available at
-**`/api/v1/docs`** once the server is running — this page covers auth requirements and worked
-examples; the exact request/response shapes are best explored there.
-
-## Auth
-
-| Endpoint | Method | Auth | Purpose |
-|---|---|---|---|
-| `/auth/register` | POST | Admin JWT | Create a new user (`email`, `password`). New users are created `is_active=False` until an admin activates them. |
-| `/auth/token` | POST | — | Exchange `username` (email) + `password` for a JWT (`access_token`). Rate-limited. |
-| `/auth/me` | GET | User JWT | Current user's profile. |
-| `/auth/s2s/clients` | POST | Admin JWT | Create a `ServiceClient`. Response includes `api_key` and `encryption_key` — **shown once**, cannot be retrieved again. |
-| `/auth/s2s/ping` | GET | API key | Liveness check for S2S credentials. Failed attempts are rate-limited per IP (`S2S_AUTH_RATE_LIMIT`). |
+The config/flag read API is mounted under `/api/v1/config/`. It's intentionally the only
+programmatic (non-browser) API this app exposes — everything else (creating applications,
+environments, configs/secrets, feature flags, service clients, and viewing/rolling back config
+history) is done through the session-authenticated web UI. There is no JWT-based user/service auth
+API.
 
 ## Config / secrets
 
@@ -21,52 +13,21 @@ secret.
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/config/configs/upsert` | POST | Admin/user JWT | Create or update a config/secret for a `(service, environment, key)`. Response always shows `***ENCRYPTED***` for secret values. |
 | `/config/configs/list` | GET | API key | List configs for `?service=&environment=`, re-encrypted with the calling client's own key. |
-| `/config/configs/{id}/history` | GET | JWT | Version history for one entry. Secret values are never included, only that a version changed, when, and by whom. |
-| `/config/configs/{id}/rollback` | POST | JWT | Restore a prior `version`. Recorded as a new version (`action=rollback`), not a rewrite of history. |
 
 ## Feature flags
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/config/feature-flags` | POST | JWT | Create a flag for `(service, environment, name)`. |
-| `/config/feature-flags` | GET | JWT or API key | List flags for `?service=&environment=`. |
-| `/config/feature-flags/{name}/toggle` | POST | JWT | Flip `is_enabled` for `?service=&environment=`. |
+| `/config/feature-flags` | GET | API key | List flags for `?service=&environment=`. |
+
+Both endpoints authenticate with `X-API-Key: <key_id>.<secret>`, issued when a service client is
+created from the web UI (**Service Clients → Create**). Failed API-key attempts are rate-limited
+per client IP (`S2S_AUTH_RATE_LIMIT`); a valid key is never throttled.
 
 ---
 
 ## Examples
-
-### Get a user JWT
-
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/token \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin@example.com", "password": "<password>"}'
-```
-
-### Create a service client (admin JWT required)
-
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/s2s/clients \
-  -H "Authorization: Bearer <admin-jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-service"}'
-```
-
-The response includes `api_key` and `encryption_key` — both are shown once, at creation time.
-Store them securely; they can't be retrieved again (the encryption key can be rotated later from
-the client's detail page in the web UI if lost).
-
-### Write a config/secret (admin JWT required)
-
-```bash
-curl -X POST http://localhost:8000/api/v1/config/configs/upsert \
-  -H "Authorization: Bearer <admin-jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{"service": "my-app", "environment": "prod", "key": "DB_PASSWORD", "value": "secret-value", "is_secret": true}'
-```
 
 ### Read configs as a service client
 
@@ -75,26 +36,19 @@ curl "http://localhost:8000/api/v1/config/configs/list?service=my-app&environmen
   -H "X-API-Key: <key_id>.<secret>"
 ```
 
-### View history and roll back a config/secret (admin JWT required)
+### Read feature flags as a service client
 
 ```bash
-curl http://localhost:8000/api/v1/config/configs/<config-id>/history \
-  -H "Authorization: Bearer <admin-jwt>"
-
-curl -X POST http://localhost:8000/api/v1/config/configs/<config-id>/rollback \
-  -H "Authorization: Bearer <admin-jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{"version": 3}'
+curl "http://localhost:8000/api/v1/config/feature-flags?service=my-app&environment=prod" \
+  -H "X-API-Key: <key_id>.<secret>"
 ```
-
-The same views are available in the web UI from a config's history icon.
 
 ---
 
 ## Encryption model
 
-1. **Write** — an admin creates a config/secret via the API or web UI. The value is encrypted with
-   `MASTER_ENCRYPTION_KEY` before it's stored; responses never echo the plaintext back.
+1. **Write** — an admin creates a config/secret via the web UI. The value is encrypted with
+   `MASTER_ENCRYPTION_KEY` before it's stored; the UI never echoes the plaintext back.
 2. **Read** — a service client calls `GET /config/configs/list` with its `X-API-Key`. The server
    decrypts with the master key and **re-encrypts with that client's own encryption key** (generated
    once, at client-creation time) before returning it.
@@ -110,11 +64,17 @@ See [`examples/`](../examples) for runnable Python, Go, Node.js, and TypeScript 
 configs/secrets and feature flags and decrypt them locally. Full architecture is documented in
 [Architecture](./architecture.md#encryption-flow).
 
+## Config history and rollback
+
+Every config/secret write is snapshotted as an immutable version. From a config's detail page in
+the web UI, open its history to see prior versions (secret values are never shown, only that a
+version changed, when, and by whom) and roll back to any of them — a rollback is recorded as a new
+version rather than rewriting history.
+
 ## OAuth2 / OIDC login
 
 The web UI supports signing in through an external OAuth2/OIDC provider (Google, GitHub, Okta, an
-internal IdP, etc.) instead of a local password, via [authlib](https://authlib.org/)'s
-authorization-code flow.
+internal IdP, etc.) instead of a local password.
 
 1. As an admin, go to **OAuth Providers** in the web UI and add one, with:
    - `client_id` / `client_secret` — from the provider's app registration.

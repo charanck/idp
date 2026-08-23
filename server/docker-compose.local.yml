@@ -39,48 +39,6 @@ services:
     volumes:
       - redis_data:/data
 
-  idp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: idp-go:local
-    container_name: idp
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    environment:
-      MASTER_ENCRYPTION_KEY: "${MASTER_ENCRYPTION_KEY:?Set MASTER_ENCRYPTION_KEY in .env - see README.md}"
-      ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@example.com}"
-      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-changeme123}"
-      ALLOWED_HOSTS: "${ALLOWED_HOSTS:-localhost,127.0.0.1}"
-      CSRF_TRUSTED_ORIGINS: "${CSRF_TRUSTED_ORIGINS:-http://localhost:8000}"
-      # SESSION_SECRET has no Django equivalent. The app falls back to
-      # DJANGO_SECRET_KEY internally if SESSION_SECRET is unset (see
-      # appconfig.Load), so forwarding both - unset SESSION_SECRET plus the
-      # same DJANGO_SECRET_KEY Django uses - lets one .env drive either stack.
-      SESSION_SECRET: "${SESSION_SECRET:-}"
-      DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-dev-secret-key-change-me}"
-      DB_NAME: "${DB_NAME:-idp}"
-      DB_USER: "${DB_USER:-idp}"
-      DB_PASSWORD: "${DB_PASSWORD:-idp}"
-      DB_HOST: "postgres"
-      DB_PORT: "5432"
-      DB_SSLMODE: "disable"
-      # Redis is mandatory for the Go server (sessions, rate limiting, cache) -
-      # unlike Django's optional CACHE_ENABLED/CACHE_BACKEND toggle.
-      REDIS_URL: "redis://redis:6379/1"
-      CACHE_KEY_PREFIX: "${CACHE_KEY_PREFIX:-idp}"
-      CACHE_TIMEOUT: "${CACHE_TIMEOUT:-300}"
-      AUTH_RATE_LIMIT: "${AUTH_RATE_LIMIT:-10}"
-      AUTH_RATE_LIMIT_WINDOW_SECONDS: "${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}"
-      S2S_AUTH_RATE_LIMIT: "${S2S_AUTH_RATE_LIMIT:-20}"
-      DEBUG: "${DEBUG:-true}"
-
 volumes:
   postgres_data:
   redis_data:

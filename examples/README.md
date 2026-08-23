@@ -10,8 +10,7 @@ single credential drives both functions:
   `{ KEY: value }` map.
 - **`getFeatureFlags` / `get_feature_flags` / `GetFeatureFlags`** — lists every feature flag for a
   `service`+`environment` via `GET /api/v1/config/feature-flags` and returns them as a
-  `{ name: enabled }` map. (This endpoint also accepts a user JWT as an alternative, for
-  admin/internal tooling - the examples here just use the API key.)
+  `{ name: enabled }` map.
 
 | Language | File |
 |---|---|
@@ -22,14 +21,8 @@ single credential drives both functions:
 
 ## Prerequisites
 
-An admin JWT (`POST /api/v1/auth/token`) to create a service client:
-
-```bash
-curl -X POST http://localhost:8000/api/v1/auth/s2s/clients \
-  -H "Authorization: Bearer <admin-jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "my-service"}'
-```
+A service client, created from the web UI at `http://localhost:8000/clients/create/`: give it a
+name and submit the form.
 
 The response's `api_key` and `encryption_key` are shown once — save them; they're what every
 example above needs. (`api_key` is stored hashed server-side and can't be recovered later;

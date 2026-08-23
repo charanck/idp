@@ -5,9 +5,12 @@ package appconfig
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -95,6 +98,10 @@ func splitCSV(v string) []string {
 // settings.py does - that behavior is dev-convenience, and a Go binary
 // running in production must always be given real secrets explicitly.
 func Load() (*Config, error) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 	cfg := &Config{
 		Debug: getenvBool("DEBUG", false),
 
