@@ -3,6 +3,7 @@ package webui
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -13,9 +14,13 @@ import (
 )
 
 func redirectURIFor(c echo.Context, providerID string) string {
-	scheme := "https"
-	if c.Request().TLS == nil {
-		scheme = "http"
+	scheme := "http"
+	// Behind a reverse proxy/load balancer that terminates TLS, the
+	// connection to this process is plain HTTP even for HTTPS clients, so
+	// c.Request().TLS is always nil in production - trust X-Forwarded-Proto
+	// too, same as the session cookie's Secure flag in internal/session.
+	if c.Request().TLS != nil || strings.EqualFold(c.Request().Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https"
 	}
 	return scheme + "://" + c.Request().Host + "/oauth/callback/" + providerID + "/"
 }
