@@ -1,0 +1,120 @@
+// Package layout provides the shared page chrome (sidebar/topbar/flash
+// messages) for every web UI page, mirroring web_ui/templates/web_ui/base.html.
+package layout
+
+import "controlplane/internal/session"
+
+// NavUser is the current-user view the layout needs to render the sidebar
+// and topbar, decoupled from the auth package to avoid an import cycle with
+// the webui package (which imports views/pages, which imports this package).
+type NavUser struct {
+	LoggedIn  bool
+	Email     string
+	IsStaff   bool
+	CSRFToken string
+}
+
+templ Base(title string, activeNav string, user NavUser, flashes []session.Flash) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } · Control Plane</title>
+			<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet"/>
+			<link href="/static/app.css" rel="stylesheet"/>
+		</head>
+		<body>
+			if user.LoggedIn {
+				<div class="app-shell">
+					@sidebar(activeNav, user)
+					<div class="content">
+						@topbar(user)
+						<main class="page">
+							@Flashes(flashes)
+							{ children... }
+						</main>
+					</div>
+				</div>
+			} else {
+				<main class="auth-shell">
+					@Flashes(flashes)
+					{ children... }
+				</main>
+			}
+		</body>
+	</html>
+}
+
+templ sidebar(activeNav string, user NavUser) {
+	<div class="sidebar">
+		<a href="/dashboard/" class="brand">Control Plane</a>
+		<nav>
+			<ul>
+				@navLink(activeNav, "dashboard", "/dashboard/", "bi-speedometer2", "Dashboard")
+				@navLink(activeNav, "applications", "/applications/", "bi-grid-3x3-gap", "Applications")
+				@navLink(activeNav, "environments", "/environments/", "bi-layers", "Environments")
+				@navLink(activeNav, "configs", "/configs/", "bi-sliders", "Configs & Secrets")
+				@navLink(activeNav, "flags", "/flags/", "bi-toggle-on", "Feature Flags")
+			</ul>
+		</nav>
+		if user.IsStaff {
+			<details class="sidebar-group" open>
+				<summary>Admin</summary>
+				<nav>
+					<ul>
+						@navLink(activeNav, "clients", "/clients/", "bi-hdd-network", "Service Clients")
+						@navLink(activeNav, "users", "/users/", "bi-people", "Users")
+						@navLink(activeNav, "oauth_providers", "/oauth/providers/", "bi-shield-lock", "OAuth Providers")
+						@navLink(activeNav, "activity", "/activity/", "bi-clock-history", "Activity Log")
+					</ul>
+				</nav>
+			</details>
+		}
+	</div>
+}
+
+templ navLink(activeNav, key, href, icon, label string) {
+	<li>
+		if activeNav == key {
+			<a href={ templ.URL(href) } class="active" aria-current="page">
+				<i class={ "bi", icon }></i>{ label }
+			</a>
+		} else {
+			<a href={ templ.URL(href) }>
+				<i class={ "bi", icon }></i>{ label }
+			</a>
+		}
+	</li>
+}
+
+templ topbar(user NavUser) {
+	<div class="topbar">
+		<span class="user-email">{ user.Email }</span>
+		<a role="button" class="btn-sm outline secondary" href="/password/change/">Change Password</a>
+		<form method="post" action="/logout/" class="m-0">
+			<input type="hidden" name="csrf_token" value={ user.CSRFToken }/>
+			<button class="btn-sm btn-danger outline" type="submit">Logout</button>
+		</form>
+	</div>
+}
+
+templ Flashes(flashes []session.Flash) {
+	for _, f := range flashes {
+		<div class={ "alert", "alert-" + alertTag(f.Tag) } role="alert">
+			{ f.Text }
+			<button type="button" class="alert-close" aria-label="Close" onclick="this.closest('.alert').remove()">&times;</button>
+		</div>
+	}
+}
+
+func alertTag(tag string) string {
+	switch tag {
+	case "success", "danger", "warning", "info":
+		return tag
+	case "error":
+		return "danger"
+	default:
+		return "secondary"
+	}
+}

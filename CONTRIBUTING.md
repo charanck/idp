@@ -6,11 +6,11 @@ Thanks for considering a contribution to IDP.
 
 ```bash
 git clone https://github.com/charanck/idp.git
-cd idp
-uv sync --group dev
-cp .env.example .env   # then set MASTER_ENCRYPTION_KEY, ADMIN_EMAIL, ADMIN_PASSWORD
-uv run python manage.py migrate
-uv run python manage.py runserver
+cd idp/server
+go build ./...
+
+cp .env.example .env   # then set MASTER_ENCRYPTION_KEY, ADMIN_EMAIL, ADMIN_PASSWORD, DB_*, REDIS_URL
+go run ./cmd/server
 ```
 
 See the [README](./README.md#quick-start) for the full local setup, and [docs/](./docs) for
@@ -18,28 +18,29 @@ architecture, configuration, and API details.
 
 ## Running tests
 
+Most tests are integration tests against a real Postgres instance:
+
 ```bash
-uv run pytest
-# or a single app / case
-uv run python manage.py test authentication
-uv run python manage.py test config_management.tests.SomeTestCase
+docker run --rm -d -p 5433:5432 -e POSTGRES_PASSWORD=idp -e POSTGRES_USER=idp -e POSTGRES_DB=idp_test postgres:15.3-alpine
+export CP_TEST_DATABASE_URL="host=localhost port=5433 dbname=idp_test user=idp password=idp sslmode=disable"
+make test
 ```
 
-`pytest.ini` points `DJANGO_SETTINGS_MODULE` at `control_plane_project.test_settings`, which
-isolates the test database, cache, and crypto keys from your local `.env` — you can run `pytest`
-directly without any extra setup. Tests live alongside each app (`authentication/tests/`,
-`config_management/tests/`, `web_ui/tests/`, `common/tests/`).
+Without `CP_TEST_DATABASE_URL` set, those tests `t.Skip()` individually rather than failing.
 
-Please add or update tests for any behavior change, and make sure `uv run pytest` passes before
+Please add or update tests for any behavior change, and make sure `make test` passes before
 opening a PR.
 
 ## Making changes
 
 - Keep changes scoped to what the PR is about — avoid drive-by refactors in unrelated code.
-- The API (`*/api.py`) and the web UI (`web_ui/views.py`) both call into the same
-  `authentication`/`config_management` services (`services.py`) — if you change a service method's
+- The `api` package (`internal/api`) and the web UI (`internal/webui`) both call into the same
+  `auth`/`config` services (`internal/auth`, `internal/config`) — if you change a service method's
   behavior, check both call sites.
-- Run migrations for any model change (`uv run python manage.py makemigrations`) and commit them.
+- Schema changes go through a new [goose](https://github.com/pressly/goose) migration in
+  `internal/db/migrations/` — GORM is a query layer only and doesn't own the schema.
+- After editing a `.templ` file, regenerate views with
+  `go run github.com/a-h/templ/cmd/templ generate` and commit the generated `_templ.go` output.
 - See [`docs/architecture.md`](./docs/architecture.md) before touching the encryption flow, config
   history/rollback, or caching invalidation — each has a non-obvious invariant worth understanding
   first.

@@ -1,6 +1,0 @@
-.git
-*_test.go
-docker-compose*.yml
-Dockerfile
-.dockerignore
-README.md

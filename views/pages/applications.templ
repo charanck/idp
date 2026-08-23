@@ -1,0 +1,90 @@
+package pages
+
+import "controlplane/internal/config"
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+type ApplicationsListData struct {
+	Apps       []config.Application
+	CurrentQ   string
+	Page       int
+	NumPages   int
+	HasPrev    bool
+	HasNext    bool
+	PrevNum    int
+	NextNum    int
+	Window     []int
+	ExtraQuery string
+}
+
+templ ApplicationsList(flashes []session.Flash, user layout.NavUser, data ApplicationsListData) {
+	@layout.Base("Applications", "applications", user, flashes) {
+		<div class="toolbar">
+			<h2>Applications</h2>
+			<a role="button" href="/applications/create/"><i class="bi bi-plus-lg"></i> New Application</a>
+		</div>
+		<form method="get" class="filter-bar">
+			<div>
+				<label for="q">Search</label>
+				<input type="text" id="q" name="q" placeholder="Application name" value={ data.CurrentQ }/>
+			</div>
+			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+		</form>
+		<article class="card">
+			<table>
+				<thead>
+					<tr><th>Name</th><th class="actions">Actions</th></tr>
+				</thead>
+				<tbody>
+					if len(data.Apps) == 0 {
+						<tr><td colspan="2">No applications found.</td></tr>
+					}
+					for _, app := range data.Apps {
+						<tr>
+							<td>{ app.Name }</td>
+							<td class="actions">
+								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/applications/" + app.ID.String() + "/edit/") }>Edit</a>
+								<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/applications/" + app.ID.String() + "/delete/") }>Delete</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</article>
+		@PaginationNav("/applications/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+	}
+}
+
+type ApplicationFormData struct {
+	CSRFToken string
+	Name      string
+	Error     string
+	IsEdit    bool
+	Action    string
+}
+
+templ ApplicationForm(flashes []session.Flash, user layout.NavUser, data ApplicationFormData) {
+	@layout.Base("Application", "applications", user, flashes) {
+		<h2>
+			if data.IsEdit {
+				Edit Application
+			} else {
+				New Application
+			}
+		</h2>
+		<article style="max-width: 480px;">
+			if data.Error != "" {
+				<div class="alert alert-danger">{ data.Error }</div>
+			}
+			<form method="post" action={ templ.URL(data.Action) }>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<label for="name">
+					Name
+					<input type="text" id="name" name="name" value={ data.Name } required autofocus/>
+				</label>
+				<button type="submit" style="width: auto;">Save</button>
+				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/applications/">Cancel</a>
+			</form>
+		</article>
+	}
+}

@@ -1,0 +1,151 @@
+package pages
+
+import "controlplane/internal/auth"
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+type UsersListData struct {
+	Users         []auth.User
+	CurrentQ      string
+	CurrentStaff  string
+	Page          int
+	NumPages      int
+	HasPrev       bool
+	HasNext       bool
+	PrevNum       int
+	NextNum       int
+	Window        []int
+	ExtraQuery    string
+}
+
+templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData) {
+	@layout.Base("Users", "users", user, flashes) {
+		<div class="toolbar">
+			<h2>Users</h2>
+			<a role="button" href="/users/create/"><i class="bi bi-plus-lg"></i> New User</a>
+		</div>
+		<form method="get" class="filter-bar">
+			<div>
+				<label for="q">Search</label>
+				<input type="text" id="q" name="q" placeholder="Email" value={ data.CurrentQ }/>
+			</div>
+			<div>
+				<label for="staff">Role</label>
+				<select id="staff" name="staff">
+					<option value="" selected?={ data.CurrentStaff == "" }>All</option>
+					<option value="yes" selected?={ data.CurrentStaff == "yes" }>Staff only</option>
+					<option value="no" selected?={ data.CurrentStaff == "no" }>Non-staff only</option>
+				</select>
+			</div>
+			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+		</form>
+		<article class="card">
+			<table>
+				<thead><tr><th>Email</th><th>Username</th><th>Active</th><th>Staff</th><th class="actions">Actions</th></tr></thead>
+				<tbody>
+					if len(data.Users) == 0 {
+						<tr><td colspan="5">No users found.</td></tr>
+					}
+					for _, u := range data.Users {
+						<tr>
+							<td>{ u.Email }</td>
+							<td>{ u.Username }</td>
+							<td>
+								if u.IsActive {
+									<span class="badge badge-success">Active</span>
+								} else {
+									<span class="badge badge-secondary">Inactive</span>
+								}
+							</td>
+							<td>
+								if u.IsStaff {
+									<span class="badge badge-info">Staff</span>
+								}
+							</td>
+							<td class="actions">
+								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/users/" + u.ID.String() + "/edit/") }>Edit</a>
+								<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/users/" + u.ID.String() + "/delete/") }>Delete</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</article>
+		@PaginationNav("/users/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+	}
+}
+
+type UserFormData struct {
+	CSRFToken    string
+	Email        string
+	Username     string
+	IsActive     bool
+	IsStaff      bool
+	Error        string
+	Action       string
+	Title        string
+	IsEdit       bool
+	EditingSelf  bool
+}
+
+templ UserForm(flashes []session.Flash, user layout.NavUser, data UserFormData) {
+	@layout.Base(data.Title, "users", user, flashes) {
+		<h2>{ data.Title }</h2>
+		<article style="max-width: 560px;">
+			if data.Error != "" {
+				<div class="alert alert-danger">{ data.Error }</div>
+			}
+			if data.IsEdit && data.EditingSelf {
+				<div class="alert alert-info">You cannot change your own active/staff status here — ask another admin.</div>
+			}
+			<form method="post" action={ templ.URL(data.Action) }>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<label for="email">
+					Email
+					<input type="email" id="email" name="email" value={ data.Email } required/>
+				</label>
+				<label for="username">
+					Username
+					<input type="text" id="username" name="username" value={ data.Username } required/>
+				</label>
+				if !data.IsEdit {
+					<label for="password1">
+						Password
+						<input type="password" id="password1" name="password1" required/>
+					</label>
+					<label for="password2">
+						Confirm Password
+						<input type="password" id="password2" name="password2" required/>
+					</label>
+				}
+				<label for="is_active">
+					if data.IsActive {
+						<input type="checkbox" id="is_active" name="is_active" checked/>
+					} else {
+						<input type="checkbox" id="is_active" name="is_active"/>
+					}
+					if data.IsEdit {
+						Active
+					} else {
+						Activate immediately
+					}
+				</label>
+				if !data.IsEdit {
+					<small>Leave unchecked to require a separate admin activation step before this user can log in.</small>
+				}
+				if data.IsEdit {
+					<label for="is_staff">
+						if data.IsStaff {
+							<input type="checkbox" id="is_staff" name="is_staff" checked/>
+						} else {
+							<input type="checkbox" id="is_staff" name="is_staff"/>
+						}
+						Staff (admin access)
+					</label>
+				}
+				<button type="submit" style="width: auto;">Save</button>
+				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/users/">Cancel</a>
+			</form>
+		</article>
+	}
+}

@@ -1,0 +1,124 @@
+package pages
+
+import "controlplane/internal/config"
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+type EnvironmentGroup struct {
+	Application  config.Application
+	Environments []config.Environment
+}
+
+type EnvironmentsListData struct {
+	Groups            []EnvironmentGroup
+	Applications      []config.Application
+	CurrentAppID      string
+	CurrentQ          string
+	Page              int
+	NumPages          int
+	HasPrev           bool
+	HasNext           bool
+	PrevNum           int
+	NextNum           int
+	Window            []int
+	ExtraQuery        string
+}
+
+templ EnvironmentsList(flashes []session.Flash, user layout.NavUser, data EnvironmentsListData) {
+	@layout.Base("Environments", "environments", user, flashes) {
+		<div class="toolbar">
+			<h2>Environments</h2>
+			<a role="button" href="/environments/create/"><i class="bi bi-plus-lg"></i> New Environment</a>
+		</div>
+		<form method="get" class="filter-bar">
+			<div>
+				<label for="application_id">Application</label>
+				<select id="application_id" name="application_id">
+					<option value="">All applications</option>
+					for _, app := range data.Applications {
+						if app.ID.String() == data.CurrentAppID {
+							<option value={ app.ID.String() } selected>{ app.Name }</option>
+						} else {
+							<option value={ app.ID.String() }>{ app.Name }</option>
+						}
+					}
+				</select>
+			</div>
+			<div>
+				<label for="q">Search</label>
+				<input type="text" id="q" name="q" placeholder="Environment name" value={ data.CurrentQ }/>
+			</div>
+			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+		</form>
+		if len(data.Groups) == 0 {
+			<div class="alert alert-secondary">No environments found.</div>
+		}
+		for _, group := range data.Groups {
+			<article class="card">
+				<header>{ group.Application.Name }</header>
+				<table>
+					<tbody>
+						for _, env := range group.Environments {
+							<tr>
+								<td>{ env.Name }</td>
+								<td class="actions">
+									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/environments/" + env.ID.String() + "/edit/") }>Edit</a>
+									<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/environments/" + env.ID.String() + "/delete/") }>Delete</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</article>
+		}
+		@PaginationNav("/environments/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+	}
+}
+
+type EnvironmentFormData struct {
+	CSRFToken     string
+	Applications  []config.Application
+	ApplicationID string
+	Name          string
+	Error         string
+	IsEdit        bool
+	Action        string
+}
+
+templ EnvironmentForm(flashes []session.Flash, user layout.NavUser, data EnvironmentFormData) {
+	@layout.Base("Environment", "environments", user, flashes) {
+		<h2>
+			if data.IsEdit {
+				Edit Environment
+			} else {
+				New Environment
+			}
+		</h2>
+		<article style="max-width: 480px;">
+			if data.Error != "" {
+				<div class="alert alert-danger">{ data.Error }</div>
+			}
+			<form method="post" action={ templ.URL(data.Action) }>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<label for="application">
+					Application
+					<select id="application" name="application_id" required>
+						for _, app := range data.Applications {
+							if app.ID.String() == data.ApplicationID {
+								<option value={ app.ID.String() } selected>{ app.Name }</option>
+							} else {
+								<option value={ app.ID.String() }>{ app.Name }</option>
+							}
+						}
+					</select>
+				</label>
+				<label for="name">
+					Name
+					<input type="text" id="name" name="name" value={ data.Name } required/>
+				</label>
+				<button type="submit" style="width: auto;">Save</button>
+				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/environments/">Cancel</a>
+			</form>
+		</article>
+	}
+}

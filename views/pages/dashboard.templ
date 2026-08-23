@@ -1,0 +1,61 @@
+package pages
+
+import "controlplane/internal/config"
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+type DashboardData struct {
+	ApplicationCount int64
+	EnvironmentCount int64
+	ConfigCount      int64
+	SecretCount      int64
+	FlagCount        int64
+	ClientCount      int64
+	RecentConfigs    []config.ConfigEntry
+}
+
+templ Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData) {
+	@layout.Base("Dashboard", "dashboard", user, flashes) {
+		<h2>Dashboard</h2>
+		<div class="stat-grid">
+			@statCard("Applications", data.ApplicationCount, "bi-grid-3x3-gap")
+			@statCard("Environments", data.EnvironmentCount, "bi-layers")
+			@statCard("Configs", data.ConfigCount, "bi-sliders")
+			@statCard("Secrets", data.SecretCount, "bi-key")
+			@statCard("Feature Flags", data.FlagCount, "bi-toggle-on")
+			@statCard("Service Clients", data.ClientCount, "bi-hdd-network")
+		</div>
+		<article class="card">
+			<header>Recently Updated Configs</header>
+			<table>
+				<tbody>
+					if len(data.RecentConfigs) == 0 {
+						<tr><td>No configs yet.</td></tr>
+					}
+					for _, entry := range data.RecentConfigs {
+						<tr>
+							<td>
+								<strong>{ entry.Application.Name }</strong> / { entry.Environment.Name } / { entry.Key }
+							</td>
+							<td style="text-align: right;">
+								if entry.IsSecret {
+									<span class="badge badge-warning">Secret</span>
+								} else {
+									<span class="badge badge-secondary">Config</span>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</article>
+	}
+}
+
+templ statCard(label string, count int64, icon string) {
+	<article class="stat-card">
+		<i class={ "bi", icon, "stat-icon" }></i>
+		<div class="stat-count">{ formatCount(count) }</div>
+		<div class="stat-label">{ label }</div>
+	</article>
+}

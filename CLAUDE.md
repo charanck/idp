@@ -4,76 +4,116 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Django + Django Ninja control plane for configuration/secret management and feature flags, with JWT user auth, API-key service-to-service (S2S) auth, OAuth2/OIDC login, and a server-rendered Bootstrap web UI. Configs and secrets are the same model (`ConfigEntry` with `is_secret=true`) and are encrypted at rest with a master key, then re-encrypted per-client on read.
+A Go control plane for configuration/secret management and feature flags, with API-key
+service-to-service (S2S) auth, OAuth2/OIDC login, and a server-rendered Bootstrap web UI. Configs
+and secrets are the same model (`ConfigEntry` with `is_secret=true`) and are encrypted at rest with
+a master key, then re-encrypted per-client on read. Built on [Echo](https://echo.labstack.com/)
+(HTTP), [GORM](https://gorm.io/) over Postgres (query layer only — [goose](https://github.com/pressly/goose)
+owns the schema via `internal/db/migrations/`), and [templ](https://templ.guide/) for
+server-rendered HTML. See the Architecture section below for package-by-package detail.
 
-The repo root is this Django app. `server/` is an in-progress **Go rewrite** of the same system (Echo + GORM + templ, same Postgres schema, same env var names) — see [Go rewrite (`server/`)](#go-rewrite-server) below and `server/README.md` before editing anything under `server/`.
+There is no JWT-based user/service auth API and no Django-admin-style generic admin — both were
+deliberately not carried over from an earlier Django implementation of this app. Service clients,
+users, configs, secrets, and feature flags are all managed through the session-authenticated web
+UI; the only programmatic API is S2S API-key auth for reading configs/flags.
 
 ## Commands
 
-Dependency management uses `uv` (see `pyproject.toml` / `uv.lock`).
-
 ```bash
-# Install deps (add --group dev for pytest)
-uv sync --group dev
-
-# Run the dev server
-uv run python manage.py runserver
-
-# Migrations
-uv run python manage.py makemigrations
-uv run python manage.py migrate
-
-# Create/update the admin user (also runs automatically via ADMIN_EMAIL/ADMIN_PASSWORD in some setups)
-uv run python manage.py setup_admin --email admin@example.com --password SecurePass123
-
-# Tests (pytest.ini points DJANGO_SETTINGS_MODULE at control_plane_project.test_settings,
-# which isolates the test DB/cache/crypto keys from your local .env - just run pytest directly)
-uv run pytest
-uv run python manage.py test
-uv run python manage.py test authentication         # single app
-uv run python manage.py test config_management.tests.SomeTestCase   # single case, once tests exist
+go build ./...          # build everything
+go run ./cmd/server      # run the HTTP server
+go run ./cmd/migrate-cutover [--dry-run]   # standalone schema-reconciliation/validation tool
+make test                # go test -p 1 ./... (see Makefile for why -p 1 is required)
 ```
 
-Required env vars (see `README.md` for the full list): `DJANGO_SECRET_KEY`, `MASTER_ENCRYPTION_KEY`, `JWT_SECRET_KEY`, `DATABASE_URL`-style `DB_*` vars, `ADMIN_EMAIL`. If `MASTER_ENCRYPTION_KEY` is unset, `control_plane_project/settings.py` auto-generates one at startup (dev only — data becomes unreadable across restarts). Optional caching is controlled by `CACHE_ENABLED`/`CACHE_BACKEND` (`redis` or `locmem`). Auth rate limiting is controlled by `AUTH_RATE_LIMIT`/`AUTH_RATE_LIMIT_WINDOW_SECONDS`.
+Regenerating templ views (only needed after editing a `.templ` file) requires the
+[templ CLI](https://templ.guide/quick-start/installation):
+
+```bash
+go run github.com/a-h/templ/cmd/templ generate
+```
+
+Most tests are integration tests against a real Postgres instance (goose/GORM target
+Postgres-specific types a mock or sqlite can't stand in for). Point `CP_TEST_DATABASE_URL` at a
+throwaway Postgres database before running `make test`; without it, those tests `t.Skip()`
+individually rather than failing:
+
+```bash
+docker run --rm -d -p 5433:5432 -e POSTGRES_PASSWORD=idp -e POSTGRES_USER=idp -e POSTGRES_DB=idp_test postgres:15.3-alpine
+export CP_TEST_DATABASE_URL="host=localhost port=5433 dbname=idp_test user=idp password=idp sslmode=disable"
+make test
+```
+
+Required env vars (see `docs/configuration.md` for the full list): `MASTER_ENCRYPTION_KEY` (no
+auto-generated fallback — a missing key is a fatal error in every environment), `DB_*`
+(Postgres — required, no SQLite support), `REDIS_URL` (Redis — required, not optional; sessions,
+rate limiting, and caching are all Redis-backed with no fallback), `ADMIN_EMAIL`/`ADMIN_PASSWORD`
+(provisioned/synced on every startup).
 
 ## Architecture
 
-Four Django apps, each with a narrow role:
+Package layout under `internal/`, each with a narrow role:
 
-- **`control_plane_project/`** — settings, root `urls.py`. Mounts the Django Ninja `NinjaAPI` at `/api/v1/` (auth router at `/api/v1/auth/`, config router at `/api/v1/config/`), Django admin at `/admin/`, and `web_ui` at `/`.
-- **`authentication/`** — `User` (custom `AUTH_USER_MODEL`, email-based login, UUID PK, `force_password_reset` flag), `ServiceClient` (S2S API-key holder + per-client Fernet `encryption_key`), and OAuth2/OIDC models (`OAuthProvider`, `OAuthUserToken` in `oauth_models.py`, imported at the bottom of `models.py` so migrations pick them up). `services.py` = `AuthService` (user registration/auth, service-client creation/API-key verification). `oauth_service.py` = `OAuthService` (authlib-based authorization-code flow). `api.py` exposes JWT/S2S endpoints under Ninja.
-- **`config_management/`** — `Application` → `Environment` (unique per app) → `ConfigEntry` (unique per app+env+key; secrets are just `is_secret=True` entries) and `FeatureFlag` (same app+env scoping, soft-deleted via `deleted_at`). `ConfigEntryVersion` is an immutable snapshot written on every create/update/delete/rollback of a `ConfigEntry` (see below). `Activity` is an append-only audit log (type/resource/resource_id/user_email/ip) written by `common/activity_logger.py`. `services.py` = `ConfigService` and `FeatureFlagService`, both **get-or-create** the `Application`/`Environment` scope from `(service, environment)` string pairs rather than taking foreign keys directly — this is the shape both the Ninja API and the web UI call into.
-- **`web_ui/`** — server-rendered CRUD (Bootstrap templates in `web_ui/templates/web_ui/`) for everything above: users, service clients, applications, environments, configs/secrets, feature flags, OAuth providers, plus the OAuth login/callback flow and a read-only activity log. `views.py` is one large module gated by Django's session auth (`@login_required`) and a local `admin_required` decorator (`is_staff` check) — this is a separate auth path from the JWT/API-key auth used by the Ninja API.
-- **`common/`** — shared, framework-adjacent utilities imported across apps: `encryption.py` (Fernet — `EncryptionService.encrypt_for_storage`/`decrypt_from_storage` use the master key; `re_encrypt_for_client` re-wraps for a client's own key), `jwt_utils.py` (encode/decode JWT, `type` claim distinguishes `user` vs `service` tokens), `authentication.py` (Ninja auth classes: `JWTAuth`, `JWTAdminAuth` (staff-only), `APIKeyAuth` for the `X-API-Key: <key_id>.<secret>` S2S header), `security.py` (password hashing wrappers), `activity_logger.py` (writes `Activity` rows; `log_create`/`log_update`/`log_delete`/`log_toggle`/`log_login`/`log_logout` helpers), `ratelimit.py`/`middleware.py` (fixed-window rate limiting for auth endpoints, see below).
+| Package | Responsibility |
+|---|---|
+| `appconfig` | Loads runtime configuration from environment variables. |
+| `db` | Schema management. GORM is a query layer only; goose (`internal/db/migrations`) owns the schema. `Migrate` runs on every startup, guarded by a Postgres advisory lock. |
+| `auth` | `User` (custom, email-based login, UUID PK, `ForcePasswordReset` flag), `ServiceClient` (S2S API-key holder + per-client Fernet `EncryptionKey`), OAuth2/OIDC models, and `AuthService`/`OAuthService` (authlib-equivalent authorization-code flow). |
+| `config` | `Application` → `Environment` (unique per app) → `ConfigEntry` (unique per app+env+key; secrets are just `IsSecret=true` entries) and `FeatureFlag` (same app+env scoping, soft-deleted). `ConfigEntryVersion` is an immutable snapshot written on every create/update/delete/rollback of a `ConfigEntry`. `Activity` is an append-only audit log. `ConfigService`/`FeatureFlagService` both **get-or-create** the `Application`/`Environment` scope from `(service, environment)` string pairs rather than taking foreign keys directly — this is the shape both the API and the web UI call into. |
+| `crypto` | Fernet master-key encryption (`EncryptForStorage`/`DecryptFromStorage`) + per-client re-encryption (`ReEncryptForClient`). |
+| `security` | Password hashing. |
+| `session` | Redis-backed signed-cookie sessions; flash messages and the CSRF token live in the same session blob. |
+| `ratelimit` | Redis fixed-window limiter. |
+| `activity` | Append-only audit log writer. |
+| `cache` | Redis-backed, version-counter invalidation for `ConfigService`/`FeatureFlagService` list reads. |
+| `api` | The S2S config/flag JSON API (`/api/v1/config/...`) — `APIKeyAuth` reads the `X-API-Key` header. |
+| `webui` | Session-authenticated CRUD handlers for everything: applications, environments, configs/secrets (incl. history/rollback), feature flags, users, service clients, OAuth providers, OAuth login/callback, activity log. Routes registered in `internal/webui/router.go`. |
+| `observability` | Opt-in OTLP traces/metrics/logs, enabled only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. |
 
-### Two independent auth systems
+`views/` holds the `.templ` sources and their generated `_templ.go` output (generated files are
+committed, so a plain `go build` never needs the templ CLI). `static/` is served at `/static`.
 
-1. **Ninja API** (`/api/v1/...`): stateless. `JWTAuth`/`JWTAdminAuth` read a Bearer token (`common/jwt_utils.py`); `APIKeyAuth` reads `X-API-Key` and resolves a `ServiceClient` via `AuthService.authenticate_service_api_key`.
-2. **Web UI** (`/...`): standard Django session auth (`django.contrib.auth`), gated with `@login_required` / `admin_required`.
-Both end up operating on the same `authentication`/`config_management` models and services — when changing a service method, check both `*/api.py` and `web_ui/views.py` for callers.
+### Two auth systems
+
+1. **API** (`/api/v1/config/...`): stateless. `APIKeyAuth` reads `X-API-Key: <key_id>.<secret>` and
+   resolves a `ServiceClient` via `AuthService`'s API-key verification. This is the only
+   programmatic auth surface in the app.
+2. **Web UI** (`/...`): signed-cookie session auth (`internal/session`), gated by a login-required
+   check and an admin-only (`IsStaff`) check for privileged pages.
+
+Both operate on the same `auth`/`config` models and services — when changing a service method,
+check both `internal/api` and `internal/webui` for callers.
 
 ### Encryption flow
 
-Admin writes a config/secret via JWT-authenticated API or the web UI → `ConfigService.upsert_config` encrypts with `MASTER_ENCRYPTION_KEY` before storing. A service client reads via `GET /api/v1/config/configs/list` (API-key auth) → the server decrypts with the master key and **re-encrypts with that client's own `encryption_key`** before returning it; the client decrypts locally with the key it was given at creation time (`POST /api/v1/auth/s2s/clients`). The web UI never displays decrypted secret values back through the API (`upsert_config` always returns `"***ENCRYPTED***"`).
+Admin writes a config/secret via the web UI → `ConfigService.UpsertConfig` encrypts with
+`MASTER_ENCRYPTION_KEY` before storing. A service client reads via
+`GET /api/v1/config/configs/list` (API-key auth) → the server decrypts with the master key and
+**re-encrypts with that client's own `EncryptionKey`** before returning it; the client decrypts
+locally with the key it was given at creation time. The web UI never displays decrypted secret
+values back (`UpsertConfig` always returns `"***ENCRYPTED***"`).
 
 ### Caching
 
-When `CACHE_ENABLED=true`, `ConfigService`/`FeatureFlagService` cache list responses scoped by service+environment (+ client key hash for configs). Cache invalidation is version-based: a per-scope version counter (`config:scope-version:{service}:{environment}`) is bumped on any write instead of deleting keys directly — read paths must incorporate the current version into their cache key.
+`ConfigService`/`FeatureFlagService` cache list responses in Redis, scoped by service+environment
+(+ client key hash for configs). Cache invalidation is version-based: a per-scope version counter
+(`config:scope-version:{service}:{environment}`) is bumped on any write instead of deleting keys
+directly — read paths must incorporate the current version into their cache key.
 
 ### Config history and rollback
 
-Every `ConfigEntry` write path (API `upsert_config`, web UI create/clone/edit) calls `ConfigService.record_config_version`, which snapshots the entry's current *encrypted* value into `ConfigEntryVersion` via a cascading FK (`config_entry`), numbered per entry starting at 1. Deleting a `ConfigEntry` deletes its version history with it (`on_delete=CASCADE`) — history is not kept for deleted configs, and re-creating the same key later starts a fresh history at version 1. `ConfigService.rollback_config` restores a prior version by calling `upsert_config` again (tagged `history_action="rollback"`) rather than mutating history in place — the rollback itself becomes a new, auditable version. Exposed at `GET/POST /api/v1/config/configs/{id}/history|rollback` (JWT auth) and via the web UI's per-config history page; secret values are never included in history responses, only that a version changed, when, and by whom.
+Every `ConfigEntry` write path (web UI create/clone/edit) calls `ConfigService.RecordConfigVersion`,
+which snapshots the entry's current *encrypted* value into `ConfigEntryVersion` via a cascading FK
+(`config_entry`), numbered per entry starting at 1. Deleting a `ConfigEntry` deletes its version
+history with it (cascade) — history is not kept for deleted configs, and re-creating the same key
+later starts a fresh history at version 1. `ConfigService.RollbackConfig` restores a prior version
+by calling `UpsertConfig` again (tagged as a rollback action) rather than mutating history in
+place — the rollback itself becomes a new, auditable version. Secret values are never included in
+history responses, only that a version changed, when, and by whom.
 
 ### Rate limiting
 
-`common/middleware.py`'s `RateLimitMiddleware` throttles a fixed set of `(method, path)` routes — `POST /api/v1/auth/token`, `POST /api/v1/auth/register`, `POST /login/` — per client IP, via a fixed-window counter in the dedicated `'ratelimit'` cache alias (`common/ratelimit.py`). That cache alias always exists and always stores real counters regardless of the app-level `CACHE_ENABLED` flag (which may leave `'default'` as a no-op `DummyCache`): Redis when `CACHE_ENABLED`/`CACHE_BACKEND=redis`, otherwise an in-process `locmem` cache. Limits are configured via `AUTH_RATE_LIMIT`/`AUTH_RATE_LIMIT_WINDOW_SECONDS`; `test_settings.py` sets these very high so ordinary test traffic never trips the limiter.
-
-## Go rewrite (`server/`)
-
-`server/` is a from-scratch Go port of this app, built up incrementally alongside the Django code — not a generated or transpiled copy. Full details (commands, package-by-package mapping to the Django apps above, migration status, and how it differs from Django) are in `server/README.md`; keep that file current when you change anything under `server/`. The short version:
-
-- **Stack**: [Echo](https://echo.labstack.com/) (HTTP), [GORM](https://gorm.io/) over Postgres (query layer only — [goose](https://github.com/pressly/goose) owns the schema via `server/internal/db/migrations/`), [templ](https://templ.guide/) for server-rendered HTML, all against **the same Postgres schema** Django's migrations create — either implementation can run against a database the other created/manages.
-- **Env vars are shared with Django** — `server/internal/appconfig/config.go` reads the same names (`MASTER_ENCRYPTION_KEY`, `DB_*`, `ADMIN_EMAIL`/`ADMIN_PASSWORD`, `AUTH_RATE_LIMIT*`, etc.) as `control_plane_project/settings.py`, so one `.env` drives either stack. Two hard requirements the Django app doesn't have: **Postgres** (no SQLite) and **Redis** (mandatory, not optional via `CACHE_ENABLED`) — see `server/README.md` for why.
-- **Not ported yet**: the JWT user/service auth API (`/api/v1/auth/...`) — only S2S API-key auth (`/api/v1/config/...`) exists in Go today — and Django admin. The full session-authenticated web UI *is* ported route-for-route (`server/internal/webui/router.go` mirrors `web_ui/urls.py`).
-- **Container config**: `server/Dockerfile` + `server/docker-compose.local.yml` mirror the root `Dockerfile`/`docker-compose.local.yml` — same port (8000), same env var names, same Postgres/Redis sidecars — so they're a drop-in alternative, not a parallel deployment model to learn.
-- When changing a Django service method (`AuthService`, `ConfigService`, `FeatureFlagService`, etc.), check whether `server/internal/{auth,config}` has an equivalent to keep in sync, and vice versa.
+A fixed-window limiter (`internal/ratelimit`, Redis-backed) throttles `POST /login/` per client IP
+(`AUTH_RATE_LIMIT`/`AUTH_RATE_LIMIT_WINDOW_SECONDS`). S2S API-key auth (`X-API-Key`, used by both
+endpoints under `/api/v1/config/...`) is separately throttled **on failed attempts only**, per
+client IP, via `S2S_AUTH_RATE_LIMIT` — a valid key is never throttled, only guessing.

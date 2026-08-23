@@ -1,0 +1,185 @@
+package pages
+
+import "controlplane/internal/auth"
+import "controlplane/internal/session"
+import "controlplane/views/layout"
+
+type ClientsListData struct {
+	Clients       []auth.ServiceClient
+	CurrentQ      string
+	CurrentStatus string
+	Page          int
+	NumPages      int
+	HasPrev       bool
+	HasNext       bool
+	PrevNum       int
+	NextNum       int
+	Window        []int
+	ExtraQuery    string
+}
+
+templ ClientsList(flashes []session.Flash, user layout.NavUser, data ClientsListData) {
+	@layout.Base("Service Clients", "clients", user, flashes) {
+		<div class="toolbar">
+			<h2>Service Clients</h2>
+			<a role="button" href="/clients/create/"><i class="bi bi-plus-lg"></i> New Client</a>
+		</div>
+		<form method="get" class="filter-bar">
+			<div>
+				<label for="q">Search</label>
+				<input type="text" id="q" name="q" placeholder="Client name" value={ data.CurrentQ }/>
+			</div>
+			<div>
+				<label for="status">Status</label>
+				<select id="status" name="status">
+					<option value="" selected?={ data.CurrentStatus == "" }>All</option>
+					<option value="active" selected?={ data.CurrentStatus == "active" }>Active</option>
+					<option value="inactive" selected?={ data.CurrentStatus == "inactive" }>Inactive</option>
+				</select>
+			</div>
+			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+		</form>
+		<article class="card">
+			<table>
+				<thead><tr><th>Name</th><th>API Key ID</th><th>Status</th><th class="actions">Actions</th></tr></thead>
+				<tbody>
+					if len(data.Clients) == 0 {
+						<tr><td colspan="4">No service clients found.</td></tr>
+					}
+					for _, client := range data.Clients {
+						<tr>
+							<td>{ client.Name }</td>
+							<td><code>
+								if client.APIKeyID != nil {
+									{ *client.APIKeyID }
+								} else {
+									-
+								}
+							</code></td>
+							<td>
+								if client.IsActive {
+									<span class="badge badge-success">Active</span>
+								} else {
+									<span class="badge badge-secondary">Inactive</span>
+								}
+							</td>
+							<td class="actions">
+								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/clients/" + client.ID.String() + "/") }>View</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</article>
+		@PaginationNav("/clients/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+	}
+}
+
+type ClientFormData struct {
+	CSRFToken string
+	Name      string
+	Error     string
+}
+
+templ ClientForm(flashes []session.Flash, user layout.NavUser, data ClientFormData) {
+	@layout.Base("New Service Client", "clients", user, flashes) {
+		<h2>New Service Client</h2>
+		<article style="max-width: 480px;">
+			if data.Error != "" {
+				<div class="alert alert-danger">{ data.Error }</div>
+			}
+			<form method="post" action="/clients/create/">
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<label for="name">
+					Client name
+					<input type="text" id="name" name="name" value={ data.Name } required/>
+				</label>
+				<button type="submit" style="width: auto;">Create</button>
+				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/clients/">Cancel</a>
+			</form>
+		</article>
+	}
+}
+
+type ClientCreatedData struct {
+	ClientID string
+	Name     string
+	APIKeyID string
+	APIKey   string
+}
+
+templ ClientCreated(flashes []session.Flash, user layout.NavUser, data ClientCreatedData) {
+	@layout.Base("Service Client Created", "clients", user, flashes) {
+		<article style="max-width: 640px;">
+			<h3>Service Client Created</h3>
+			<p>Copy the API key now. It will not be shown again.</p>
+			<div class="alert alert-warning">
+				<strong>Client:</strong> { data.Name }<br/>
+				<strong>API Key ID:</strong> <code>{ data.APIKeyID }</code><br/>
+				<strong>API Key:</strong> <code>{ data.APIKey }</code>
+			</div>
+			<div class="toolbar">
+				<a role="button" class="secondary outline" style="width: auto;" href="/clients/">Back to Clients</a>
+				<a role="button" style="width: auto;" href={ templ.URL("/clients/" + data.ClientID + "/") }>View Details</a>
+			</div>
+		</article>
+	}
+}
+
+type ClientDetailData struct {
+	CSRFToken     string
+	ID            string
+	Name          string
+	APIKeyID      string
+	EncryptionKey string
+	IsActive      bool
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+templ ClientDetail(flashes []session.Flash, user layout.NavUser, data ClientDetailData) {
+	@layout.Base("Service Client Details", "clients", user, flashes) {
+		<article style="max-width: 720px;">
+			<div class="toolbar">
+				<div>
+					<h3 style="margin-bottom: 0.2rem;">{ data.Name }</h3>
+					<p class="stat-label" style="margin: 0;">Service client details and status.</p>
+				</div>
+				if data.IsActive {
+					<span class="badge badge-success">Active</span>
+				} else {
+					<span class="badge badge-secondary">Inactive</span>
+				}
+			</div>
+			<table>
+				<tbody>
+					<tr><th>Name</th><td>{ data.Name }</td></tr>
+					<tr><th>API Key ID</th><td><code>{ data.APIKeyID }</code></td></tr>
+					<tr><th>ID</th><td><code>{ data.ID }</code></td></tr>
+					<tr>
+						<th>Encryption Key</th>
+						<td>
+							<code>{ data.EncryptionKey }</code>
+							<form method="post" action={ templ.URL("/clients/" + data.ID + "/regenerate-key/") } style="display: inline;" onsubmit="return confirm('Regenerate the encryption key? The current key stops working immediately.')">
+								<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+								<button type="submit" class="btn-sm outline secondary" style="width: auto; margin-left: 0.5rem;"><i class="bi bi-arrow-repeat"></i> Regenerate</button>
+							</form>
+						</td>
+					</tr>
+					<tr><th>Created</th><td>{ data.CreatedAt }</td></tr>
+					<tr><th>Updated</th><td>{ data.UpdatedAt }</td></tr>
+				</tbody>
+			</table>
+			<div class="toolbar">
+				<a role="button" class="secondary outline" style="width: auto;" href="/clients/">Back to Clients</a>
+				<div class="actions">
+					<form method="post" action={ templ.URL("/clients/" + data.ID + "/toggle/") }>
+						<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+						<button type="submit" style="width: auto;">Toggle Status</button>
+					</form>
+					<a role="button" class="btn-danger" style="width: auto;" href={ templ.URL("/clients/" + data.ID + "/delete/") }>Delete</a>
+				</div>
+			</div>
+		</article>
+	}
+}

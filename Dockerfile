@@ -1,56 +1,51 @@
-### ---- Builder: resolve dependencies into a venv, nothing else ----
-FROM python:3.12-slim AS builder
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/app/.venv
+### ---- CSS builder: compile the Tailwind source into static/app.css ----
+FROM node:22-alpine AS css-builder
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir uv
+COPY package.json package-lock.json ./
+RUN npm ci
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+COPY static/src ./static/src
+RUN npm run build:css
+
+
+### ---- Builder: regenerate templ views, compile a static binary ----
+FROM golang:1.25-alpine AS builder
+
+ARG VERSION=docker
+
+WORKDIR /app
+
+RUN apk add --no-cache ca-certificates
+
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY . .
-RUN uv sync --frozen --no-dev
+COPY --from=css-builder /app/static/app.css ./static/app.css
+
+RUN go run github.com/a-h/templ/cmd/templ generate
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
+    -o /out/control-plane ./cmd/server
 
 
-### ---- Runtime: slim image, no build tools, non-root user ----
-FROM python:3.12-slim AS runtime
+### ---- Runtime: distroless-style slim image, non-root user ----
+FROM alpine:3.20 AS runtime
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH" \
-    DJANGO_SETTINGS_MODULE=control_plane_project.settings
-
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y curl \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN groupadd --system app && useradd --system --gid app --home /app app
+RUN apk add --no-cache ca-certificates curl \
+    && addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
-RUN chown app:app /app
 
-COPY --from=builder --chown=app:app /app /app
-RUN chmod +x /app/docker-entrypoint.sh
+COPY --from=builder --chown=app:app /out/control-plane ./control-plane
+COPY --from=builder --chown=app:app /app/static ./static
 
 USER app
-
-RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl --fail --silent http://127.0.0.1:8000/ || exit 1
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["gunicorn", "control_plane_project.wsgi:application", \
-     "--bind", "0.0.0.0:8000", \
-     "--workers", "4", \
-     "--timeout", "30", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-"]
+ENTRYPOINT ["./control-plane"]
