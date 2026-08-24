@@ -60,6 +60,7 @@ func OpenDB(t *testing.T) *gorm.DB {
 func TruncateAll(t *testing.T, gdb *gorm.DB) {
 	t.Helper()
 	tables := []string{
+		"notifications", "notification_provider_settings",
 		"oauth_user_tokens", "oauth_providers",
 		"config_entry_versions", "config_entries", "feature_flags",
 		"environments", "applications",

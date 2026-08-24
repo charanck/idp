@@ -8,10 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
 	"controlplane/internal/auth"
-	"controlplane/internal/crypto"
 	"controlplane/views/pages"
 )
 
@@ -22,19 +20,18 @@ func clientsListHandler(deps *Deps) echo.HandlerFunc {
 		q := strings.TrimSpace(c.QueryParam("q"))
 		statusFilter := c.QueryParam("status")
 
-		query := deps.DB.WithContext(c.Request().Context()).Order("created_at DESC")
-		if q != "" {
-			query = query.Where("name ILIKE ?", "%"+q+"%")
-		}
+		var isActive *bool
 		switch statusFilter {
 		case "active":
-			query = query.Where("is_active = true")
+			v := true
+			isActive = &v
 		case "inactive":
-			query = query.Where("is_active = false")
+			v := false
+			isActive = &v
 		}
 
-		var clients []auth.ServiceClient
-		if err := query.Find(&clients).Error; err != nil {
+		clients, err := deps.AuthService.ListServiceClients(c.Request().Context(), q, isActive)
+		if err != nil {
 			return err
 		}
 
@@ -100,14 +97,14 @@ func loadClient(deps *Deps, c echo.Context) (*auth.ServiceClient, error) {
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusNotFound)
 	}
-	var client auth.ServiceClient
-	if err := deps.DB.WithContext(c.Request().Context()).First(&client, "id = ?", id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, echo.NewHTTPError(http.StatusNotFound)
-		}
+	client, err := deps.AuthService.GetServiceClientByIDAny(c.Request().Context(), id)
+	if err != nil {
 		return nil, err
 	}
-	return &client, nil
+	if client == nil {
+		return nil, echo.NewHTTPError(http.StatusNotFound)
+	}
+	return client, nil
 }
 
 func clientDetailHandler(deps *Deps) echo.HandlerFunc {
@@ -134,8 +131,8 @@ func clientToggleHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return err
 		}
-		client.IsActive = !client.IsActive
-		if err := deps.DB.WithContext(c.Request().Context()).Save(client).Error; err != nil {
+		client, err = deps.AuthService.ToggleServiceClient(c.Request().Context(), client.ID)
+		if err != nil {
 			return err
 		}
 		deps.Activity.LogToggle(requestContext(c), "client", client.ID.String(), client.Name, map[string]any{"is_active": client.IsActive})
@@ -165,7 +162,7 @@ func clientDeleteHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		if err := deps.DB.WithContext(c.Request().Context()).Delete(client).Error; err != nil {
+		if _, err := deps.AuthService.DeleteServiceClient(c.Request().Context(), client.ID); err != nil {
 			return err
 		}
 		deps.Activity.LogDelete(requestContext(c), "client", client.ID.String(), client.Name, nil)
@@ -182,12 +179,8 @@ func clientRegenerateKeyHandler(deps *Deps) echo.HandlerFunc {
 		}
 
 		if c.Request().Method == http.MethodPost {
-			newKey, err := crypto.GenerateKey()
+			client, err = deps.AuthService.RegenerateServiceClientKey(c.Request().Context(), client.ID)
 			if err != nil {
-				return err
-			}
-			client.EncryptionKey = newKey
-			if err := deps.DB.WithContext(c.Request().Context()).Save(client).Error; err != nil {
 				return err
 			}
 			deps.Activity.LogUpdate(requestContext(c), "client", client.ID.String(), client.Name, map[string]any{"action": "regenerate_encryption_key"})

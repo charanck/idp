@@ -7,7 +7,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"controlplane/internal/auth"
 	"controlplane/internal/ratelimit"
 	"controlplane/internal/security"
 	"controlplane/internal/session"
@@ -15,8 +14,8 @@ import (
 )
 
 func activeOAuthProviders(ctx context.Context, deps *Deps) ([]pages.LoginOAuthProvider, error) {
-	var providers []auth.OAuthProvider
-	if err := deps.DB.WithContext(ctx).Where("is_active = ?", true).Find(&providers).Error; err != nil {
+	providers, err := deps.OAuthService.ListActiveProviders(ctx)
+	if err != nil {
 		return nil, err
 	}
 	out := make([]pages.LoginOAuthProvider, 0, len(providers))

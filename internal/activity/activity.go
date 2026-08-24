@@ -125,3 +125,49 @@ func (l *Logger) LogLoginFailed(ctx context.Context, identifier string, details 
 func (l *Logger) LogAuthFailed(ctx context.Context, resource, identifier string, details any) {
 	l.log(ctx, config.ActivityTypeAuthFailed, resource, identifier, identifier, "", details)
 }
+
+// ListFilter filters List.
+type ListFilter struct {
+	Resource string
+	Type     string
+	UserLike string // case-insensitive substring match on user_email
+}
+
+// List lists activity rows matching filter, newest first.
+func (l *Logger) List(ctx context.Context, filter ListFilter) ([]config.Activity, error) {
+	query := l.db.WithContext(ctx).Order("timestamp DESC")
+	if filter.Resource != "" {
+		query = query.Where("resource = ?", filter.Resource)
+	}
+	if filter.Type != "" {
+		query = query.Where("type = ?", filter.Type)
+	}
+	if filter.UserLike != "" {
+		query = query.Where("user_email ILIKE ?", "%"+filter.UserLike+"%")
+	}
+	var activities []config.Activity
+	if err := query.Find(&activities).Error; err != nil {
+		return nil, err
+	}
+	return activities, nil
+}
+
+// DistinctResources lists every distinct resource value ever logged, ordered alphabetically.
+func (l *Logger) DistinctResources(ctx context.Context) ([]string, error) {
+	var resources []string
+	err := l.db.WithContext(ctx).Model(&config.Activity{}).Order("resource").Distinct("resource").Pluck("resource", &resources).Error
+	if err != nil {
+		return nil, err
+	}
+	return resources, nil
+}
+
+// DistinctTypes lists every distinct activity type value ever logged, ordered alphabetically.
+func (l *Logger) DistinctTypes(ctx context.Context) ([]string, error) {
+	var types []string
+	err := l.db.WithContext(ctx).Model(&config.Activity{}).Order("type").Distinct("type").Pluck("type", &types).Error
+	if err != nil {
+		return nil, err
+	}
+	return types, nil
+}

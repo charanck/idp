@@ -180,6 +180,186 @@ func (s *AuthService) AuthenticateServiceAPIKey(ctx context.Context, apiKey stri
 	return &client, nil
 }
 
+// ListUsers lists users, optionally filtered by a case-insensitive email
+// substring and staff status, ordered newest-first.
+func (s *AuthService) ListUsers(ctx context.Context, q string, isStaff *bool) ([]User, error) {
+	query := s.db.WithContext(ctx).Order("created_at DESC")
+	if q != "" {
+		query = query.Where("email ILIKE ?", "%"+q+"%")
+	}
+	if isStaff != nil {
+		query = query.Where("is_staff = ?", *isStaff)
+	}
+	var users []User
+	if err := query.Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+// GetUserByIDAny returns a user by ID regardless of active status, or nil if not found.
+func (s *AuthService) GetUserByIDAny(ctx context.Context, id uuid.UUID) (*User, error) {
+	var user User
+	err := s.db.WithContext(ctx).First(&user, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// CreateUserAdminInput bundles CreateUserAdmin's fields.
+type CreateUserAdminInput struct {
+	Email    string
+	Username string
+	Password string
+	IsActive bool
+}
+
+// CreateUserAdmin creates a new user directly (as opposed to RegisterUser's
+// always-inactive self-registration flow), returning ErrAlreadyExists if the
+// email is taken.
+func (s *AuthService) CreateUserAdmin(ctx context.Context, in CreateUserAdminInput) (*User, error) {
+	db := s.db.WithContext(ctx)
+
+	var existing User
+	err := db.Where("email = ?", in.Email).First(&existing).Error
+	if err == nil {
+		return nil, fmt.Errorf("user already exists: %w", ErrAlreadyExists)
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	hashed, err := security.HashPassword(in.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	user := &User{
+		Email:    in.Email,
+		Username: in.Username,
+		Password: hashed,
+		IsActive: in.IsActive,
+	}
+	if err := db.Create(user).Error; err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// UpdateUserAdminInput bundles UpdateUserAdmin's mutable fields.
+type UpdateUserAdminInput struct {
+	Email    string
+	Username string
+	IsActive bool
+	IsStaff  bool
+}
+
+// UpdateUserAdmin updates a user's profile/role fields by ID, returning nil if not found.
+func (s *AuthService) UpdateUserAdmin(ctx context.Context, id uuid.UUID, in UpdateUserAdminInput) (*User, error) {
+	user, err := s.GetUserByIDAny(ctx, id)
+	if err != nil || user == nil {
+		return user, err
+	}
+	user.Email = in.Email
+	user.Username = in.Username
+	user.IsActive = in.IsActive
+	user.IsStaff = in.IsStaff
+	if err := s.db.WithContext(ctx).Save(user).Error; err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// DeleteUser deletes a user by ID, returning nil if not found.
+func (s *AuthService) DeleteUser(ctx context.Context, id uuid.UUID) (*User, error) {
+	user, err := s.GetUserByIDAny(ctx, id)
+	if err != nil || user == nil {
+		return user, err
+	}
+	if err := s.db.WithContext(ctx).Delete(user).Error; err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+// ListServiceClients lists service clients, optionally filtered by a
+// case-insensitive name substring and active status, ordered newest-first.
+func (s *AuthService) ListServiceClients(ctx context.Context, q string, isActive *bool) ([]ServiceClient, error) {
+	query := s.db.WithContext(ctx).Order("created_at DESC")
+	if q != "" {
+		query = query.Where("name ILIKE ?", "%"+q+"%")
+	}
+	if isActive != nil {
+		query = query.Where("is_active = ?", *isActive)
+	}
+	var clients []ServiceClient
+	if err := query.Find(&clients).Error; err != nil {
+		return nil, err
+	}
+	return clients, nil
+}
+
+// GetServiceClientByIDAny returns a service client by ID regardless of
+// active status, or nil if not found.
+func (s *AuthService) GetServiceClientByIDAny(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
+	var client ServiceClient
+	err := s.db.WithContext(ctx).First(&client, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &client, nil
+}
+
+// ToggleServiceClient flips a service client's active state by ID, returning nil if not found.
+func (s *AuthService) ToggleServiceClient(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
+	client, err := s.GetServiceClientByIDAny(ctx, id)
+	if err != nil || client == nil {
+		return client, err
+	}
+	client.IsActive = !client.IsActive
+	if err := s.db.WithContext(ctx).Save(client).Error; err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
+// DeleteServiceClient deletes a service client by ID, returning nil if not found.
+func (s *AuthService) DeleteServiceClient(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
+	client, err := s.GetServiceClientByIDAny(ctx, id)
+	if err != nil || client == nil {
+		return client, err
+	}
+	if err := s.db.WithContext(ctx).Delete(client).Error; err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
+// RegenerateServiceClientKey rotates a service client's encryption key by
+// ID, returning nil if not found.
+func (s *AuthService) RegenerateServiceClientKey(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
+	client, err := s.GetServiceClientByIDAny(ctx, id)
+	if err != nil || client == nil {
+		return client, err
+	}
+	newKey, err := crypto.GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+	client.EncryptionKey = newKey
+	if err := s.db.WithContext(ctx).Save(client).Error; err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
 // GetServiceClientByID returns an active service client by ID.
 func (s *AuthService) GetServiceClientByID(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
 	var client ServiceClient

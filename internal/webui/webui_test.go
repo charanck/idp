@@ -20,6 +20,7 @@ import (
 	"controlplane/internal/cache"
 	"controlplane/internal/config"
 	"controlplane/internal/crypto"
+	"controlplane/internal/dashboard"
 	"controlplane/internal/ratelimit"
 	"controlplane/internal/security"
 	"controlplane/internal/session"
@@ -51,15 +52,14 @@ func setupWebUI(t *testing.T) (*gorm.DB, *echo.Echo, *webui.Deps) {
 	noopCache := cache.NewNoopCache()
 
 	deps := &webui.Deps{
-		DB:            gdb,
 		AuthService:   auth.NewAuthService(gdb),
 		OAuthService:  auth.NewOAuthService(gdb),
 		ConfigService: config.NewConfigService(gdb, encryption, noopCache, time.Minute),
 		FlagService:   config.NewFeatureFlagService(gdb, noopCache, time.Minute),
+		Dashboard:     dashboard.NewService(gdb),
 		Activity:      activity.NewLogger(gdb),
 		RateLimiter:   ratelimit.NewLimiter(rdb),
 		Sessions:      session.NewStore(rdb, "test-session-secret", 0),
-		Encryption:    encryption,
 
 		AuthRateLimit:              1000,
 		AuthRateLimitWindowSeconds: 60,

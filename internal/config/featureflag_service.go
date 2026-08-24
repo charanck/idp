@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"controlplane/internal/cache"
@@ -239,4 +240,84 @@ func (s *FeatureFlagService) ToggleFlag(ctx context.Context, service, environmen
 	flag.Environment = *env
 	slog.Info("toggled feature flag", "service", service, "environment", environment, "name", name, "is_enabled", flag.IsEnabled)
 	return &flag, nil
+}
+
+// ListFlagsFilter filters ListAllFlags.
+type ListFlagsFilter struct {
+	ApplicationID *uuid.UUID
+	EnvironmentID *uuid.UUID
+	IsEnabled     *bool
+}
+
+// ListAllFlags lists non-deleted feature flags (with Application/Environment
+// preloaded) across every service/environment, for the admin flags list page.
+func (s *FeatureFlagService) ListAllFlags(ctx context.Context, filter ListFlagsFilter) ([]FeatureFlag, error) {
+	query := s.db.WithContext(ctx).Preload("Application").Preload("Environment").
+		Joins("JOIN applications ON applications.id = feature_flags.application_id").
+		Where("feature_flags.deleted_at IS NULL").
+		Order("applications.name, feature_flags.name, feature_flags.description")
+	if filter.ApplicationID != nil {
+		query = query.Where("feature_flags.application_id = ?", *filter.ApplicationID)
+	}
+	if filter.EnvironmentID != nil {
+		query = query.Where("feature_flags.environment_id = ?", *filter.EnvironmentID)
+	}
+	if filter.IsEnabled != nil {
+		query = query.Where("feature_flags.is_enabled = ?", *filter.IsEnabled)
+	}
+	var flags []FeatureFlag
+	if err := query.Find(&flags).Error; err != nil {
+		return nil, err
+	}
+	return flags, nil
+}
+
+// GetFlagByID returns a feature flag by ID (with Application/Environment
+// preloaded), or nil if not found.
+func (s *FeatureFlagService) GetFlagByID(ctx context.Context, id uuid.UUID) (*FeatureFlag, error) {
+	var flag FeatureFlag
+	err := s.db.WithContext(ctx).Preload("Application").Preload("Environment").First(&flag, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &flag, nil
+}
+
+// ToggleFlagByID flips a feature flag's enabled state by ID, returning nil if not found.
+func (s *FeatureFlagService) ToggleFlagByID(ctx context.Context, id uuid.UUID) (*FeatureFlag, error) {
+	flag, err := s.GetFlagByID(ctx, id)
+	if err != nil || flag == nil {
+		return flag, err
+	}
+
+	flag.IsEnabled = !flag.IsEnabled
+	if err := s.db.WithContext(ctx).Save(flag).Error; err != nil {
+		return nil, err
+	}
+	if err := s.InvalidateScopeCache(ctx, flag.Application.Name, flag.Environment.Name); err != nil {
+		return nil, err
+	}
+	return flag, nil
+}
+
+// SoftDeleteFlagByID soft-deletes (sets deleted_at) a feature flag by ID,
+// returning nil if not found.
+func (s *FeatureFlagService) SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*FeatureFlag, error) {
+	flag, err := s.GetFlagByID(ctx, id)
+	if err != nil || flag == nil {
+		return flag, err
+	}
+
+	now := time.Now()
+	flag.DeletedAt = &now
+	if err := s.db.WithContext(ctx).Save(flag).Error; err != nil {
+		return nil, err
+	}
+	if err := s.InvalidateScopeCache(ctx, flag.Application.Name, flag.Environment.Name); err != nil {
+		return nil, err
+	}
+	return flag, nil
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
 	"controlplane/internal/config"
 	"controlplane/views/pages"
@@ -23,18 +22,15 @@ func environmentsListHandler(deps *Deps) echo.HandlerFunc {
 		appIDFilter := c.QueryParam("application_id")
 		q := strings.TrimSpace(c.QueryParam("q"))
 
-		query := deps.DB.WithContext(c.Request().Context()).Preload("Application").Order("name")
+		filter := config.ListEnvironmentsFilter{Query: q}
 		if appIDFilter != "" {
-			if _, err := uuid.Parse(appIDFilter); err == nil {
-				query = query.Where("application_id = ?", appIDFilter)
+			if id, err := uuid.Parse(appIDFilter); err == nil {
+				filter.ApplicationID = &id
 			}
 		}
-		if q != "" {
-			query = query.Where("name ILIKE ?", "%"+q+"%")
-		}
 
-		var envs []config.Environment
-		if err := query.Find(&envs).Error; err != nil {
+		envs, err := deps.ConfigService.ListAllEnvironments(c.Request().Context(), filter)
+		if err != nil {
 			return err
 		}
 
@@ -84,9 +80,7 @@ func environmentsListHandler(deps *Deps) echo.HandlerFunc {
 }
 
 func listApplications(ctx context.Context, deps *Deps) ([]config.Application, error) {
-	var apps []config.Application
-	err := deps.DB.WithContext(ctx).Order("name").Find(&apps).Error
-	return apps, err
+	return deps.ConfigService.ListAllApplications(ctx, "")
 }
 
 func environmentCreateHandler(deps *Deps) echo.HandlerFunc {
@@ -113,20 +107,14 @@ func environmentCreateHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		var existing config.Environment
-		err = deps.DB.WithContext(c.Request().Context()).Where("application_id = ? AND name = ?", appID, name).First(&existing).Error
-		if err == nil {
-			return pages.EnvironmentForm(flashes(c), navUser(c), pages.EnvironmentFormData{
-				CSRFToken: csrfToken(c), Applications: apps, Action: "/environments/create/",
-				ApplicationID: applicationID, Name: name, Error: "This application already has an environment with this name.",
-			}).Render(c.Request().Context(), c.Response())
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-
-		env := config.Environment{ApplicationID: appID, Name: name}
-		if err := deps.DB.WithContext(c.Request().Context()).Create(&env).Error; err != nil {
+		env, err := deps.ConfigService.CreateEnvironment(c.Request().Context(), appID, name)
+		if err != nil {
+			if errors.Is(err, config.ErrAlreadyExists) {
+				return pages.EnvironmentForm(flashes(c), navUser(c), pages.EnvironmentFormData{
+					CSRFToken: csrfToken(c), Applications: apps, Action: "/environments/create/",
+					ApplicationID: applicationID, Name: name, Error: "This application already has an environment with this name.",
+				}).Render(c.Request().Context(), c.Response())
+			}
 			return err
 		}
 		deps.Activity.LogCreate(requestContext(c), "environment", env.ID.String(), env.Name, nil)
@@ -141,12 +129,12 @@ func environmentEditHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var env config.Environment
-		if err := deps.DB.WithContext(c.Request().Context()).First(&env, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		env, err := deps.ConfigService.GetEnvironmentByID(c.Request().Context(), id)
+		if err != nil {
 			return err
+		}
+		if env == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 		apps, err := listApplications(c.Request().Context(), deps)
 		if err != nil {
@@ -171,12 +159,11 @@ func environmentEditHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		env.ApplicationID = appID
-		env.Name = name
-		if err := deps.DB.WithContext(c.Request().Context()).Save(&env).Error; err != nil {
+		updated, err := deps.ConfigService.UpdateEnvironment(c.Request().Context(), id, appID, name)
+		if err != nil {
 			return err
 		}
-		deps.Activity.LogUpdate(requestContext(c), "environment", env.ID.String(), env.Name, nil)
+		deps.Activity.LogUpdate(requestContext(c), "environment", updated.ID.String(), updated.Name, nil)
 		AddFlash(c, "success", "Environment updated.")
 		return c.Redirect(http.StatusFound, "/environments/")
 	}
@@ -188,12 +175,12 @@ func environmentDeleteHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var env config.Environment
-		if err := deps.DB.WithContext(c.Request().Context()).Preload("Application").First(&env, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		env, err := deps.ConfigService.GetEnvironmentWithApplicationByID(c.Request().Context(), id)
+		if err != nil {
 			return err
+		}
+		if env == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		if c.Request().Method == http.MethodGet {
@@ -206,7 +193,7 @@ func environmentDeleteHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		if err := deps.DB.WithContext(c.Request().Context()).Delete(&env).Error; err != nil {
+		if _, err := deps.ConfigService.DeleteEnvironment(c.Request().Context(), id); err != nil {
 			return err
 		}
 		deps.Activity.LogDelete(requestContext(c), "environment", env.ID.String(), env.Name, nil)

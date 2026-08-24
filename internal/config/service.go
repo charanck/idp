@@ -549,6 +549,113 @@ func (s *ConfigService) ListConfigsForClient(ctx context.Context, service, envir
 	return result, nil
 }
 
+// GetConfigByID returns a config entry by ID with its Application/Environment
+// preloaded, or nil if not found.
+func (s *ConfigService) GetConfigByID(ctx context.Context, id uuid.UUID) (*ConfigEntry, error) {
+	var entry ConfigEntry
+	err := s.db.WithContext(ctx).Preload("Application").Preload("Environment").First(&entry, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &entry, nil
+}
+
+// ListConfigEntriesFilter filters ListAllConfigEntries.
+type ListConfigEntriesFilter struct {
+	ApplicationID *uuid.UUID
+	EnvironmentID *uuid.UUID
+	IsSecret      *bool
+	Query         string
+}
+
+// ListAllConfigEntries lists config entries (with Application/Environment
+// preloaded) across every service/environment, for the admin config list page.
+func (s *ConfigService) ListAllConfigEntries(ctx context.Context, filter ListConfigEntriesFilter) ([]ConfigEntry, error) {
+	query := s.db.WithContext(ctx).Preload("Application").Preload("Environment").
+		Joins("JOIN applications ON applications.id = config_entries.application_id").
+		Order("applications.name, config_entries.key, config_entries.is_secret, config_entries.type")
+	if filter.ApplicationID != nil {
+		query = query.Where("config_entries.application_id = ?", *filter.ApplicationID)
+	}
+	if filter.EnvironmentID != nil {
+		query = query.Where("config_entries.environment_id = ?", *filter.EnvironmentID)
+	}
+	if filter.IsSecret != nil {
+		query = query.Where("config_entries.is_secret = ?", *filter.IsSecret)
+	}
+	if filter.Query != "" {
+		query = query.Where("config_entries.key ILIKE ?", "%"+filter.Query+"%")
+	}
+	var entries []ConfigEntry
+	if err := query.Find(&entries).Error; err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// UpdateConfigEntryInput bundles UpdateConfigEntry's mutable fields.
+type UpdateConfigEntryInput struct {
+	ApplicationID uuid.UUID
+	EnvironmentID uuid.UUID
+	Key           string
+	Value         string
+	ConfigType    string
+	IsSecret      bool
+	ChangedBy     string
+}
+
+// UpdateConfigEntry mutates a ConfigEntry's fields directly by ID (rather
+// than upserting by service/environment/key scope, like UpsertConfig does),
+// mirroring config_edit's direct-field-update behavior. Returns nil if not found.
+func (s *ConfigService) UpdateConfigEntry(ctx context.Context, id uuid.UUID, in UpdateConfigEntryInput) (*ConfigEntry, error) {
+	var entry ConfigEntry
+	err := s.db.WithContext(ctx).First(&entry, "id = ?", id).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedValue, err := s.encryption.EncryptForStorage(in.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	entry.ApplicationID = in.ApplicationID
+	entry.EnvironmentID = in.EnvironmentID
+	entry.Key = in.Key
+	entry.Type = in.ConfigType
+	entry.IsSecret = in.IsSecret
+	entry.Value = encryptedValue
+	if err := s.db.WithContext(ctx).Save(&entry).Error; err != nil {
+		return nil, err
+	}
+
+	if _, err := s.RecordConfigVersion(ctx, &entry, ActionUpdate, in.ChangedBy); err != nil {
+		return nil, err
+	}
+
+	var app Application
+	if err := s.db.WithContext(ctx).First(&app, "id = ?", entry.ApplicationID).Error; err != nil {
+		return nil, err
+	}
+	var env Environment
+	if err := s.db.WithContext(ctx).First(&env, "id = ?", entry.EnvironmentID).Error; err != nil {
+		return nil, err
+	}
+	if err := s.InvalidateScopeCache(ctx, app.Name, env.Name); err != nil {
+		return nil, err
+	}
+
+	entry.Application = app
+	entry.Environment = env
+	return &entry, nil
+}
+
 // ListServices lists all unique application names used by configs.
 func (s *ConfigService) ListServices(ctx context.Context) ([]string, error) {
 	var names []string

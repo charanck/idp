@@ -1,15 +1,12 @@
 package webui
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
-	"controlplane/internal/auth"
 	"controlplane/internal/session"
 )
 
@@ -34,16 +31,16 @@ func oauthLoginHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var provider auth.OAuthProvider
-		if err := deps.DB.WithContext(c.Request().Context()).First(&provider, "id = ? AND is_active = ?", id, true).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		provider, err := deps.OAuthService.GetActiveProviderByID(c.Request().Context(), id)
+		if err != nil {
 			return err
+		}
+		if provider == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		redirectURI := redirectURIFor(c, provider.ID.String())
-		authURL, state, err := deps.OAuthService.GetAuthorizationURL(&provider, redirectURI)
+		authURL, state, err := deps.OAuthService.GetAuthorizationURL(provider, redirectURI)
 		if err != nil {
 			return err
 		}
@@ -66,12 +63,12 @@ func oauthCallbackHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var provider auth.OAuthProvider
-		if err := deps.DB.WithContext(c.Request().Context()).First(&provider, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		provider, err := deps.OAuthService.GetProviderByID(c.Request().Context(), id)
+		if err != nil {
 			return err
+		}
+		if provider == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		if oauthErr := c.QueryParam("error"); oauthErr != "" {
@@ -96,19 +93,19 @@ func oauthCallbackHandler(deps *Deps) echo.HandlerFunc {
 		ctx := c.Request().Context()
 		redirectURI := redirectURIFor(c, provider.ID.String())
 
-		token, err := deps.OAuthService.ExchangeCodeForToken(ctx, &provider, code, redirectURI)
+		token, err := deps.OAuthService.ExchangeCodeForToken(ctx, provider, code, redirectURI)
 		if err != nil {
 			AddFlash(c, "error", "OAuth login failed: "+err.Error())
 			return c.Redirect(http.StatusFound, "/login/")
 		}
 
-		userInfo, err := deps.OAuthService.GetUserInfo(ctx, &provider, token.AccessToken)
+		userInfo, err := deps.OAuthService.GetUserInfo(ctx, provider, token.AccessToken)
 		if err != nil {
 			AddFlash(c, "error", "OAuth login failed: "+err.Error())
 			return c.Redirect(http.StatusFound, "/login/")
 		}
 
-		user, _, err := deps.OAuthService.AuthenticateOrCreateUser(ctx, &provider, token, userInfo)
+		user, _, err := deps.OAuthService.AuthenticateOrCreateUser(ctx, provider, token, userInfo)
 		if err != nil {
 			AddFlash(c, "error", "OAuth login failed: "+err.Error())
 			return c.Redirect(http.StatusFound, "/login/")

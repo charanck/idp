@@ -5,7 +5,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"controlplane/internal/config"
+	"controlplane/internal/activity"
 	"controlplane/views/pages"
 )
 
@@ -17,19 +17,10 @@ func activityLogHandler(deps *Deps) echo.HandlerFunc {
 		typeFilter := c.QueryParam("type")
 		userFilter := c.QueryParam("user")
 
-		query := deps.DB.WithContext(c.Request().Context()).Model(&config.Activity{}).Order("timestamp DESC")
-		if resourceFilter != "" {
-			query = query.Where("resource = ?", resourceFilter)
-		}
-		if typeFilter != "" {
-			query = query.Where("type = ?", typeFilter)
-		}
-		if userFilter != "" {
-			query = query.Where("user_email ILIKE ?", "%"+userFilter+"%")
-		}
-
-		var activities []config.Activity
-		if err := query.Find(&activities).Error; err != nil {
+		activities, err := deps.Activity.List(c.Request().Context(), activity.ListFilter{
+			Resource: resourceFilter, Type: typeFilter, UserLike: userFilter,
+		})
+		if err != nil {
 			return err
 		}
 
@@ -54,12 +45,12 @@ func activityLogHandler(deps *Deps) echo.HandlerFunc {
 			})
 		}
 
-		var resourceTypes []string
-		if err := deps.DB.WithContext(c.Request().Context()).Model(&config.Activity{}).Order("resource").Distinct("resource").Pluck("resource", &resourceTypes).Error; err != nil {
+		resourceTypes, err := deps.Activity.DistinctResources(c.Request().Context())
+		if err != nil {
 			return err
 		}
-		var actionTypes []string
-		if err := deps.DB.WithContext(c.Request().Context()).Model(&config.Activity{}).Order("type").Distinct("type").Pluck("type", &actionTypes).Error; err != nil {
+		actionTypes, err := deps.Activity.DistinctTypes(c.Request().Context())
+		if err != nil {
 			return err
 		}
 

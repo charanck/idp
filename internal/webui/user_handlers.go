@@ -8,10 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
 	"controlplane/internal/auth"
-	"controlplane/internal/security"
 	"controlplane/views/pages"
 )
 
@@ -22,19 +20,18 @@ func usersListHandler(deps *Deps) echo.HandlerFunc {
 		q := strings.TrimSpace(c.QueryParam("q"))
 		staffFilter := c.QueryParam("staff")
 
-		query := deps.DB.WithContext(c.Request().Context()).Order("created_at DESC")
-		if q != "" {
-			query = query.Where("email ILIKE ?", "%"+q+"%")
-		}
+		var isStaff *bool
 		switch staffFilter {
 		case "yes":
-			query = query.Where("is_staff = true")
+			v := true
+			isStaff = &v
 		case "no":
-			query = query.Where("is_staff = false")
+			v := false
+			isStaff = &v
 		}
 
-		var users []auth.User
-		if err := query.Find(&users).Error; err != nil {
+		users, err := deps.AuthService.ListUsers(c.Request().Context(), q, isStaff)
+		if err != nil {
 			return err
 		}
 
@@ -88,27 +85,13 @@ func userCreateHandler(deps *Deps) echo.HandlerFunc {
 			return reRender("Password must be at least 8 characters long.")
 		}
 
-		var existing auth.User
-		err := deps.DB.WithContext(c.Request().Context()).Where("email = ?", email).First(&existing).Error
-		if err == nil {
-			return reRender("A user with that email already exists.")
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-
-		hashed, err := security.HashPassword(password1)
+		newUser, err := deps.AuthService.CreateUserAdmin(c.Request().Context(), auth.CreateUserAdminInput{
+			Email: email, Username: username, Password: password1, IsActive: c.FormValue("is_active") != "",
+		})
 		if err != nil {
-			return err
-		}
-
-		newUser := auth.User{
-			Email:    email,
-			Username: username,
-			Password: hashed,
-			IsActive: c.FormValue("is_active") != "",
-		}
-		if err := deps.DB.WithContext(c.Request().Context()).Create(&newUser).Error; err != nil {
+			if errors.Is(err, auth.ErrAlreadyExists) {
+				return reRender("A user with that email already exists.")
+			}
 			return err
 		}
 
@@ -127,12 +110,12 @@ func userEditHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var target auth.User
-		if err := deps.DB.WithContext(c.Request().Context()).First(&target, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		target, err := deps.AuthService.GetUserByIDAny(c.Request().Context(), id)
+		if err != nil {
 			return err
+		}
+		if target == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		current := CurrentUser(c)
@@ -170,16 +153,15 @@ func userEditHandler(deps *Deps) echo.HandlerFunc {
 			AddFlash(c, "warning", "You cannot change your own role or active status. Ask another admin to do it.")
 		}
 
-		target.Email = email
-		target.Username = username
-		target.IsActive = newIsActive
-		target.IsStaff = newIsStaff
-		if err := deps.DB.WithContext(c.Request().Context()).Save(&target).Error; err != nil {
+		updated, err := deps.AuthService.UpdateUserAdmin(c.Request().Context(), id, auth.UpdateUserAdminInput{
+			Email: email, Username: username, IsActive: newIsActive, IsStaff: newIsStaff,
+		})
+		if err != nil {
 			return err
 		}
 
-		deps.Activity.LogUpdate(requestContext(c), "user", target.ID.String(), target.Email, nil)
-		AddFlash(c, "success", "User "+target.Email+" updated successfully.")
+		deps.Activity.LogUpdate(requestContext(c), "user", updated.ID.String(), updated.Email, nil)
+		AddFlash(c, "success", "User "+updated.Email+" updated successfully.")
 		return c.Redirect(http.StatusFound, "/users/")
 	}
 }
@@ -190,12 +172,12 @@ func userDeleteHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var target auth.User
-		if err := deps.DB.WithContext(c.Request().Context()).First(&target, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		target, err := deps.AuthService.GetUserByIDAny(c.Request().Context(), id)
+		if err != nil {
 			return err
+		}
+		if target == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		if c.Request().Method == http.MethodGet {
@@ -213,7 +195,7 @@ func userDeleteHandler(deps *Deps) echo.HandlerFunc {
 			return c.Redirect(http.StatusFound, "/users/")
 		}
 
-		if err := deps.DB.WithContext(c.Request().Context()).Delete(&target).Error; err != nil {
+		if _, err := deps.AuthService.DeleteUser(c.Request().Context(), id); err != nil {
 			return err
 		}
 

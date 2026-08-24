@@ -9,9 +9,13 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/redis/go-redis/extra/redisotel/v9"
@@ -27,7 +31,9 @@ import (
 	"controlplane/internal/cache"
 	"controlplane/internal/config"
 	"controlplane/internal/crypto"
+	"controlplane/internal/dashboard"
 	"controlplane/internal/db"
+	"controlplane/internal/notification"
 	"controlplane/internal/observability"
 	"controlplane/internal/ratelimit"
 	"controlplane/internal/security"
@@ -102,8 +108,20 @@ func main() {
 	configService := config.NewConfigService(gdb, encryption, appCache, cacheTimeout)
 	flagService := config.NewFeatureFlagService(gdb, appCache, cacheTimeout)
 	activityLogger := activity.NewLogger(gdb)
+	dashboardService := dashboard.NewService(gdb)
 	limiter := ratelimit.NewLimiter(rdb)
 	sessionStore := session.NewStore(rdb, cfg.SessionSecret, 0)
+
+	notificationSettingsService := notification.NewProviderSettingService(gdb, encryption)
+	notificationTokenIssuer := notification.NewTokenIssuer(encryption)
+	channelRegistry := notification.NewChannelRegistry()
+	asynqClient := notification.NewAsynqClient(rdb)
+	taskEnqueuer := notification.NewTaskEnqueuer(asynqClient)
+	notificationService := notification.NewNotificationService(gdb, taskEnqueuer)
+	sseHub := notification.NewHub(rdb)
+	notificationWorker := notification.NewWorker(notificationService, notificationSettingsService, channelRegistry, sseHub)
+	asynqServer := notification.NewAsynqServer(rdb, asynq.Config{})
+	asynqMux := notification.NewAsynqMux(notificationWorker)
 
 	if err := bootstrapAdmin(gdb, cfg); err != nil {
 		log.Fatalf("bootstrap admin user: %v", err)
@@ -134,15 +152,15 @@ func main() {
 	e.Use(skipForAPI(webui.CSRFProtect()))
 
 	webuiDeps := &webui.Deps{
-		DB:            gdb,
-		AuthService:   authService,
-		OAuthService:  oauthService,
-		ConfigService: configService,
-		FlagService:   flagService,
-		Activity:      activityLogger,
-		RateLimiter:   limiter,
-		Sessions:      sessionStore,
-		Encryption:    encryption,
+		AuthService:          authService,
+		OAuthService:         oauthService,
+		ConfigService:        configService,
+		FlagService:          flagService,
+		Dashboard:            dashboardService,
+		Activity:             activityLogger,
+		NotificationSettings: notificationSettingsService,
+		RateLimiter:          limiter,
+		Sessions:             sessionStore,
 
 		AuthRateLimit:              cfg.AuthRateLimit,
 		AuthRateLimitWindowSeconds: cfg.AuthRateLimitWindowSeconds,
@@ -161,9 +179,42 @@ func main() {
 	apiGroup := e.Group("/api/v1")
 	api.RegisterConfigRoutes(apiGroup.Group("/config"), apiDeps)
 
-	slog.Info("starting server", "port", cfg.Port)
-	if err := e.Start(":" + cfg.Port); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("server error: %v", err)
+	notifDeps := &notification.Deps{
+		Authenticator: auth.ServiceClientAuthenticator{Service: authService},
+		Notifications: notificationService,
+		Channels:      channelRegistry,
+		RateLimiter:   limiter,
+		Hub:           sseHub,
+		TokenIssuer:   notificationTokenIssuer,
+
+		AuthRateLimitWindowSeconds: cfg.AuthRateLimitWindowSeconds,
+		S2SAuthRateLimit:           cfg.S2SAuthRateLimit,
+	}
+	notification.RegisterRoutes(apiGroup.Group("/notifications"), notifDeps)
+
+	go func() {
+		if err := asynqServer.Run(asynqMux); err != nil {
+			slog.Error("asynq server stopped", "err", err)
+		}
+	}()
+
+	go func() {
+		slog.Info("starting server", "port", cfg.Port)
+		if err := e.Start(":" + cfg.Port); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	slog.Info("shutting down")
+	asynqServer.Shutdown()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := e.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server shutdown", "err", err)
 	}
 }
 

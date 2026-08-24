@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
 	"controlplane/internal/config"
 	"controlplane/views/pages"
@@ -28,8 +27,8 @@ type environmentOption struct {
 // cascading application->environment <select> reads client-side, mirroring
 // web_ui/views.py's _environments_by_application().
 func environmentsByApplicationJSON(ctx context.Context, deps *Deps) (string, error) {
-	var envs []config.Environment
-	if err := deps.DB.WithContext(ctx).Order("name").Find(&envs).Error; err != nil {
+	envs, err := deps.ConfigService.ListAllEnvironments(ctx, config.ListEnvironmentsFilter{})
+	if err != nil {
 		return "", err
 	}
 	byApp := map[string][]environmentOption{}
@@ -51,31 +50,28 @@ func configsListHandler(deps *Deps) echo.HandlerFunc {
 		secretFilter := c.QueryParam("secret")
 		q := strings.TrimSpace(c.QueryParam("q"))
 
-		query := deps.DB.WithContext(c.Request().Context()).Preload("Application").Preload("Environment").
-			Joins("JOIN applications ON applications.id = config_entries.application_id").
-			Order("applications.name, config_entries.key, config_entries.is_secret, config_entries.type")
+		filter := config.ListConfigEntriesFilter{Query: q}
 		if appIDFilter != "" {
-			if _, err := uuid.Parse(appIDFilter); err == nil {
-				query = query.Where("config_entries.application_id = ?", appIDFilter)
+			if id, err := uuid.Parse(appIDFilter); err == nil {
+				filter.ApplicationID = &id
 			}
 		}
 		if envIDFilter != "" {
-			if _, err := uuid.Parse(envIDFilter); err == nil {
-				query = query.Where("config_entries.environment_id = ?", envIDFilter)
+			if id, err := uuid.Parse(envIDFilter); err == nil {
+				filter.EnvironmentID = &id
 			}
 		}
 		switch secretFilter {
 		case "secret":
-			query = query.Where("config_entries.is_secret = true")
+			v := true
+			filter.IsSecret = &v
 		case "config":
-			query = query.Where("config_entries.is_secret = false")
-		}
-		if q != "" {
-			query = query.Where("config_entries.key ILIKE ?", "%"+q+"%")
+			v := false
+			filter.IsSecret = &v
 		}
 
-		var entries []config.ConfigEntry
-		if err := query.Find(&entries).Error; err != nil {
+		entries, err := deps.ConfigService.ListAllConfigEntries(c.Request().Context(), filter)
+		if err != nil {
 			return err
 		}
 
@@ -166,8 +162,11 @@ func upsertConfigFromForm(deps *Deps, c echo.Context, historyAction string) erro
 	if err != nil {
 		return errors.New("application is required")
 	}
-	var app config.Application
-	if err := deps.DB.WithContext(c.Request().Context()).First(&app, "id = ?", appID).Error; err != nil {
+	app, err := deps.ConfigService.GetApplicationByID(c.Request().Context(), appID)
+	if err != nil {
+		return err
+	}
+	if app == nil {
 		return errors.New("application not found")
 	}
 
@@ -186,8 +185,8 @@ func upsertConfigFromForm(deps *Deps, c echo.Context, historyAction string) erro
 	opts := config.UpsertOptions{IsSecret: isSecret, ConfigType: cfgType, ChangedBy: changedBy, HistoryAction: historyAction}
 
 	if c.FormValue("submit_action") == "create_all_env" {
-		var envs []config.Environment
-		if err := deps.DB.WithContext(c.Request().Context()).Where("application_id = ?", appID).Find(&envs).Error; err != nil {
+		envs, err := deps.ConfigService.ListEnvironmentsByApplicationID(c.Request().Context(), appID)
+		if err != nil {
 			return err
 		}
 		if len(envs) == 0 {
@@ -205,8 +204,11 @@ func upsertConfigFromForm(deps *Deps, c echo.Context, historyAction string) erro
 	if err != nil {
 		return errors.New("environment is required")
 	}
-	var env config.Environment
-	if err := deps.DB.WithContext(c.Request().Context()).First(&env, "id = ? AND application_id = ?", envID, appID).Error; err != nil {
+	env, err := deps.ConfigService.GetEnvironmentByID(c.Request().Context(), envID)
+	if err != nil {
+		return err
+	}
+	if env == nil || env.ApplicationID != appID {
 		return errors.New("environment not found for the selected application")
 	}
 
@@ -254,12 +256,12 @@ func configCloneHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var entry config.ConfigEntry
-		if err := deps.DB.WithContext(c.Request().Context()).Preload("Application").First(&entry, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		entry, err := deps.ConfigService.GetConfigByID(c.Request().Context(), id)
+		if err != nil {
 			return err
+		}
+		if entry == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		apps, envJSON, err := loadConfigFormApps(c.Request().Context(), deps)
@@ -271,7 +273,7 @@ func configCloneHandler(deps *Deps) echo.HandlerFunc {
 		if c.Request().Method == http.MethodGet {
 			value := ""
 			if !entry.IsSecret {
-				value = deps.ConfigService.DecryptConfigValueOrOriginal(&entry)
+				value = deps.ConfigService.DecryptConfigValueOrOriginal(entry)
 			}
 			return pages.ConfigForm(flashes(c), navUser(c), pages.ConfigFormData{
 				CSRFToken: csrfToken(c), Applications: apps, EnvironmentsByAppJSON: envJSON,
@@ -290,20 +292,21 @@ func configCloneHandler(deps *Deps) echo.HandlerFunc {
 	}
 }
 
-// configEditHandler mutates the ConfigEntry directly rather than going
-// through ConfigService.UpsertConfig, mirroring web_ui/views.py's config_edit.
+// configEditHandler mutates the ConfigEntry directly (via
+// ConfigService.UpdateConfigEntry) rather than going through
+// ConfigService.UpsertConfig, mirroring web_ui/views.py's config_edit.
 func configEditHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var entry config.ConfigEntry
-		if err := deps.DB.WithContext(c.Request().Context()).First(&entry, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		entry, err := deps.ConfigService.GetConfigByID(c.Request().Context(), id)
+		if err != nil {
 			return err
+		}
+		if entry == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		apps, envJSON, err := loadConfigFormApps(c.Request().Context(), deps)
@@ -315,7 +318,7 @@ func configEditHandler(deps *Deps) echo.HandlerFunc {
 		if c.Request().Method == http.MethodGet {
 			value := ""
 			if !entry.IsSecret {
-				value = deps.ConfigService.DecryptConfigValueOrOriginal(&entry)
+				value = deps.ConfigService.DecryptConfigValueOrOriginal(entry)
 			}
 			return pages.ConfigForm(flashes(c), navUser(c), pages.ConfigFormData{
 				CSRFToken: csrfToken(c), Applications: apps, EnvironmentsByAppJSON: envJSON,
@@ -333,12 +336,18 @@ func configEditHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return rePopulateConfigEditForm(c, apps, envJSON, action, "environment is required")
 		}
-		var env config.Environment
-		if err := deps.DB.WithContext(c.Request().Context()).First(&env, "id = ? AND application_id = ?", envID, appID).Error; err != nil {
+		env, err := deps.ConfigService.GetEnvironmentByID(c.Request().Context(), envID)
+		if err != nil {
+			return err
+		}
+		if env == nil || env.ApplicationID != appID {
 			return rePopulateConfigEditForm(c, apps, envJSON, action, "environment not found for the selected application")
 		}
-		var app config.Application
-		if err := deps.DB.WithContext(c.Request().Context()).First(&app, "id = ?", appID).Error; err != nil {
+		app, err := deps.ConfigService.GetApplicationByID(c.Request().Context(), appID)
+		if err != nil {
+			return err
+		}
+		if app == nil {
 			return rePopulateConfigEditForm(c, apps, envJSON, action, "application not found")
 		}
 
@@ -347,29 +356,16 @@ func configEditHandler(deps *Deps) echo.HandlerFunc {
 			return rePopulateConfigEditForm(c, apps, envJSON, action, "key is required")
 		}
 
-		encryptedValue, err := deps.Encryption.EncryptForStorage(c.FormValue("value"))
-		if err != nil {
-			return err
-		}
-
-		entry.ApplicationID = appID
-		entry.EnvironmentID = envID
-		entry.Key = key
-		entry.Type = c.FormValue("type")
-		entry.IsSecret = c.FormValue("is_secret") != ""
-		entry.Value = encryptedValue
-		if err := deps.DB.WithContext(c.Request().Context()).Save(&entry).Error; err != nil {
-			return err
-		}
-
 		changedBy := ""
 		if user := CurrentUser(c); user != nil {
 			changedBy = user.Email
 		}
-		if _, err := deps.ConfigService.RecordConfigVersion(c.Request().Context(), &entry, config.ActionUpdate, changedBy); err != nil {
-			return err
-		}
-		if err := deps.ConfigService.InvalidateScopeCache(c.Request().Context(), app.Name, env.Name); err != nil {
+
+		if _, err := deps.ConfigService.UpdateConfigEntry(c.Request().Context(), id, config.UpdateConfigEntryInput{
+			ApplicationID: appID, EnvironmentID: envID, Key: key,
+			Value: c.FormValue("value"), ConfigType: c.FormValue("type"),
+			IsSecret: c.FormValue("is_secret") != "", ChangedBy: changedBy,
+		}); err != nil {
 			return err
 		}
 
@@ -391,12 +387,12 @@ func configDeleteHandler(deps *Deps) echo.HandlerFunc {
 		if parseErr != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var entry config.ConfigEntry
-		if err := deps.DB.WithContext(c.Request().Context()).Preload("Application").Preload("Environment").First(&entry, "id = ?", parsedID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		entry, err := deps.ConfigService.GetConfigByID(c.Request().Context(), parsedID)
+		if err != nil {
 			return err
+		}
+		if entry == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		if c.Request().Method == http.MethodGet {
@@ -429,12 +425,12 @@ func configHistoryHandler(deps *Deps) echo.HandlerFunc {
 		if parseErr != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var entry config.ConfigEntry
-		if err := deps.DB.WithContext(c.Request().Context()).Preload("Application").Preload("Environment").First(&entry, "id = ?", parsedID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		entry, err := deps.ConfigService.GetConfigByID(c.Request().Context(), parsedID)
+		if err != nil {
 			return err
+		}
+		if entry == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		versions, err := deps.ConfigService.GetConfigHistory(c.Request().Context(), id)

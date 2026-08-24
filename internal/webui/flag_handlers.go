@@ -5,11 +5,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
 
 	"controlplane/internal/config"
 	"controlplane/views/pages"
@@ -23,29 +21,28 @@ func flagsListHandler(deps *Deps) echo.HandlerFunc {
 		envIDFilter := c.QueryParam("environment_id")
 		statusFilter := c.QueryParam("status")
 
-		query := deps.DB.WithContext(c.Request().Context()).Preload("Application").Preload("Environment").
-			Joins("JOIN applications ON applications.id = feature_flags.application_id").
-			Where("feature_flags.deleted_at IS NULL").
-			Order("applications.name, feature_flags.name, feature_flags.description")
+		filter := config.ListFlagsFilter{}
 		if appIDFilter != "" {
-			if _, err := uuid.Parse(appIDFilter); err == nil {
-				query = query.Where("feature_flags.application_id = ?", appIDFilter)
+			if id, err := uuid.Parse(appIDFilter); err == nil {
+				filter.ApplicationID = &id
 			}
 		}
 		if envIDFilter != "" {
-			if _, err := uuid.Parse(envIDFilter); err == nil {
-				query = query.Where("feature_flags.environment_id = ?", envIDFilter)
+			if id, err := uuid.Parse(envIDFilter); err == nil {
+				filter.EnvironmentID = &id
 			}
 		}
 		switch statusFilter {
 		case "enabled":
-			query = query.Where("feature_flags.is_enabled = true")
+			enabled := true
+			filter.IsEnabled = &enabled
 		case "disabled":
-			query = query.Where("feature_flags.is_enabled = false")
+			disabled := false
+			filter.IsEnabled = &disabled
 		}
 
-		var flags []config.FeatureFlag
-		if err := query.Find(&flags).Error; err != nil {
+		flags, err := deps.FlagService.ListAllFlags(c.Request().Context(), filter)
+		if err != nil {
 			return err
 		}
 
@@ -137,8 +134,11 @@ func flagCreateHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return reRender("Application is required.")
 		}
-		var app config.Application
-		if err := deps.DB.WithContext(c.Request().Context()).First(&app, "id = ?", appID).Error; err != nil {
+		app, err := deps.ConfigService.GetApplicationByID(c.Request().Context(), appID)
+		if err != nil {
+			return err
+		}
+		if app == nil {
 			return reRender("Application not found.")
 		}
 
@@ -175,29 +175,21 @@ func flagCreateHandler(deps *Deps) echo.HandlerFunc {
 	}
 }
 
-// flagToggleHandler mirrors web_ui/views.py's flag_toggle: a direct
-// fetch-by-ID/flip/save, not FeatureFlagService.ToggleFlag (which looks up
-// by service/environment/name strings, not by primary key).
+// flagToggleHandler flips a flag's enabled state by primary key, mirroring
+// web_ui/views.py's flag_toggle (not FeatureFlagService.ToggleFlag, which
+// looks up by service/environment/name strings instead).
 func flagToggleHandler(deps *Deps) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var flag config.FeatureFlag
-		if err := deps.DB.WithContext(c.Request().Context()).Preload("Application").Preload("Environment").First(&flag, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		flag, err := deps.FlagService.ToggleFlagByID(c.Request().Context(), id)
+		if err != nil {
 			return err
 		}
-
-		flag.IsEnabled = !flag.IsEnabled
-		if err := deps.DB.WithContext(c.Request().Context()).Save(&flag).Error; err != nil {
-			return err
-		}
-		if err := deps.FlagService.InvalidateScopeCache(c.Request().Context(), flag.Application.Name, flag.Environment.Name); err != nil {
-			return err
+		if flag == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		deps.Activity.LogToggle(requestContext(c), "feature_flag", flag.ID.String(), flag.Name, map[string]any{"is_enabled": flag.IsEnabled})
@@ -214,12 +206,12 @@ func flagDeleteHandler(deps *Deps) echo.HandlerFunc {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
-		var flag config.FeatureFlag
-		if err := deps.DB.WithContext(c.Request().Context()).Preload("Application").Preload("Environment").First(&flag, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return echo.NewHTTPError(http.StatusNotFound)
-			}
+		flag, err := deps.FlagService.GetFlagByID(c.Request().Context(), id)
+		if err != nil {
 			return err
+		}
+		if flag == nil {
+			return echo.NewHTTPError(http.StatusNotFound)
 		}
 
 		if c.Request().Method == http.MethodGet {
@@ -232,15 +224,9 @@ func flagDeleteHandler(deps *Deps) echo.HandlerFunc {
 			}).Render(c.Request().Context(), c.Response())
 		}
 
-		now := time.Now()
-		flag.DeletedAt = &now
-		if err := deps.DB.WithContext(c.Request().Context()).Save(&flag).Error; err != nil {
+		if _, err := deps.FlagService.SoftDeleteFlagByID(c.Request().Context(), id); err != nil {
 			return err
 		}
-		if err := deps.FlagService.InvalidateScopeCache(c.Request().Context(), flag.Application.Name, flag.Environment.Name); err != nil {
-			return err
-		}
-
 		deps.Activity.LogDelete(requestContext(c), "feature_flag", flag.ID.String(), flag.Name, nil)
 		AddFlash(c, "success", "Feature flag deleted.")
 		return c.Redirect(http.StatusFound, "/flags/")

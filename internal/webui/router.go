@@ -85,6 +85,10 @@ func RegisterRoutes(e *echo.Echo, deps *Deps) {
 	admin.POST("/oauth/providers/:id/delete/", oauthProviderDeleteHandler(deps))
 	admin.POST("/oauth/providers/:id/toggle/", oauthProviderToggleHandler(deps))
 
+	admin.GET("/notification-settings/", notificationSettingsListHandler(deps))
+	admin.GET("/notification-settings/:channel/edit/", notificationSettingEditHandler(deps))
+	admin.POST("/notification-settings/:channel/edit/", notificationSettingEditHandler(deps))
+
 	admin.GET("/activity/", activityLogHandler(deps))
 
 	e.GET("/oauth/login/:id/", oauthLoginHandler(deps))
