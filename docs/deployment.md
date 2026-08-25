@@ -2,7 +2,8 @@
 
 ## Docker image
 
-The [`Dockerfile`](../Dockerfile) is a multi-stage, production-ready build:
+The [`Dockerfile`](https://github.com/charanck/idp/blob/master/Dockerfile) is a multi-stage,
+production-ready build:
 
 - **Builder stage** compiles a static Go binary (`CGO_ENABLED=0`) — no runtime Go toolchain ships
   in the final image.
@@ -11,8 +12,9 @@ The [`Dockerfile`](../Dockerfile) is a multi-stage, production-ready build:
   server).
 - A `HEALTHCHECK` hits `/` with `curl`.
 - Schema migrations and admin user provisioning run automatically on startup, guarded by a
-  Postgres advisory lock (see [`internal/db/db.go`](../internal/db/db.go)) — safe for
-  multiple replicas starting concurrently.
+  Postgres advisory lock (see
+  [`internal/db/db.go`](https://github.com/charanck/idp/blob/master/internal/db/db.go)) — safe
+  for multiple replicas starting concurrently.
 
 ```bash
 docker build -t idp:local .
@@ -27,7 +29,7 @@ cp .env.example .env
 docker compose -f docker-compose.local.yml --env-file .env up --build
 ```
 
-This builds the image from [`Dockerfile`](../Dockerfile) and brings up Postgres and
+This builds the image from [`Dockerfile`](https://github.com/charanck/idp/blob/master/Dockerfile) and brings up Postgres and
 Redis alongside the app — everything needed to run IDP locally with no other setup. The app is
 available at http://localhost:8000/ once the containers are healthy.
 
@@ -49,7 +51,8 @@ See [Configuration](./configuration.md) for the full environment variable refere
 
 ## GHCR release publishing
 
-A GitHub Actions workflow ([`.github/workflows/release-ghcr.yml`](../.github/workflows/release-ghcr.yml))
+A GitHub Actions workflow
+([`.github/workflows/release-ghcr.yml`](https://github.com/charanck/idp/blob/master/.github/workflows/release-ghcr.yml))
 publishes a container image to GHCR when you push a tag matching `release-*` or `release/*`:
 
 ```bash
@@ -58,4 +61,4 @@ git push origin release-1.0.0
 ```
 
 Published as `ghcr.io/<owner>/<repo>:release-1.0.0` and `ghcr.io/<owner>/<repo>:latest`, built from
-[`Dockerfile`](../Dockerfile).
+[`Dockerfile`](https://github.com/charanck/idp/blob/master/Dockerfile).

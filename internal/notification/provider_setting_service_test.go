@@ -20,7 +20,7 @@ func newTestProviderSettingService(t *testing.T) *notification.ProviderSettingSe
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	return notification.NewProviderSettingService(gdb, crypto.NewEncryptionService(masterKey))
+	return notification.NewProviderSettingService(notification.NewProviderSettingRepository(gdb), crypto.NewEncryptionService(masterKey))
 }
 
 func TestProviderSettingUpsert_CreatesThenUpdates(t *testing.T) {

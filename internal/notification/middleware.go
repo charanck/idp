@@ -39,20 +39,39 @@ func (f AuthenticatorFunc) Authenticate(ctx context.Context, apiKey string) (str
 const contextKeySubject = "notification_subject"
 
 // SubjectFromContext returns the calling client's identity authenticated by
-// APIKeyAuth for this request, or "" if none.
+// APIKeyAuthMiddleware for this request, or "" if none.
 func SubjectFromContext(c echo.Context) string {
 	subject, _ := c.Get(contextKeySubject).(string)
 	return subject
 }
 
-// APIKeyAuth authenticates the "X-API-Key: <key_id>.<secret>" S2S header via
-// the configured Authenticator (in production, auth.AuthService's
+// RateLimiter is the narrow slice of *ratelimit.Limiter that
+// APIKeyAuthMiddleware needs. This is its own copy of internal/api's
+// RateLimiter rather than a shared extraction, matching this package's
+// existing self-contained-ness (see Authenticator's doc comment).
+type RateLimiter interface {
+	IsRateLimited(ctx context.Context, key, clientIP string, limit int, window time.Duration) (bool, error)
+}
+
+// APIKeyAuthMiddleware authenticates the "X-API-Key: <key_id>.<secret>" S2S
+// header via the configured Authenticator (in production, auth.AuthService's
 // service-client verification), throttled by a plain fixed-window request
-// counter per client IP. This is its own copy of internal/api's APIKeyAuth
-// rather than a shared extraction - internal/api is scoped to the config API
-// by its own doc comment, and this repo favors small self-contained packages
-// over premature sharing.
-func APIKeyAuth(deps *Deps) echo.MiddlewareFunc {
+// counter per client IP. This is its own copy of internal/api's
+// APIKeyAuthMiddleware rather than a shared extraction - internal/api is
+// scoped to the config API by its own doc comment, and this repo favors
+// small self-contained packages over premature sharing.
+type APIKeyAuthMiddleware struct {
+	authenticator Authenticator
+	limiter       RateLimiter
+	windowSeconds int
+	limit         int
+}
+
+func NewAPIKeyAuthMiddleware(authenticator Authenticator, limiter RateLimiter, windowSeconds, limit int) *APIKeyAuthMiddleware {
+	return &APIKeyAuthMiddleware{authenticator: authenticator, limiter: limiter, windowSeconds: windowSeconds, limit: limit}
+}
+
+func (m *APIKeyAuthMiddleware) Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			apiKey := c.Request().Header.Get("X-API-Key")
@@ -61,17 +80,17 @@ func APIKeyAuth(deps *Deps) echo.MiddlewareFunc {
 			}
 
 			clientIP := ratelimit.ClientIP(c.Request().Header.Get("X-Forwarded-For"), c.RealIP())
-			window := time.Duration(deps.AuthRateLimitWindowSeconds) * time.Second
-			limited, err := deps.RateLimiter.IsRateLimited(c.Request().Context(), s2sRateLimitBucket, clientIP, deps.S2SAuthRateLimit, window)
+			window := time.Duration(m.windowSeconds) * time.Second
+			limited, err := m.limiter.IsRateLimited(c.Request().Context(), s2sRateLimitBucket, clientIP, m.limit, window)
 			if err != nil {
 				return err
 			}
 			if limited {
-				c.Response().Header().Set("Retry-After", strconv.Itoa(deps.AuthRateLimitWindowSeconds))
+				c.Response().Header().Set("Retry-After", strconv.Itoa(m.windowSeconds))
 				return c.String(http.StatusTooManyRequests, "Too many requests. Please try again later.")
 			}
 
-			subject, err := deps.Authenticator.Authenticate(c.Request().Context(), apiKey)
+			subject, err := m.authenticator.Authenticate(c.Request().Context(), apiKey)
 			if err != nil {
 				return err
 			}
@@ -85,3 +104,5 @@ func APIKeyAuth(deps *Deps) echo.MiddlewareFunc {
 		}
 	}
 }
+
+var _ RateLimiter = (*ratelimit.Limiter)(nil)

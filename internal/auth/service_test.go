@@ -14,7 +14,7 @@ func setup(t *testing.T) (*gorm.DB, *auth.AuthService) {
 	t.Helper()
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
-	return gdb, auth.NewAuthService(gdb)
+	return gdb, auth.NewAuthService(auth.NewUserRepository(gdb), auth.NewServiceClientRepository(gdb))
 }
 
 func TestRegisterUser_CreatesInactiveUser(t *testing.T) {

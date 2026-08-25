@@ -20,7 +20,8 @@ issue. Include reproduction steps and impact; you'll get a response before any p
 - **No self privilege-escalation** — admin (`is_staff`) users cannot change their own
   `is_staff`/`is_active` flags through the web UI; role changes must come from a different admin.
 - **Rate limiting** — brute-force/credential-stuffing protection on `POST /login/`, plus separate
-  throttling of failed S2S API-key attempts. See [Configuration](./configuration.md#rate-limiting).
+  per-client-IP throttling of S2S API-key requests (every request counts toward the window, not
+  just failed ones). See [Configuration](./configuration.md#rate-limiting).
 
 ## Deployment hygiene
 

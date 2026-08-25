@@ -1,7 +1,8 @@
 # Configuration
 
 All configuration is via environment variables, loaded from `.env` in development (see
-[`.env.example`](../.env.example) for a ready-to-copy template).
+[`.env.example`](https://github.com/charanck/idp/blob/master/.env.example) for a ready-to-copy
+template).
 
 ## Core
 
@@ -56,7 +57,7 @@ server fails to boot if it's unreachable.
 |---|---|---|
 | `AUTH_RATE_LIMIT` | `10` | Max requests per client IP per window, for `POST /login/`. |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | `60` | Window size. |
-| `S2S_AUTH_RATE_LIMIT` | `20` | Max **failed** S2S API-key attempts per client IP per window; valid keys are never throttled. |
+| `S2S_AUTH_RATE_LIMIT` | `20` | Max S2S API-key requests per client IP per window — every request counts toward the limit, whether the key is valid or not. |
 
 See [Architecture](./architecture.md#rate-limiting) for how these are enforced.
 

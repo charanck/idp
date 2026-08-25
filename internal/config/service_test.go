@@ -35,7 +35,7 @@ func setupConfigService(t *testing.T) (*gorm.DB, *config.ConfigService, *crypto.
 	}
 	enc := crypto.NewEncryptionService(masterKey)
 	c := cache.NewRedisCache(rdb, "")
-	svc := config.NewConfigService(gdb, enc, c, 5*time.Minute)
+	svc := config.NewConfigService(config.NewConfigRepository(gdb), config.NewApplicationRepository(gdb), config.NewEnvironmentRepository(gdb), enc, c, 5*time.Minute)
 	return gdb, svc, enc
 }
 

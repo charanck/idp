@@ -21,6 +21,7 @@ import (
 	"controlplane/internal/config"
 	"controlplane/internal/crypto"
 	"controlplane/internal/dashboard"
+	"controlplane/internal/notification"
 	"controlplane/internal/ratelimit"
 	"controlplane/internal/security"
 	"controlplane/internal/session"
@@ -28,10 +29,12 @@ import (
 	"controlplane/internal/webui"
 )
 
-// setupWebUI wires a *webui.Deps against the ephemeral test Postgres +
-// miniredis, and registers every route on a fresh *echo.Echo with the same
-// session/CSRF middleware stack main.go uses for non-API routes.
-func setupWebUI(t *testing.T) (*gorm.DB, *echo.Echo, *webui.Deps) {
+// setupWebUI wires every webui.*Handler against the ephemeral test Postgres
+// + miniredis, and registers every route on a fresh *echo.Echo with the same
+// session/CSRF middleware stack main.go uses for non-API routes. It returns
+// the AuthService directly (rather than a deps bag) since that's the only
+// service tests need to reach into outside of driving routes over HTTP.
+func setupWebUI(t *testing.T) (*gorm.DB, *echo.Echo, *auth.AuthService) {
 	t.Helper()
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
@@ -51,26 +54,37 @@ func setupWebUI(t *testing.T) (*gorm.DB, *echo.Echo, *webui.Deps) {
 	encryption := crypto.NewEncryptionService(masterKey)
 	noopCache := cache.NewNoopCache()
 
-	deps := &webui.Deps{
-		AuthService:   auth.NewAuthService(gdb),
-		OAuthService:  auth.NewOAuthService(gdb),
-		ConfigService: config.NewConfigService(gdb, encryption, noopCache, time.Minute),
-		FlagService:   config.NewFeatureFlagService(gdb, noopCache, time.Minute),
-		Dashboard:     dashboard.NewService(gdb),
-		Activity:      activity.NewLogger(gdb),
-		RateLimiter:   ratelimit.NewLimiter(rdb),
-		Sessions:      session.NewStore(rdb, "test-session-secret", 0),
+	authService := auth.NewAuthService(auth.NewUserRepository(gdb), auth.NewServiceClientRepository(gdb))
+	oauthService := auth.NewOAuthService(auth.NewOAuthProviderRepository(gdb), auth.NewOAuthUserTokenRepository(gdb), auth.NewUserRepository(gdb))
+	configService := config.NewConfigService(config.NewConfigRepository(gdb), config.NewApplicationRepository(gdb), config.NewEnvironmentRepository(gdb), encryption, noopCache, time.Minute)
+	flagService := config.NewFeatureFlagService(config.NewFeatureFlagRepository(gdb), config.NewApplicationRepository(gdb), config.NewEnvironmentRepository(gdb), noopCache, time.Minute)
+	dashboardService := dashboard.NewService(dashboard.NewRepository(gdb))
+	activityLogger := activity.NewLogger(activity.NewRepository(gdb))
+	rateLimiter := ratelimit.NewLimiter(rdb)
+	sessions := session.NewStore(rdb, "test-session-secret", 0)
 
-		AuthRateLimit:              1000,
-		AuthRateLimitWindowSeconds: 60,
+	authMW := webui.NewAuthMiddleware(authService)
+	h := &webui.Handlers{
+		Dashboard:            webui.NewDashboardHandler(dashboardService),
+		Activity:             webui.NewActivityHandler(activityLogger),
+		Application:          webui.NewApplicationHandler(configService, activityLogger),
+		Environment:          webui.NewEnvironmentHandler(configService, configService, activityLogger),
+		Config:               webui.NewConfigHandler(configService, configService, configService, activityLogger),
+		Flag:                 webui.NewFlagHandler(flagService, configService, configService, activityLogger),
+		Client:               webui.NewClientHandler(authService, activityLogger),
+		User:                 webui.NewUserHandler(authService, activityLogger),
+		Auth:                 webui.NewAuthHandler(authService, oauthService, rateLimiter, activityLogger, 1000, 60),
+		OAuthLogin:           webui.NewOAuthLoginHandler(oauthService, activityLogger),
+		OAuthProvider:        webui.NewOAuthProviderHandler(oauthService, activityLogger),
+		NotificationSettings: webui.NewNotificationSettingsHandler(notification.NewProviderSettingService(notification.NewProviderSettingRepository(gdb), encryption), activityLogger),
 	}
 
 	e := echo.New()
-	e.Use(deps.Sessions.Middleware())
+	e.Use(sessions.Middleware())
 	e.Use(webui.CSRFProtect())
-	webui.RegisterRoutes(e, deps)
+	webui.RegisterRoutes(e, h, authMW)
 
-	return gdb, e, deps
+	return gdb, e, authService
 }
 
 // newTestClient returns an http.Client with a cookie jar (for session

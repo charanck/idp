@@ -115,5 +115,6 @@ history responses, only that a version changed, when, and by whom.
 
 A fixed-window limiter (`internal/ratelimit`, Redis-backed) throttles `POST /login/` per client IP
 (`AUTH_RATE_LIMIT`/`AUTH_RATE_LIMIT_WINDOW_SECONDS`). S2S API-key auth (`X-API-Key`, used by both
-endpoints under `/api/v1/config/...`) is separately throttled **on failed attempts only**, per
-client IP, via `S2S_AUTH_RATE_LIMIT` — a valid key is never throttled, only guessing.
+endpoints under `/api/v1/config/...`) is separately throttled per client IP via
+`S2S_AUTH_RATE_LIMIT` — **every request counts toward the window**, whether the key is valid or
+not; there is no separate failed-only tracking.

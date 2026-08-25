@@ -20,12 +20,14 @@ import (
 // details (endpoints, scopes) coming entirely from the OAuthProvider model
 // rather than a specific provider's SDK.
 type OAuthService struct {
-	db         *gorm.DB
+	providers  OAuthProviderRepository
+	tokens     OAuthUserTokenRepository
+	users      UserRepository
 	httpClient *http.Client
 }
 
-func NewOAuthService(db *gorm.DB) *OAuthService {
-	return &OAuthService{db: db, httpClient: http.DefaultClient}
+func NewOAuthService(providers OAuthProviderRepository, tokens OAuthUserTokenRepository, users UserRepository) *OAuthService {
+	return &OAuthService{providers: providers, tokens: tokens, users: users, httpClient: http.DefaultClient}
 }
 
 func (s *OAuthService) oauth2Config(provider *OAuthProvider, redirectURI string) *oauth2.Config {
@@ -101,8 +103,6 @@ func (s *OAuthService) GetUserInfo(ctx context.Context, provider *OAuthProvider,
 // provider's token/userinfo response, mirroring
 // OAuthService.authenticate_or_create_user().
 func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *OAuthProvider, token *oauth2.Token, userInfo map[string]any) (*User, *OAuthUserToken, error) {
-	db := s.db.WithContext(ctx)
-
 	providerUserID, _ := firstNonEmpty(userInfo, "sub", "id")
 	email, _ := stringField(userInfo, "email")
 
@@ -113,13 +113,12 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *O
 		return nil, nil, errors.New("provider did not return email")
 	}
 
-	var existingToken OAuthUserToken
-	err := db.Where("provider_id = ? AND provider_user_id = ?", provider.ID, providerUserID).First(&existingToken).Error
+	existingToken, err := s.tokens.FindByProviderAndProviderUserID(ctx, provider.ID, providerUserID)
 
 	switch {
 	case err == nil:
-		var user User
-		if err := db.First(&user, "id = ?", existingToken.UserID).Error; err != nil {
+		user, err := s.users.FindByID(ctx, existingToken.UserID)
+		if err != nil {
 			return nil, nil, err
 		}
 
@@ -136,30 +135,29 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *O
 			exp := token.Expiry
 			existingToken.ExpiresAt = &exp
 		}
-		if err := db.Save(&existingToken).Error; err != nil {
+		if err := s.tokens.Update(ctx, existingToken); err != nil {
 			return nil, nil, err
 		}
-		return &user, &existingToken, nil
+		return user, existingToken, nil
 
 	case errors.Is(err, gorm.ErrRecordNotFound):
-		var user User
-		userErr := db.Where("email = ?", email).First(&user).Error
+		user, userErr := s.users.FindByEmail(ctx, email)
 		if errors.Is(userErr, gorm.ErrRecordNotFound) {
 			if !provider.AutoCreateUsers {
 				return nil, nil, errors.New("user does not exist and auto-creation is disabled")
 			}
-			username, genErr := uniqueUsernameFromEmail(db, email)
+			username, genErr := s.uniqueUsernameFromEmail(ctx, email)
 			if genErr != nil {
 				return nil, nil, genErr
 			}
-			user = User{
+			user = &User{
 				ID:       uuid.New(),
 				Email:    email,
 				Username: username,
 				IsActive: false,
 				Password: "!unusable", // mirrors Django's set_unusable_password(): no valid hash will ever match this.
 			}
-			if err := db.Create(&user).Error; err != nil {
+			if err := s.users.Create(ctx, user); err != nil {
 				return nil, nil, err
 			}
 		} else if userErr != nil {
@@ -180,7 +178,7 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *O
 			tokenType = "Bearer"
 		}
 
-		newToken := OAuthUserToken{
+		newToken := &OAuthUserToken{
 			ID:                uuid.New(),
 			UserID:            user.ID,
 			ProviderID:        provider.ID,
@@ -191,23 +189,23 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *O
 			ProviderUserID:    providerUserID,
 			ProviderUserEmail: &email,
 		}
-		if err := db.Create(&newToken).Error; err != nil {
+		if err := s.tokens.Create(ctx, newToken); err != nil {
 			return nil, nil, err
 		}
-		return &user, &newToken, nil
+		return user, newToken, nil
 
 	default:
 		return nil, nil, err
 	}
 }
 
-func uniqueUsernameFromEmail(db *gorm.DB, email string) (string, error) {
+func (s *OAuthService) uniqueUsernameFromEmail(ctx context.Context, email string) (string, error) {
 	base, _, _ := strings.Cut(email, "@")
 	username := base
 	counter := 1
 	for {
-		var count int64
-		if err := db.Model(&User{}).Where("username = ?", username).Count(&count).Error; err != nil {
+		count, err := s.users.CountByUsername(ctx, username)
+		if err != nil {
 			return "", err
 		}
 		if count == 0 {

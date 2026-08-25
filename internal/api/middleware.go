@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -9,15 +10,40 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"controlplane/internal/auth"
 	"controlplane/internal/ratelimit"
 )
 
 const s2sRateLimitBucket = "s2s-api-key"
 
-// APIKeyAuth authenticates the "X-API-Key: <key_id>.<secret>" S2S header,
-// throttled by a plain fixed-window request counter per client IP (every
-// request counts toward the window, not just failed ones).
-func APIKeyAuth(deps *Deps) echo.MiddlewareFunc {
+// APIKeyAuthenticator is the narrow slice of *auth.AuthService that
+// APIKeyAuthMiddleware needs.
+type APIKeyAuthenticator interface {
+	AuthenticateServiceAPIKey(ctx context.Context, apiKey string) (*auth.ServiceClient, error)
+}
+
+// RateLimiter is the narrow slice of *ratelimit.Limiter that
+// APIKeyAuthMiddleware needs.
+type RateLimiter interface {
+	IsRateLimited(ctx context.Context, key, clientIP string, limit int, window time.Duration) (bool, error)
+}
+
+// APIKeyAuthMiddleware authenticates the "X-API-Key: <key_id>.<secret>" S2S
+// header, throttled by a plain fixed-window request counter per client IP
+// (every request counts toward the window, not just failed ones).
+type APIKeyAuthMiddleware struct {
+	authenticator APIKeyAuthenticator
+	limiter       RateLimiter
+	windowSeconds int
+	limit         int
+}
+
+func NewAPIKeyAuthMiddleware(authenticator APIKeyAuthenticator, limiter RateLimiter, windowSeconds, limit int) *APIKeyAuthMiddleware {
+	return &APIKeyAuthMiddleware{authenticator: authenticator, limiter: limiter, windowSeconds: windowSeconds, limit: limit}
+}
+
+// Middleware returns the echo.MiddlewareFunc enforcing S2S API-key auth.
+func (m *APIKeyAuthMiddleware) Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			apiKey := c.Request().Header.Get("X-API-Key")
@@ -26,17 +52,17 @@ func APIKeyAuth(deps *Deps) echo.MiddlewareFunc {
 			}
 
 			clientIP := ratelimit.ClientIP(c.Request().Header.Get("X-Forwarded-For"), c.RealIP())
-			window := time.Duration(deps.AuthRateLimitWindowSeconds) * time.Second
-			limited, err := deps.RateLimiter.IsRateLimited(c.Request().Context(), s2sRateLimitBucket, clientIP, deps.S2SAuthRateLimit, window)
+			window := time.Duration(m.windowSeconds) * time.Second
+			limited, err := m.limiter.IsRateLimited(c.Request().Context(), s2sRateLimitBucket, clientIP, m.limit, window)
 			if err != nil {
 				return err
 			}
 			if limited {
-				c.Response().Header().Set("Retry-After", strconv.Itoa(deps.AuthRateLimitWindowSeconds))
+				c.Response().Header().Set("Retry-After", strconv.Itoa(m.windowSeconds))
 				return c.String(http.StatusTooManyRequests, "Too many requests. Please try again later.")
 			}
 
-			client, err := deps.AuthService.AuthenticateServiceAPIKey(c.Request().Context(), apiKey)
+			client, err := m.authenticator.AuthenticateServiceAPIKey(c.Request().Context(), apiKey)
 			if err != nil {
 				return err
 			}
@@ -54,3 +80,6 @@ func APIKeyAuth(deps *Deps) echo.MiddlewareFunc {
 		}
 	}
 }
+
+var _ APIKeyAuthenticator = (*auth.AuthService)(nil)
+var _ RateLimiter = (*ratelimit.Limiter)(nil)

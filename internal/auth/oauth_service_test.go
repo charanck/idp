@@ -18,7 +18,7 @@ func setupOAuth(t *testing.T) (*gorm.DB, *auth.OAuthService) {
 	t.Helper()
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
-	return gdb, auth.NewOAuthService(gdb)
+	return gdb, auth.NewOAuthService(auth.NewOAuthProviderRepository(gdb), auth.NewOAuthUserTokenRepository(gdb), auth.NewUserRepository(gdb))
 }
 
 func makeProvider(t *testing.T, gdb *gorm.DB, mutate func(*auth.OAuthProvider)) *auth.OAuthProvider {

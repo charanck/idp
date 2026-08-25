@@ -18,7 +18,7 @@ const adminPassword = "password123"
 func TestClientDelete_RequiresAdmin(t *testing.T) {
 	gdb, e, deps := setupWebUI(t)
 	baseURL := newTestServer(t, e)
-	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
+	creds, err := deps.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestClientDelete_GetShowsConfirmationWithoutDeleting(t *testing.T) {
 	gdb, e, deps := setupWebUI(t)
 	baseURL := newTestServer(t, e)
 	createAdminUser(t, gdb, adminEmail, adminPassword)
-	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
+	creds, err := deps.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestClientDelete_PostDeletesClient(t *testing.T) {
 	gdb, e, deps := setupWebUI(t)
 	baseURL := newTestServer(t, e)
 	createAdminUser(t, gdb, adminEmail, adminPassword)
-	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
+	creds, err := deps.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestClientDelete_PostDeletesClient(t *testing.T) {
 func TestClientRegenerateKey_RequiresAdmin(t *testing.T) {
 	gdb, e, deps := setupWebUI(t)
 	baseURL := newTestServer(t, e)
-	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
+	creds, err := deps.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestClientRegenerateKey_PostIssuesANewKey(t *testing.T) {
 	gdb, e, deps := setupWebUI(t)
 	baseURL := newTestServer(t, e)
 	createAdminUser(t, gdb, adminEmail, adminPassword)
-	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
+	creds, err := deps.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestClientRegenerateKey_GetDoesNotChangeTheKey(t *testing.T) {
 	gdb, e, deps := setupWebUI(t)
 	baseURL := newTestServer(t, e)
 	createAdminUser(t, gdb, adminEmail, adminPassword)
-	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
+	creds, err := deps.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)
 	}

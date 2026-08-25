@@ -31,8 +31,8 @@
 - **Rate limiting** on the login endpoint and failed S2S API-key attempts.
 - **Redis-backed caching** for read-heavy config/flag lookups.
 
-See [`docs/`](./docs) for the full architecture, API reference, configuration, deployment, and
-security docs.
+📖 **Full documentation, including per-API guides in cURL/Python/Node.js/Go, is hosted at
+<https://charanck.github.io/idp/>** (source in [`docs/`](./docs)).
 
 ## Quick start
 
@@ -84,18 +84,17 @@ make test
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full dev workflow.
 
-## Client examples
-
-Runnable examples for fetching + decrypting configs/secrets and reading feature flags from
-Python, Go, Node.js, and TypeScript are in [`examples/`](./examples).
-
 ## Documentation
+
+Hosted at **<https://charanck.github.io/idp/>**; source in [`docs/`](./docs).
 
 | | |
 |---|---|
+| [Getting Started](./docs/getting-started.md) | Run it locally in a few minutes. |
 | [Architecture](./docs/architecture.md) | Packages, auth systems, encryption flow, caching, config history/rollback. |
-| [API reference](./docs/api.md) | Endpoints, curl examples, encryption model, OAuth2/OIDC setup. |
 | [Configuration](./docs/configuration.md) | Every environment variable. |
+| Guides | Worked examples (cURL/Python/Node.js/Go) for [config & secrets](./docs/guides/config-and-secrets.md), [feature flags](./docs/guides/feature-flags.md), [notifications](./docs/guides/notifications.md), [SSE](./docs/guides/sse.md), and the [in-app inbox](./docs/guides/inapp-inbox.md). |
+| [API reference](./docs/api.md) | Full endpoint list, auth model, encryption model, OAuth2/OIDC setup. |
 | [Deployment](./docs/deployment.md) | Docker, Docker Compose, production checklist, GHCR releases. |
 | [Security](./docs/security.md) | Security model and vulnerability reporting. |
 

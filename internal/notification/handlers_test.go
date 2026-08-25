@@ -20,7 +20,21 @@ import (
 	"controlplane/internal/testutil"
 )
 
-func setupNotificationAPI(t *testing.T) (*gorm.DB, *echo.Echo, *notification.Deps, *auth.AuthService) {
+// testDeps bundles the constructed services setupNotificationAPI needs to
+// expose to tests (mirrors the old notification.Deps shape now that
+// notification itself only takes narrow per-handler interfaces).
+type testDeps struct {
+	Notifications *notification.NotificationService
+
+	S2SAuthRateLimit int
+}
+
+func setupNotificationAPI(t *testing.T) (*gorm.DB, *echo.Echo, *testDeps, *auth.AuthService) {
+	t.Helper()
+	return setupNotificationAPIWithRateLimit(t, 1000)
+}
+
+func setupNotificationAPIWithRateLimit(t *testing.T, s2sAuthRateLimit int) (*gorm.DB, *echo.Echo, *testDeps, *auth.AuthService) {
 	t.Helper()
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
@@ -33,24 +47,35 @@ func setupNotificationAPI(t *testing.T) (*gorm.DB, *echo.Echo, *notification.Dep
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { rdb.Close() })
 
-	authService := auth.NewAuthService(gdb)
+	authService := auth.NewAuthService(auth.NewUserRepository(gdb), auth.NewServiceClientRepository(gdb))
 	enqueuer := &fakeEnqueuer{}
-	notifications := notification.NewNotificationService(gdb, enqueuer)
+	notifications := notification.NewNotificationService(notification.NewNotificationRepository(gdb), enqueuer)
+	channels := notification.NewChannelRegistry()
+	hub := notification.NewHub(rdb)
+	tokenIssuer := notification.NewTokenIssuer(newTestEncryption(t))
 
-	deps := &notification.Deps{
-		Authenticator:              auth.ServiceClientAuthenticator{Service: authService},
-		Notifications:              notifications,
-		Channels:                   notification.NewChannelRegistry(),
-		RateLimiter:                ratelimit.NewLimiter(rdb),
-		Hub:                        notification.NewHub(rdb),
-		TokenIssuer:                notification.NewTokenIssuer(newTestEncryption(t)),
-		AuthRateLimitWindowSeconds: 60,
-		S2SAuthRateLimit:           1000,
+	deps := &testDeps{
+		Notifications:    notifications,
+		S2SAuthRateLimit: s2sAuthRateLimit,
 	}
+
+	authMW := notification.NewAPIKeyAuthMiddleware(
+		auth.ServiceClientAuthenticator{Service: authService},
+		ratelimit.NewLimiter(rdb),
+		60,
+		deps.S2SAuthRateLimit,
+	)
 
 	e := echo.New()
 	group := e.Group("/api/v1/notifications")
-	notification.RegisterRoutes(group, deps)
+	notification.RegisterRoutes(
+		group,
+		notification.NewNotificationHandler(notifications, notifications, notifications, channels),
+		notification.NewSessionHandler(tokenIssuer),
+		notification.NewSSEHandler(tokenIssuer, hub),
+		notification.NewInAppHandler(tokenIssuer, notifications),
+		authMW,
+	)
 
 	return gdb, e, deps, authService
 }
@@ -260,8 +285,7 @@ func TestInAppUnreadEndpoint_ListsOnlyThatUsersUnreadAndMarksThemRead(t *testing
 }
 
 func TestAPIKeyAuth_UsesSeparateRateLimitBucketFromConfigAPI(t *testing.T) {
-	_, e, deps, authService := setupNotificationAPI(t)
-	deps.S2SAuthRateLimit = 1
+	_, e, _, authService := setupNotificationAPIWithRateLimit(t, 1)
 	creds, err := authService.CreateServiceClient(context.Background(), "notifier-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)

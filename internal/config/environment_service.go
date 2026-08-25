@@ -17,64 +17,44 @@ type ListEnvironmentsFilter struct {
 // ListAllEnvironments lists environments (with Application preloaded),
 // optionally filtered by application and a case-insensitive name substring.
 func (s *ConfigService) ListAllEnvironments(ctx context.Context, filter ListEnvironmentsFilter) ([]Environment, error) {
-	query := s.db.WithContext(ctx).Preload("Application").Order("name")
-	if filter.ApplicationID != nil {
-		query = query.Where("application_id = ?", *filter.ApplicationID)
-	}
-	if filter.Query != "" {
-		query = query.Where("name ILIKE ?", "%"+filter.Query+"%")
-	}
-	var envs []Environment
-	if err := query.Find(&envs).Error; err != nil {
-		return nil, err
-	}
-	return envs, nil
+	return s.envs.List(ctx, filter)
 }
 
 // ListEnvironmentsByApplicationID lists all environments for a single
-// application, unfiltered and unordered beyond name.
+// application, ordered by name.
 func (s *ConfigService) ListEnvironmentsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]Environment, error) {
-	var envs []Environment
-	if err := s.db.WithContext(ctx).Where("application_id = ?", applicationID).Find(&envs).Error; err != nil {
-		return nil, err
-	}
-	return envs, nil
+	return s.envs.ListByApplicationID(ctx, applicationID)
 }
 
 // GetEnvironmentByID returns an environment by ID, or nil if not found.
 func (s *ConfigService) GetEnvironmentByID(ctx context.Context, id uuid.UUID) (*Environment, error) {
-	var env Environment
-	err := s.db.WithContext(ctx).First(&env, "id = ?", id).Error
+	env, err := s.envs.FindByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &env, nil
+	return env, nil
 }
 
 // GetEnvironmentWithApplicationByID returns an environment by ID with its
 // Application preloaded, or nil if not found.
 func (s *ConfigService) GetEnvironmentWithApplicationByID(ctx context.Context, id uuid.UUID) (*Environment, error) {
-	var env Environment
-	err := s.db.WithContext(ctx).Preload("Application").First(&env, "id = ?", id).Error
+	env, err := s.envs.FindByIDWithApplication(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &env, nil
+	return env, nil
 }
 
 // CreateEnvironment creates a new environment under an application, returning
 // ErrAlreadyExists if the application already has an environment with that name.
 func (s *ConfigService) CreateEnvironment(ctx context.Context, applicationID uuid.UUID, name string) (*Environment, error) {
-	db := s.db.WithContext(ctx)
-
-	var existing Environment
-	err := db.Where("application_id = ? AND name = ?", applicationID, name).First(&existing).Error
+	_, err := s.envs.FindByApplicationAndName(ctx, applicationID, name)
 	if err == nil {
 		return nil, ErrAlreadyExists
 	}
@@ -82,11 +62,11 @@ func (s *ConfigService) CreateEnvironment(ctx context.Context, applicationID uui
 		return nil, err
 	}
 
-	env := Environment{ApplicationID: applicationID, Name: name}
-	if err := db.Create(&env).Error; err != nil {
+	env := &Environment{ApplicationID: applicationID, Name: name}
+	if err := s.envs.Create(ctx, env); err != nil {
 		return nil, err
 	}
-	return &env, nil
+	return env, nil
 }
 
 // UpdateEnvironment updates an environment's application/name by ID,
@@ -98,7 +78,7 @@ func (s *ConfigService) UpdateEnvironment(ctx context.Context, id, applicationID
 	}
 	env.ApplicationID = applicationID
 	env.Name = name
-	if err := s.db.WithContext(ctx).Save(env).Error; err != nil {
+	if err := s.envs.Update(ctx, env); err != nil {
 		return nil, err
 	}
 	return env, nil
@@ -111,7 +91,7 @@ func (s *ConfigService) DeleteEnvironment(ctx context.Context, id uuid.UUID) (*E
 	if err != nil || env == nil {
 		return env, err
 	}
-	if err := s.db.WithContext(ctx).Delete(env).Error; err != nil {
+	if err := s.envs.Delete(ctx, env); err != nil {
 		return nil, err
 	}
 	return env, nil

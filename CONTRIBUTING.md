@@ -44,6 +44,11 @@ opening a PR.
 - See [`docs/architecture.md`](./docs/architecture.md) before touching the encryption flow, config
   history/rollback, or caching invalidation — each has a non-obvious invariant worth understanding
   first.
+- Docs live in [`docs/`](./docs) as plain Markdown and are built with
+  [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) (`mkdocs.yml` at the repo root),
+  auto-deployed to <https://charanck.github.io/idp/> on push to `master`
+  ([`.github/workflows/docs.yml`](./.github/workflows/docs.yml)). Preview locally with
+  `pip install mkdocs-material && mkdocs serve`.
 
 ## Pull requests
 

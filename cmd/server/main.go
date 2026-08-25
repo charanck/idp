@@ -11,33 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/hibiken/asynq"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
-	"github.com/redis/go-redis/extra/redisotel/v9"
-	"github.com/redis/go-redis/v9"
-	otelecho "go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
-	"gorm.io/gorm"
-	gormtracing "gorm.io/plugin/opentelemetry/tracing"
-
-	"controlplane/internal/activity"
 	"controlplane/internal/api"
 	"controlplane/internal/appconfig"
 	"controlplane/internal/auth"
-	"controlplane/internal/cache"
-	"controlplane/internal/config"
-	"controlplane/internal/crypto"
-	"controlplane/internal/dashboard"
-	"controlplane/internal/db"
 	"controlplane/internal/notification"
-	"controlplane/internal/observability"
-	"controlplane/internal/ratelimit"
-	"controlplane/internal/security"
-	"controlplane/internal/session"
 	"controlplane/internal/webui"
 )
 
@@ -48,7 +28,7 @@ var version = "dev"
 func main() {
 	ctx := context.Background()
 
-	otelShutdown, err := observability.Setup(ctx, version)
+	otelShutdown, err := setupObservability(ctx, version)
 	if err != nil {
 		log.Fatalf("setup observability: %v", err)
 	}
@@ -65,135 +45,68 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	gdb, err := db.Open(cfg.DSN(), cfg.Debug)
+	gdb, err := newDatabase(cfg)
 	if err != nil {
-		log.Fatalf("connect to postgres: %v", err)
+		log.Fatalf("%v", err)
 	}
-	if observability.Enabled() {
-		if err := gdb.Use(gormtracing.NewPlugin(gormtracing.WithDBSystem("postgresql"))); err != nil {
-			log.Fatalf("install gorm otel plugin: %v", err)
-		}
-	}
-	sqlDB, err := gdb.DB()
+
+	rdb, err := newRedisClient(cfg)
 	if err != nil {
-		log.Fatalf("get sql.DB: %v", err)
-	}
-	if err := db.Migrate(sqlDB); err != nil {
-		log.Fatalf("run migrations: %v", err)
+		log.Fatalf("%v", err)
 	}
 
-	redisOpts, err := redis.ParseURL(cfg.RedisURL)
-	if err != nil {
-		log.Fatalf("parse REDIS_URL: %v", err)
-	}
-	rdb := redis.NewClient(redisOpts)
-	if observability.Enabled() {
-		if err := redisotel.InstrumentTracing(rdb); err != nil {
-			log.Fatalf("install redis otel tracing: %v", err)
-		}
-		if err := redisotel.InstrumentMetrics(rdb); err != nil {
-			log.Fatalf("install redis otel metrics: %v", err)
-		}
-	}
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		log.Fatalf("connect to redis: %v", err)
-	}
-
-	var appCache cache.Cache = cache.NewRedisCache(rdb, cfg.CacheKeyPrefix)
-	cacheTimeout := time.Duration(cfg.CacheTimeoutSeconds) * time.Second
-
-	encryption := crypto.NewEncryptionService(cfg.MasterEncryptionKey)
-	authService := auth.NewAuthService(gdb)
-	oauthService := auth.NewOAuthService(gdb)
-	configService := config.NewConfigService(gdb, encryption, appCache, cacheTimeout)
-	flagService := config.NewFeatureFlagService(gdb, appCache, cacheTimeout)
-	activityLogger := activity.NewLogger(gdb)
-	dashboardService := dashboard.NewService(gdb)
-	limiter := ratelimit.NewLimiter(rdb)
-	sessionStore := session.NewStore(rdb, cfg.SessionSecret, 0)
-
-	notificationSettingsService := notification.NewProviderSettingService(gdb, encryption)
-	notificationTokenIssuer := notification.NewTokenIssuer(encryption)
-	channelRegistry := notification.NewChannelRegistry()
-	asynqClient := notification.NewAsynqClient(rdb)
-	taskEnqueuer := notification.NewTaskEnqueuer(asynqClient)
-	notificationService := notification.NewNotificationService(gdb, taskEnqueuer)
-	sseHub := notification.NewHub(rdb)
-	notificationWorker := notification.NewWorker(notificationService, notificationSettingsService, channelRegistry, sseHub)
-	asynqServer := notification.NewAsynqServer(rdb, asynq.Config{})
-	asynqMux := notification.NewAsynqMux(notificationWorker)
+	svc := newCoreServices(gdb, rdb, cfg)
+	notif := newNotificationStack(gdb, rdb, svc.Encryption)
 
 	if err := bootstrapAdmin(gdb, cfg); err != nil {
 		log.Fatalf("bootstrap admin user: %v", err)
 	}
 
-	e := echo.New()
-	e.HideBanner = true
-	e.HidePort = true
-	e.Use(middleware.Recover())
-	if observability.Enabled() {
-		e.Use(otelecho.Middleware(observability.ServiceName))
+	e := newEchoServer(svc.Sessions)
+
+	webuiAuthMW := webui.NewAuthMiddleware(svc.Auth)
+	// svc.Config satisfies webui.ApplicationStore, webui.EnvironmentStore, and webui.ConfigStore
+	// all at once, so several constructors below take it more than once, positionally, for
+	// different parameters - the compiler can't catch a swapped argument order here since every
+	// position accepts the same concrete type. Double-check argument order against each
+	// constructor's signature when editing this block.
+	webuiHandlers := &webui.Handlers{
+		Dashboard:            webui.NewDashboardHandler(svc.Dashboard),
+		Activity:             webui.NewActivityHandler(svc.Activity),
+		Application:          webui.NewApplicationHandler(svc.Config, svc.Activity),
+		Environment:          webui.NewEnvironmentHandler(svc.Config, svc.Config, svc.Activity),
+		Config:               webui.NewConfigHandler(svc.Config, svc.Config, svc.Config, svc.Activity),
+		Flag:                 webui.NewFlagHandler(svc.Flags, svc.Config, svc.Config, svc.Activity),
+		Client:               webui.NewClientHandler(svc.Auth, svc.Activity),
+		User:                 webui.NewUserHandler(svc.Auth, svc.Activity),
+		Auth:                 webui.NewAuthHandler(svc.Auth, svc.OAuth, svc.RateLimiter, svc.Activity, cfg.AuthRateLimit, cfg.AuthRateLimitWindowSeconds),
+		OAuthLogin:           webui.NewOAuthLoginHandler(svc.OAuth, svc.Activity),
+		OAuthProvider:        webui.NewOAuthProviderHandler(svc.OAuth, svc.Activity),
+		NotificationSettings: webui.NewNotificationSettingsHandler(notif.Settings, svc.Activity),
 	}
-	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogStatus: true, LogURI: true, LogMethod: true, LogLatency: true,
-		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			slog.Info("request", "method", v.Method, "uri", v.URI, "status", v.Status, "latency", v.Latency)
-			return nil
-		},
-	}))
+	webui.RegisterRoutes(e, webuiHandlers, webuiAuthMW)
 
-	e.Static("/static", "static")
-
-	// The API is stateless (JWT/API-key auth); the web UI needs session
-	// loading + CSRF protection. Both are mounted on the same *echo.Echo, so
-	// skip session/CSRF entirely for API paths rather than have CSRF's
-	// form-field check reject JSON API requests.
-	e.Use(skipForAPI(sessionStore.Middleware()))
-	e.Use(skipForAPI(webui.CSRFProtect()))
-
-	webuiDeps := &webui.Deps{
-		AuthService:          authService,
-		OAuthService:         oauthService,
-		ConfigService:        configService,
-		FlagService:          flagService,
-		Dashboard:            dashboardService,
-		Activity:             activityLogger,
-		NotificationSettings: notificationSettingsService,
-		RateLimiter:          limiter,
-		Sessions:             sessionStore,
-
-		AuthRateLimit:              cfg.AuthRateLimit,
-		AuthRateLimitWindowSeconds: cfg.AuthRateLimitWindowSeconds,
-	}
-	webui.RegisterRoutes(e, webuiDeps)
-
-	apiDeps := &api.Deps{
-		AuthService:   authService,
-		ConfigService: configService,
-		FlagService:   flagService,
-		RateLimiter:   limiter,
-
-		AuthRateLimitWindowSeconds: cfg.AuthRateLimitWindowSeconds,
-		S2SAuthRateLimit:           cfg.S2SAuthRateLimit,
-	}
+	apiKeyAuthMW := api.NewAPIKeyAuthMiddleware(svc.Auth, svc.RateLimiter, cfg.AuthRateLimitWindowSeconds, cfg.S2SAuthRateLimit)
 	apiGroup := e.Group("/api/v1")
-	api.RegisterConfigRoutes(apiGroup.Group("/config"), apiDeps)
+	api.RegisterConfigRoutes(apiGroup.Group("/config"), api.NewConfigHandler(svc.Config), api.NewFeatureFlagHandler(svc.Flags), apiKeyAuthMW)
 
-	notifDeps := &notification.Deps{
-		Authenticator: auth.ServiceClientAuthenticator{Service: authService},
-		Notifications: notificationService,
-		Channels:      channelRegistry,
-		RateLimiter:   limiter,
-		Hub:           sseHub,
-		TokenIssuer:   notificationTokenIssuer,
-
-		AuthRateLimitWindowSeconds: cfg.AuthRateLimitWindowSeconds,
-		S2SAuthRateLimit:           cfg.S2SAuthRateLimit,
-	}
-	notification.RegisterRoutes(apiGroup.Group("/notifications"), notifDeps)
+	notifAuthMW := notification.NewAPIKeyAuthMiddleware(
+		auth.ServiceClientAuthenticator{Service: svc.Auth},
+		svc.RateLimiter,
+		cfg.AuthRateLimitWindowSeconds,
+		cfg.S2SAuthRateLimit,
+	)
+	notification.RegisterRoutes(
+		apiGroup.Group("/notifications"),
+		notification.NewNotificationHandler(notif.Service, notif.Service, notif.Service, notif.Channels),
+		notification.NewSessionHandler(notif.TokenIssuer),
+		notification.NewSSEHandler(notif.TokenIssuer, notif.Hub),
+		notification.NewInAppHandler(notif.TokenIssuer, notif.Service),
+		notifAuthMW,
+	)
 
 	go func() {
-		if err := asynqServer.Run(asynqMux); err != nil {
+		if err := notif.Run(); err != nil {
 			slog.Error("asynq server stopped", "err", err)
 		}
 	}()
@@ -210,81 +123,10 @@ func main() {
 	<-quit
 
 	slog.Info("shutting down")
-	asynqServer.Shutdown()
+	notif.Shutdown()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := e.Shutdown(shutdownCtx); err != nil {
 		slog.Error("server shutdown", "err", err)
-	}
-}
-
-// skipForAPI wraps a middleware so it's a no-op for /api/... requests,
-// letting the web UI's session/CSRF middleware share an *echo.Echo with the
-// stateless JSON API.
-func skipForAPI(mw echo.MiddlewareFunc) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		wrapped := mw(next)
-		return func(c echo.Context) error {
-			if strings.HasPrefix(c.Request().URL.Path, "/api/") {
-				return next(c)
-			}
-			return wrapped(c)
-		}
-	}
-}
-
-// bootstrapAdmin mirrors authentication/management/commands/setup_admin.py:
-// on every startup, ADMIN_EMAIL/ADMIN_PASSWORD (if set) create the admin user
-// if missing, or sync an existing user's superuser/staff/active flags and
-// password. A missing ADMIN_EMAIL is a no-op, not an error, matching the
-// management command's behavior when run with no email available.
-func bootstrapAdmin(gdb *gorm.DB, cfg *appconfig.Config) error {
-	if cfg.AdminEmail == "" {
-		return nil
-	}
-	password := cfg.AdminPassword
-	if password == "" {
-		password = "admin123"
-	}
-
-	var user auth.User
-	err := gdb.Where("email = ?", cfg.AdminEmail).First(&user).Error
-	switch {
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		hashed, hashErr := security.HashPassword(password)
-		if hashErr != nil {
-			return hashErr
-		}
-		newUser := auth.User{
-			Email:              cfg.AdminEmail,
-			Username:           strings.SplitN(cfg.AdminEmail, "@", 2)[0],
-			Password:           hashed,
-			IsSuperuser:        true,
-			IsStaff:            true,
-			IsActive:           true,
-			ForcePasswordReset: true,
-		}
-		if createErr := gdb.Create(&newUser).Error; createErr != nil {
-			return createErr
-		}
-		slog.Info("created admin user", "email", cfg.AdminEmail)
-		return nil
-	case err != nil:
-		return err
-	default:
-		hashed, hashErr := security.HashPassword(password)
-		if hashErr != nil {
-			return hashErr
-		}
-		user.IsSuperuser = true
-		user.IsStaff = true
-		user.IsActive = true
-		user.Password = hashed
-		user.ForcePasswordReset = true
-		if saveErr := gdb.Save(&user).Error; saveErr != nil {
-			return saveErr
-		}
-		slog.Info("synced admin user credentials", "email", cfg.AdminEmail)
-		return nil
 	}
 }

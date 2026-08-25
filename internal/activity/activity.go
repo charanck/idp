@@ -9,17 +9,16 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	"controlplane/internal/config"
 )
 
 type Logger struct {
-	db *gorm.DB
+	repo Repository
 }
 
-func NewLogger(db *gorm.DB) *Logger {
-	return &Logger{db: db}
+func NewLogger(repo Repository) *Logger {
+	return &Logger{repo: repo}
 }
 
 // requestInfoKey is the context.Context key under which request-derived
@@ -87,7 +86,7 @@ func (l *Logger) log(ctx context.Context, typ, resource, resourceID, resourceNam
 		IPAddress:    ip,
 	}
 
-	if err := l.db.WithContext(ctx).Create(&a).Error; err != nil {
+	if err := l.repo.Create(ctx, &a); err != nil {
 		slog.Error("failed to record activity", "type", typ, "resource", resource, "resource_id", resourceID, "user", userEmail, "err", err)
 	}
 }
@@ -135,39 +134,15 @@ type ListFilter struct {
 
 // List lists activity rows matching filter, newest first.
 func (l *Logger) List(ctx context.Context, filter ListFilter) ([]config.Activity, error) {
-	query := l.db.WithContext(ctx).Order("timestamp DESC")
-	if filter.Resource != "" {
-		query = query.Where("resource = ?", filter.Resource)
-	}
-	if filter.Type != "" {
-		query = query.Where("type = ?", filter.Type)
-	}
-	if filter.UserLike != "" {
-		query = query.Where("user_email ILIKE ?", "%"+filter.UserLike+"%")
-	}
-	var activities []config.Activity
-	if err := query.Find(&activities).Error; err != nil {
-		return nil, err
-	}
-	return activities, nil
+	return l.repo.List(ctx, filter)
 }
 
 // DistinctResources lists every distinct resource value ever logged, ordered alphabetically.
 func (l *Logger) DistinctResources(ctx context.Context) ([]string, error) {
-	var resources []string
-	err := l.db.WithContext(ctx).Model(&config.Activity{}).Order("resource").Distinct("resource").Pluck("resource", &resources).Error
-	if err != nil {
-		return nil, err
-	}
-	return resources, nil
+	return l.repo.DistinctResources(ctx)
 }
 
 // DistinctTypes lists every distinct activity type value ever logged, ordered alphabetically.
 func (l *Logger) DistinctTypes(ctx context.Context) ([]string, error) {
-	var types []string
-	err := l.db.WithContext(ctx).Model(&config.Activity{}).Order("type").Distinct("type").Pluck("type", &types).Error
-	if err != nil {
-		return nil, err
-	}
-	return types, nil
+	return l.repo.DistinctTypes(ctx)
 }

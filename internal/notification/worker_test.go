@@ -35,7 +35,7 @@ func TestNotificationDelivery_CreateEnqueueProcessSent(t *testing.T) {
 	t.Cleanup(func() { client.Close() })
 	enqueuer := notification.NewTaskEnqueuer(client)
 
-	svc := notification.NewNotificationService(gdb, enqueuer)
+	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), enqueuer)
 	hub := notification.NewHub(rdb)
 	worker := notification.NewWorker(svc, nil, notification.NewChannelRegistry(), hub)
 
@@ -94,7 +94,7 @@ func TestNotificationDelivery_SSEPublishReflectsFinalStatus(t *testing.T) {
 	t.Cleanup(func() { client.Close() })
 	enqueuer := notification.NewTaskEnqueuer(client)
 
-	svc := notification.NewNotificationService(gdb, enqueuer)
+	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), enqueuer)
 	hub := notification.NewHub(rdb)
 	worker := notification.NewWorker(svc, nil, notification.NewChannelRegistry(), hub)
 

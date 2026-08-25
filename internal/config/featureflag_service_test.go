@@ -29,7 +29,7 @@ func setupFlagService(t *testing.T) (*gorm.DB, *config.FeatureFlagService) {
 	t.Cleanup(func() { rdb.Close() })
 
 	c := cache.NewRedisCache(rdb, "")
-	svc := config.NewFeatureFlagService(gdb, c, 5*time.Minute)
+	svc := config.NewFeatureFlagService(config.NewFeatureFlagRepository(gdb), config.NewApplicationRepository(gdb), config.NewEnvironmentRepository(gdb), c, 5*time.Minute)
 	return gdb, svc
 }
 

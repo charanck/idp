@@ -16,23 +16,39 @@ import (
 
 const contextKeyUser = "webui_current_user"
 
-// CurrentUser returns the logged-in user attached by LoadUser, if any.
+// CurrentUser returns the logged-in user attached by AuthMiddleware.LoadUser, if any.
 func CurrentUser(c echo.Context) *auth.User {
 	u, _ := c.Get(contextKeyUser).(*auth.User)
 	return u
 }
 
+// UserLoader resolves the logged-in user for a session, used by
+// AuthMiddleware.LoadUser. Satisfied by *auth.AuthService.
+type UserLoader interface {
+	GetUserByID(ctx context.Context, id uuid.UUID) (*auth.User, error)
+}
+
+// AuthMiddleware groups the session/user-aware middleware every route needs:
+// loading the current user, requiring login, and requiring staff.
+type AuthMiddleware struct {
+	users UserLoader
+}
+
+func NewAuthMiddleware(users UserLoader) *AuthMiddleware {
+	return &AuthMiddleware{users: users}
+}
+
 // LoadUser attaches the logged-in user (if any) to the request context from
 // the session, without enforcing authentication, so every page - including
 // public ones like the login page - can render user-aware nav state.
-func LoadUser(deps *Deps) echo.MiddlewareFunc {
+func (m *AuthMiddleware) LoadUser() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			sess := session.FromContext(c)
 			if sess != nil {
 				if idStr, ok := sess.UserID(); ok {
 					if id, err := uuid.Parse(idStr); err == nil {
-						if user, err := deps.AuthService.GetUserByID(c.Request().Context(), id); err == nil && user != nil {
+						if user, err := m.users.GetUserByID(c.Request().Context(), id); err == nil && user != nil {
 							c.Set(contextKeyUser, user)
 						}
 					}
@@ -45,7 +61,7 @@ func LoadUser(deps *Deps) echo.MiddlewareFunc {
 
 // LoginRequired mirrors Django's @login_required: redirects to /login/ (with
 // ?next=) when there is no authenticated user in session.
-func LoginRequired(_ *Deps) echo.MiddlewareFunc {
+func (m *AuthMiddleware) LoginRequired() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if CurrentUser(c) == nil {
@@ -60,8 +76,8 @@ func LoginRequired(_ *Deps) echo.MiddlewareFunc {
 // AdminRequired mirrors web_ui/views.py's admin_required decorator:
 // @login_required plus an is_staff check, flashing an error and redirecting
 // to the dashboard when the logged-in user isn't staff.
-func AdminRequired(deps *Deps) echo.MiddlewareFunc {
-	loginRequired := LoginRequired(deps)
+func (m *AuthMiddleware) AdminRequired() echo.MiddlewareFunc {
+	loginRequired := m.LoginRequired()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return loginRequired(func(c echo.Context) error {
 			user := CurrentUser(c)
@@ -116,3 +132,5 @@ func requestContext(c echo.Context) context.Context {
 	}
 	return activity.WithRequestInfo(c.Request().Context(), info)
 }
+
+var _ UserLoader = (*auth.AuthService)(nil)

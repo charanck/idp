@@ -5,18 +5,15 @@ package dashboard
 import (
 	"context"
 
-	"gorm.io/gorm"
-
-	"controlplane/internal/auth"
 	"controlplane/internal/config"
 )
 
 type Service struct {
-	db *gorm.DB
+	repo Repository
 }
 
-func NewService(db *gorm.DB) *Service {
-	return &Service{db: db}
+func NewService(repo Repository) *Service {
+	return &Service{repo: repo}
 }
 
 // Counts bundles the dashboard's summary stat-grid figures.
@@ -31,25 +28,25 @@ type Counts struct {
 
 // GetCounts computes the dashboard's summary stat-grid figures.
 func (s *Service) GetCounts(ctx context.Context) (Counts, error) {
-	db := s.db.WithContext(ctx)
 	var c Counts
+	var err error
 
-	if err := db.Model(&config.Application{}).Count(&c.ApplicationCount).Error; err != nil {
+	if c.ApplicationCount, err = s.repo.CountApplications(ctx); err != nil {
 		return Counts{}, err
 	}
-	if err := db.Model(&config.Environment{}).Count(&c.EnvironmentCount).Error; err != nil {
+	if c.EnvironmentCount, err = s.repo.CountEnvironments(ctx); err != nil {
 		return Counts{}, err
 	}
-	if err := db.Model(&config.ConfigEntry{}).Where("is_secret = ?", false).Count(&c.ConfigCount).Error; err != nil {
+	if c.ConfigCount, err = s.repo.CountConfigEntries(ctx, false); err != nil {
 		return Counts{}, err
 	}
-	if err := db.Model(&config.ConfigEntry{}).Where("is_secret = ?", true).Count(&c.SecretCount).Error; err != nil {
+	if c.SecretCount, err = s.repo.CountConfigEntries(ctx, true); err != nil {
 		return Counts{}, err
 	}
-	if err := db.Model(&config.FeatureFlag{}).Where("deleted_at IS NULL").Count(&c.FlagCount).Error; err != nil {
+	if c.FlagCount, err = s.repo.CountActiveFeatureFlags(ctx); err != nil {
 		return Counts{}, err
 	}
-	if err := db.Model(&auth.ServiceClient{}).Count(&c.ClientCount).Error; err != nil {
+	if c.ClientCount, err = s.repo.CountServiceClients(ctx); err != nil {
 		return Counts{}, err
 	}
 	return c, nil
@@ -58,11 +55,5 @@ func (s *Service) GetCounts(ctx context.Context) (Counts, error) {
 // RecentConfigs lists the most recently updated config entries (with
 // Application/Environment preloaded), newest first.
 func (s *Service) RecentConfigs(ctx context.Context, limit int) ([]config.ConfigEntry, error) {
-	var entries []config.ConfigEntry
-	err := s.db.WithContext(ctx).Preload("Application").Preload("Environment").
-		Order("updated_at DESC").Limit(limit).Find(&entries).Error
-	if err != nil {
-		return nil, err
-	}
-	return entries, nil
+	return s.repo.RecentConfigEntries(ctx, limit)
 }

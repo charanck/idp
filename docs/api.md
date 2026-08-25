@@ -1,57 +1,64 @@
 # API reference
 
-The config/flag read API is mounted under `/api/v1/config/`. It's intentionally the only
-programmatic (non-browser) API this app exposes — everything else (creating applications,
-environments, configs/secrets, feature flags, service clients, and viewing/rolling back config
-history) is done through the session-authenticated web UI. There is no JWT-based user/service auth
-API.
+Everything under `/api/v1/` is the app's only programmatic (non-browser) surface — creating
+applications, environments, configs/secrets, feature flags, service clients, and viewing/rolling
+back config history is web-UI-only. There is no JWT-based user/service auth API and no generic
+CRUD API.
+
+For worked examples in cURL, Python, Node.js/TypeScript, and Go, see the [Guides](guides/config-and-secrets.md).
 
 ## Config / secrets
 
-Configs and secrets share one model (`ConfigEntry`); `is_secret=true` is what makes a value a
-secret.
-
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/config/configs/list` | GET | API key | List configs for `?service=&environment=`, re-encrypted with the calling client's own key. |
+| `/api/v1/config/configs/list` | GET | `X-API-Key` | List configs/secrets for `?service=&environment=`, re-encrypted with the calling client's own key. |
+
+Details: [Config & Secrets guide](guides/config-and-secrets.md).
 
 ## Feature flags
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/config/feature-flags` | GET | API key | List flags for `?service=&environment=`. |
+| `/api/v1/config/feature-flags` | GET | `X-API-Key` | List flags for `?service=&environment=`. |
 
-Both endpoints authenticate with `X-API-Key: <key_id>.<secret>`, issued when a service client is
-created from the web UI (**Service Clients → Create**). Failed API-key attempts are rate-limited
-per client IP (`S2S_AUTH_RATE_LIMIT`); a valid key is never throttled.
+Details: [Feature Flags guide](guides/feature-flags.md).
 
----
+## Notifications
 
-## Examples
+| Endpoint | Method | Auth | Purpose |
+|---|---|---|---|
+| `/api/v1/notifications` | POST | `X-API-Key` | Create (queue) a notification on `email`/`sms`/`whatsapp`/`inapp`. |
+| `/api/v1/notifications` | GET | `X-API-Key` | List notifications, filterable by `?channel=&status=`. |
+| `/api/v1/notifications/:id` | GET | `X-API-Key` | Get a single notification by ID. |
+| `/api/v1/notifications/sessions` | POST | `X-API-Key` | Mint a short-lived bearer token scoped to one `user_id`, for the two end-user endpoints below. |
+| `/api/v1/notifications/sse/events` | GET | `Bearer <token>` | Stream that user's delivery events in real time (push, not persisted). |
+| `/api/v1/notifications/inapp/unread` | GET | `Bearer <token>` | Fetch and mark-read that user's unread in-app notifications (pull, persisted). |
 
-### Read configs as a service client
+Details: [Notifications guide](guides/notifications.md), [Realtime events (SSE)](guides/sse.md),
+[In-app inbox](guides/inapp-inbox.md).
 
-```bash
-curl "http://localhost:8000/api/v1/config/configs/list?service=my-app&environment=prod" \
-  -H "X-API-Key: <key_id>.<secret>"
-```
+## Authentication
 
-### Read feature flags as a service client
+Two distinct credentials are used across these endpoints, never interchangeably:
 
-```bash
-curl "http://localhost:8000/api/v1/config/feature-flags?service=my-app&environment=prod" \
-  -H "X-API-Key: <key_id>.<secret>"
-```
+- **`X-API-Key: <key_id>.<secret>`** — a service client's own credential, issued once at
+  creation time (**Service Clients → Create** in the web UI). Used by a *service* calling the API
+  on its own behalf: reading configs/flags, and creating/listing/getting notifications.
+- **`Authorization: Bearer <token>`** — a short-lived token minted by
+  `POST /api/v1/notifications/sessions`, scoped to one end user. Used when the *caller is that
+  user* (or something acting on their behalf, e.g. a browser tab), not the service client — the
+  SSE stream and the in-app inbox.
 
----
+Failed `X-API-Key` attempts are rate-limited per client IP (`S2S_AUTH_RATE_LIMIT`) — see
+[Configuration](configuration.md#rate-limiting).
 
 ## Encryption model
 
 1. **Write** — an admin creates a config/secret via the web UI. The value is encrypted with
    `MASTER_ENCRYPTION_KEY` before it's stored; the UI never echoes the plaintext back.
-2. **Read** — a service client calls `GET /config/configs/list` with its `X-API-Key`. The server
-   decrypts with the master key and **re-encrypts with that client's own encryption key** (generated
-   once, at client-creation time) before returning it.
+2. **Read** — a service client calls `GET /api/v1/config/configs/list` with its `X-API-Key`. The
+   server decrypts with the master key and **re-encrypts with that client's own encryption key**
+   (generated once, at client-creation time) before returning it.
 3. **Client-side decrypt**:
    ```python
    from cryptography.fernet import Fernet
@@ -60,16 +67,15 @@ curl "http://localhost:8000/api/v1/config/feature-flags?service=my-app&environme
    decrypted = fernet.decrypt(encrypted_value.encode()).decode()
    ```
 
-See [`examples/`](../examples) for runnable Python, Go, Node.js, and TypeScript clients that list
-configs/secrets and feature flags and decrypt them locally. Full architecture is documented in
-[Architecture](./architecture.md#encryption-flow).
+See the [Config & Secrets guide](guides/config-and-secrets.md) for full client examples, and
+[Architecture](architecture.md#encryption-flow) for how this fits together end to end.
 
 ## Config history and rollback
 
 Every config/secret write is snapshotted as an immutable version. From a config's detail page in
 the web UI, open its history to see prior versions (secret values are never shown, only that a
 version changed, when, and by whom) and roll back to any of them — a rollback is recorded as a new
-version rather than rewriting history.
+version rather than rewriting history. There is no S2S endpoint for this; it's web-UI-only.
 
 ## OAuth2 / OIDC login
 
@@ -84,5 +90,5 @@ internal IdP, etc.) instead of a local password.
      provider.
 2. Register the provider's callback URL with the provider itself:
    `http://<your-host>/oauth/callback/<provider-id>/`.
-3. Users can now log in via **"Sign in with <Provider>"** on the login page
+3. Users can now log in via **"Sign in with &lt;Provider&gt;"** on the login page
    (`/oauth/login/<provider-id>/`).

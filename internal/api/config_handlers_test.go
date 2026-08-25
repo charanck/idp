@@ -22,7 +22,23 @@ import (
 	"controlplane/internal/testutil"
 )
 
-func setupConfigAPI(t *testing.T) (*gorm.DB, *echo.Echo, *api.Deps) {
+// testDeps bundles the constructed services setupConfigAPI needs to expose
+// to tests (mirrors the old api.Deps shape now that api itself only takes
+// narrow per-handler interfaces).
+type testDeps struct {
+	AuthService   *auth.AuthService
+	ConfigService *config.ConfigService
+	FlagService   *config.FeatureFlagService
+
+	S2SAuthRateLimit int
+}
+
+func setupConfigAPI(t *testing.T) (*gorm.DB, *echo.Echo, *testDeps) {
+	t.Helper()
+	return setupConfigAPIWithRateLimit(t, 1000)
+}
+
+func setupConfigAPIWithRateLimit(t *testing.T, s2sAuthRateLimit int) (*gorm.DB, *echo.Echo, *testDeps) {
 	t.Helper()
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
@@ -42,18 +58,17 @@ func setupConfigAPI(t *testing.T) (*gorm.DB, *echo.Echo, *api.Deps) {
 	}
 	enc := crypto.NewEncryptionService(masterKey)
 
-	deps := &api.Deps{
-		AuthService:                auth.NewAuthService(gdb),
-		ConfigService:              config.NewConfigService(gdb, enc, c, 5*time.Minute),
-		FlagService:                config.NewFeatureFlagService(gdb, c, 5*time.Minute),
-		RateLimiter:                ratelimit.NewLimiter(rdb),
-		AuthRateLimitWindowSeconds: 60,
-		S2SAuthRateLimit:           1000,
+	deps := &testDeps{
+		AuthService:      auth.NewAuthService(auth.NewUserRepository(gdb), auth.NewServiceClientRepository(gdb)),
+		ConfigService:    config.NewConfigService(config.NewConfigRepository(gdb), config.NewApplicationRepository(gdb), config.NewEnvironmentRepository(gdb), enc, c, 5*time.Minute),
+		FlagService:      config.NewFeatureFlagService(config.NewFeatureFlagRepository(gdb), config.NewApplicationRepository(gdb), config.NewEnvironmentRepository(gdb), c, 5*time.Minute),
+		S2SAuthRateLimit: s2sAuthRateLimit,
 	}
 
 	e := echo.New()
 	configGroup := e.Group("/api/v1/config")
-	api.RegisterConfigRoutes(configGroup, deps)
+	authMW := api.NewAPIKeyAuthMiddleware(deps.AuthService, ratelimit.NewLimiter(rdb), 60, deps.S2SAuthRateLimit)
+	api.RegisterConfigRoutes(configGroup, api.NewConfigHandler(deps.ConfigService), api.NewFeatureFlagHandler(deps.FlagService), authMW)
 
 	return gdb, e, deps
 }
@@ -164,8 +179,7 @@ func TestListFeatureFlagsEndpoint_RejectsMissingAuth(t *testing.T) {
 }
 
 func TestAPIKeyAuth_FixedWindowThrottlesRepeatedRequests(t *testing.T) {
-	_, e, deps := setupConfigAPI(t)
-	deps.S2SAuthRateLimit = 2
+	_, e, deps := setupConfigAPIWithRateLimit(t, 2)
 	creds, err := deps.AuthService.CreateServiceClient(context.Background(), "billing-service")
 	if err != nil {
 		t.Fatalf("CreateServiceClient: %v", err)

@@ -36,7 +36,7 @@ func TestCreateNotification_InsertsQueuedAndEnqueues(t *testing.T) {
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
 	enqueuer := &fakeEnqueuer{}
-	svc := notification.NewNotificationService(gdb, enqueuer)
+	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), enqueuer)
 
 	n, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
 		Channel:   notification.ChannelEmail,
@@ -66,7 +66,7 @@ func TestCreateNotification_IdempotencyKeyReturnsExistingQueued(t *testing.T) {
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
 	enqueuer := &fakeEnqueuer{}
-	svc := notification.NewNotificationService(gdb, enqueuer)
+	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), enqueuer)
 
 	in := notification.CreateNotificationInput{
 		Channel:        notification.ChannelSMS,
@@ -96,7 +96,7 @@ func TestCreateNotification_IdempotencyKeyReturnsExistingQueued(t *testing.T) {
 func TestGetNotification_ReturnsNilForUnknownID(t *testing.T) {
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
-	svc := notification.NewNotificationService(gdb, &fakeEnqueuer{})
+	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), &fakeEnqueuer{})
 
 	got, err := svc.GetNotification(context.Background(), uuid.New())
 	if err != nil {
@@ -110,7 +110,7 @@ func TestGetNotification_ReturnsNilForUnknownID(t *testing.T) {
 func TestListNotifications_FiltersByChannelAndStatus(t *testing.T) {
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
-	svc := notification.NewNotificationService(gdb, &fakeEnqueuer{})
+	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), &fakeEnqueuer{})
 
 	if _, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
 		Channel: notification.ChannelEmail, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`),
@@ -143,7 +143,7 @@ func TestListNotifications_FiltersByChannelAndStatus(t *testing.T) {
 func TestConsumeUnreadInAppForUser_FiltersByChannelAndRecipientUserIDAndMarksReturnedAsRead(t *testing.T) {
 	gdb := testutil.OpenDB(t)
 	testutil.TruncateAll(t, gdb)
-	svc := notification.NewNotificationService(gdb, &fakeEnqueuer{})
+	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), &fakeEnqueuer{})
 
 	unreadForUser1, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
 		Channel: notification.ChannelInApp, Recipient: datatypes.JSON(`{"user_id":"user-1"}`), Content: datatypes.JSON(`{"title":"hi"}`),

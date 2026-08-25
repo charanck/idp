@@ -20,19 +20,17 @@ var ErrAlreadyExists = errors.New("already exists")
 
 // AuthService mirrors authentication/services.py's AuthService.
 type AuthService struct {
-	db *gorm.DB
+	users   UserRepository
+	clients ServiceClientRepository
 }
 
-func NewAuthService(db *gorm.DB) *AuthService {
-	return &AuthService{db: db}
+func NewAuthService(users UserRepository, clients ServiceClientRepository) *AuthService {
+	return &AuthService{users: users, clients: clients}
 }
 
 // RegisterUser registers a new user, inactive until an admin activates the account.
 func (s *AuthService) RegisterUser(ctx context.Context, email, password, username string) (*User, error) {
-	db := s.db.WithContext(ctx)
-
-	var existing User
-	err := db.Where("email = ?", email).First(&existing).Error
+	_, err := s.users.FindByEmail(ctx, email)
 	if err == nil {
 		return nil, fmt.Errorf("user already exists: %w", ErrAlreadyExists)
 	}
@@ -61,7 +59,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, email, password, usernam
 		IsActive: false,
 		Password: hashed,
 	}
-	if err := db.Create(user).Error; err != nil {
+	if err := s.users.Create(ctx, user); err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -69,37 +67,32 @@ func (s *AuthService) RegisterUser(ctx context.Context, email, password, usernam
 
 // AuthenticateUser authenticates a user by email and password.
 func (s *AuthService) AuthenticateUser(ctx context.Context, email, password string) (*User, error) {
-	var user User
-	err := s.db.WithContext(ctx).Where("email = ? AND is_active = ?", email, true).First(&user).Error
+	user, err := s.users.FindActiveByEmail(ctx, email)
 	if err != nil {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error, matching the Python service.
 	}
 	if !security.VerifyPassword(password, user.Password) {
 		return nil, nil
 	}
-	return &user, nil
+	return user, nil
 }
 
 // SetPassword updates a user's password hash and clears any pending forced
 // reset, mirroring web_ui/views.py's password_change_view.
 func (s *AuthService) SetPassword(ctx context.Context, userID uuid.UUID, hashedPassword string) error {
-	return s.db.WithContext(ctx).Model(&User{}).Where("id = ?", userID).Updates(map[string]any{
-		"password":             hashedPassword,
-		"force_password_reset": false,
-	}).Error
+	return s.users.UpdatePassword(ctx, userID, hashedPassword)
 }
 
 // GetUserByID returns an active user by ID.
 func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
-	var user User
-	err := s.db.WithContext(ctx).Where("id = ? AND is_active = ?", id, true).First(&user).Error
+	user, err := s.users.FindActiveByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &user, nil
+	return user, nil
 }
 
 type ServiceClientCredentials struct {
@@ -109,10 +102,7 @@ type ServiceClientCredentials struct {
 
 // CreateServiceClient creates a new service client with an API key and encryption key.
 func (s *AuthService) CreateServiceClient(ctx context.Context, name string) (*ServiceClientCredentials, error) {
-	db := s.db.WithContext(ctx)
-
-	var existing ServiceClient
-	err := db.Where("name = ?", name).First(&existing).Error
+	_, err := s.clients.FindByName(ctx, name)
 	if err == nil {
 		return nil, fmt.Errorf("service client already exists: %w", ErrAlreadyExists)
 	}
@@ -150,7 +140,7 @@ func (s *AuthService) CreateServiceClient(ctx context.Context, name string) (*Se
 		EncryptionKey: clientEncryptionKey,
 		IsActive:      true,
 	}
-	if err := db.Create(client).Error; err != nil {
+	if err := s.clients.Create(ctx, client); err != nil {
 		return nil, err
 	}
 
@@ -165,8 +155,7 @@ func (s *AuthService) AuthenticateServiceAPIKey(ctx context.Context, apiKey stri
 		return nil, nil
 	}
 
-	var client ServiceClient
-	err := s.db.WithContext(ctx).Where("is_active = ? AND api_key_id = ?", true, keyID).First(&client).Error
+	client, err := s.clients.FindByAPIKeyIDActive(ctx, keyID)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -177,37 +166,25 @@ func (s *AuthService) AuthenticateServiceAPIKey(ctx context.Context, apiKey stri
 	if client.APIKeyHash == "" || !security.VerifyPassword(secret, client.APIKeyHash) {
 		return nil, nil
 	}
-	return &client, nil
+	return client, nil
 }
 
 // ListUsers lists users, optionally filtered by a case-insensitive email
 // substring and staff status, ordered newest-first.
 func (s *AuthService) ListUsers(ctx context.Context, q string, isStaff *bool) ([]User, error) {
-	query := s.db.WithContext(ctx).Order("created_at DESC")
-	if q != "" {
-		query = query.Where("email ILIKE ?", "%"+q+"%")
-	}
-	if isStaff != nil {
-		query = query.Where("is_staff = ?", *isStaff)
-	}
-	var users []User
-	if err := query.Find(&users).Error; err != nil {
-		return nil, err
-	}
-	return users, nil
+	return s.users.List(ctx, q, isStaff)
 }
 
 // GetUserByIDAny returns a user by ID regardless of active status, or nil if not found.
 func (s *AuthService) GetUserByIDAny(ctx context.Context, id uuid.UUID) (*User, error) {
-	var user User
-	err := s.db.WithContext(ctx).First(&user, "id = ?", id).Error
+	user, err := s.users.FindByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &user, nil
+	return user, nil
 }
 
 // CreateUserAdminInput bundles CreateUserAdmin's fields.
@@ -222,10 +199,7 @@ type CreateUserAdminInput struct {
 // always-inactive self-registration flow), returning ErrAlreadyExists if the
 // email is taken.
 func (s *AuthService) CreateUserAdmin(ctx context.Context, in CreateUserAdminInput) (*User, error) {
-	db := s.db.WithContext(ctx)
-
-	var existing User
-	err := db.Where("email = ?", in.Email).First(&existing).Error
+	_, err := s.users.FindByEmail(ctx, in.Email)
 	if err == nil {
 		return nil, fmt.Errorf("user already exists: %w", ErrAlreadyExists)
 	}
@@ -244,7 +218,7 @@ func (s *AuthService) CreateUserAdmin(ctx context.Context, in CreateUserAdminInp
 		Password: hashed,
 		IsActive: in.IsActive,
 	}
-	if err := db.Create(user).Error; err != nil {
+	if err := s.users.Create(ctx, user); err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -268,7 +242,7 @@ func (s *AuthService) UpdateUserAdmin(ctx context.Context, id uuid.UUID, in Upda
 	user.Username = in.Username
 	user.IsActive = in.IsActive
 	user.IsStaff = in.IsStaff
-	if err := s.db.WithContext(ctx).Save(user).Error; err != nil {
+	if err := s.users.Update(ctx, user); err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -280,7 +254,7 @@ func (s *AuthService) DeleteUser(ctx context.Context, id uuid.UUID) (*User, erro
 	if err != nil || user == nil {
 		return user, err
 	}
-	if err := s.db.WithContext(ctx).Delete(user).Error; err != nil {
+	if err := s.users.Delete(ctx, user); err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -289,32 +263,20 @@ func (s *AuthService) DeleteUser(ctx context.Context, id uuid.UUID) (*User, erro
 // ListServiceClients lists service clients, optionally filtered by a
 // case-insensitive name substring and active status, ordered newest-first.
 func (s *AuthService) ListServiceClients(ctx context.Context, q string, isActive *bool) ([]ServiceClient, error) {
-	query := s.db.WithContext(ctx).Order("created_at DESC")
-	if q != "" {
-		query = query.Where("name ILIKE ?", "%"+q+"%")
-	}
-	if isActive != nil {
-		query = query.Where("is_active = ?", *isActive)
-	}
-	var clients []ServiceClient
-	if err := query.Find(&clients).Error; err != nil {
-		return nil, err
-	}
-	return clients, nil
+	return s.clients.List(ctx, q, isActive)
 }
 
 // GetServiceClientByIDAny returns a service client by ID regardless of
 // active status, or nil if not found.
 func (s *AuthService) GetServiceClientByIDAny(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
-	var client ServiceClient
-	err := s.db.WithContext(ctx).First(&client, "id = ?", id).Error
+	client, err := s.clients.FindByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &client, nil
+	return client, nil
 }
 
 // ToggleServiceClient flips a service client's active state by ID, returning nil if not found.
@@ -324,7 +286,7 @@ func (s *AuthService) ToggleServiceClient(ctx context.Context, id uuid.UUID) (*S
 		return client, err
 	}
 	client.IsActive = !client.IsActive
-	if err := s.db.WithContext(ctx).Save(client).Error; err != nil {
+	if err := s.clients.Update(ctx, client); err != nil {
 		return nil, err
 	}
 	return client, nil
@@ -336,7 +298,7 @@ func (s *AuthService) DeleteServiceClient(ctx context.Context, id uuid.UUID) (*S
 	if err != nil || client == nil {
 		return client, err
 	}
-	if err := s.db.WithContext(ctx).Delete(client).Error; err != nil {
+	if err := s.clients.Delete(ctx, client); err != nil {
 		return nil, err
 	}
 	return client, nil
@@ -354,7 +316,7 @@ func (s *AuthService) RegenerateServiceClientKey(ctx context.Context, id uuid.UU
 		return nil, err
 	}
 	client.EncryptionKey = newKey
-	if err := s.db.WithContext(ctx).Save(client).Error; err != nil {
+	if err := s.clients.Update(ctx, client); err != nil {
 		return nil, err
 	}
 	return client, nil
@@ -362,15 +324,14 @@ func (s *AuthService) RegenerateServiceClientKey(ctx context.Context, id uuid.UU
 
 // GetServiceClientByID returns an active service client by ID.
 func (s *AuthService) GetServiceClientByID(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
-	var client ServiceClient
-	err := s.db.WithContext(ctx).Where("id = ? AND is_active = ?", id, true).First(&client).Error
+	client, err := s.clients.FindActiveByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return &client, nil
+	return client, nil
 }
 
 func randomHex(n int) (string, error) {
