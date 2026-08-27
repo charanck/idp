@@ -9,6 +9,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	model "controlplane/internal/model/notification"
 	"controlplane/internal/notification/provider"
 )
 
@@ -30,7 +31,7 @@ func NewWorker(notifications *NotificationService, settings *ProviderSettingServ
 // is configured. Errors are logged, not returned - a failed SSE publish
 // should never fail the send task itself (the row in Postgres is already
 // the source of truth, and SSE is fire-and-forget by design).
-func (w *Worker) publish(ctx context.Context, n *Notification) {
+func (w *Worker) publish(ctx context.Context, n *model.Notification) {
 	if w.hub == nil {
 		return
 	}
@@ -56,7 +57,7 @@ func (w *Worker) HandleSend(ctx context.Context, task *asynq.Task) error {
 	}
 	// A notification already past "queued"/"retrying" was handled by a
 	// previous delivery of this task (or a re-enqueue race) - skip.
-	if n.Status != StatusQueued && n.Status != StatusRetrying {
+	if n.Status != model.StatusQueued && n.Status != model.StatusRetrying {
 		return nil
 	}
 
@@ -70,7 +71,7 @@ func (w *Worker) HandleSend(ctx context.Context, task *asynq.Task) error {
 		if markErr := w.notifications.markFailed(ctx, n.ID, n.Attempt, permErr); markErr != nil {
 			slog.Error("mark failed after unknown channel", "id", n.ID, "err", markErr)
 		}
-		n.Status = StatusFailed
+		n.Status = model.StatusFailed
 		w.publish(ctx, n)
 		return fmt.Errorf("%w: %v", asynq.SkipRetry, permErr)
 	}
@@ -85,7 +86,7 @@ func (w *Worker) HandleSend(ctx context.Context, task *asynq.Task) error {
 			if markErr := w.notifications.markFailed(ctx, n.ID, n.Attempt, permErr); markErr != nil {
 				slog.Error("mark failed after disabled channel", "id", n.ID, "err", markErr)
 			}
-			n.Status = StatusFailed
+			n.Status = model.StatusFailed
 			w.publish(ctx, n)
 			return fmt.Errorf("%w: %v", asynq.SkipRetry, permErr)
 		}
@@ -100,7 +101,7 @@ func (w *Worker) HandleSend(ctx context.Context, task *asynq.Task) error {
 	if err := w.notifications.markSent(ctx, n.ID, result.Provider, result.ProviderMessageID); err != nil {
 		return fmt.Errorf("mark sent: %w", err)
 	}
-	n.Status = StatusSent
+	n.Status = model.StatusSent
 	n.Provider = &result.Provider
 	w.publish(ctx, n)
 
@@ -112,7 +113,7 @@ func (w *Worker) HandleSend(ctx context.Context, task *asynq.Task) error {
 // retry counter (or a permanent SendError) is exhausted. Permanent failures
 // wrap the error with asynq.SkipRetry so asynq doesn't requeue them, and
 // (since they're the final status) get published over SSE.
-func (w *Worker) handleSendError(ctx context.Context, n *Notification, attempt int, sendErr error) error {
+func (w *Worker) handleSendError(ctx context.Context, n *model.Notification, attempt int, sendErr error) error {
 	var permanent bool
 	var sendErrTyped *provider.SendError
 	if errors.As(sendErr, &sendErrTyped) {
@@ -127,7 +128,7 @@ func (w *Worker) handleSendError(ctx context.Context, n *Notification, attempt i
 		if err := w.notifications.markFailed(ctx, n.ID, attempt, sendErr); err != nil {
 			slog.Error("mark failed", "id", n.ID, "err", err)
 		}
-		n.Status = StatusFailed
+		n.Status = model.StatusFailed
 		w.publish(ctx, n)
 		if permanent {
 			return fmt.Errorf("%w: %v", asynq.SkipRetry, sendErr)

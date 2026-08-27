@@ -1,4 +1,4 @@
-package config
+package repository
 
 import (
 	"context"
@@ -7,50 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+
+	model "controlplane/internal/model/config"
 )
-
-// UpsertEntryParams bundles UpsertEntryAndRecordVersion's inputs.
-type UpsertEntryParams struct {
-	Service        string
-	Environment    string
-	Key            string
-	EncryptedValue string
-	ConfigType     string
-	IsSecret       bool
-	HistoryAction  string // defaults to "create"/"update" based on whether the entry existed
-	ChangedBy      string
-}
-
-// ConfigRepository is the persistence boundary for ConfigEntry/ConfigEntryVersion
-// rows. Not-found lookups return gorm's raw error (including
-// gorm.ErrRecordNotFound) rather than swallowing it - callers decide how to
-// translate that.
-type ConfigRepository interface {
-	FindByScopeAndKey(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*ConfigEntry, error)
-	FindByScopeAndKeyWithScope(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*ConfigEntry, error)
-	ListByScope(ctx context.Context, applicationID, environmentID uuid.UUID) ([]ConfigEntry, error)
-	FindByID(ctx context.Context, id uuid.UUID) (*ConfigEntry, error)
-	FindByIDWithScope(ctx context.Context, id uuid.UUID) (*ConfigEntry, error)
-	List(ctx context.Context, filter ListConfigEntriesFilter) ([]ConfigEntry, error)
-	Update(ctx context.Context, entry *ConfigEntry) error
-	Delete(ctx context.Context, entry *ConfigEntry) error
-
-	// RecordVersion snapshots entry's current (encrypted) value into history,
-	// serialized by a per-entry advisory lock so concurrent writers can't
-	// collide on the next version number.
-	RecordVersion(ctx context.Context, entry *ConfigEntry, action, changedBy string) (*ConfigEntryVersion, error)
-
-	// UpsertEntryAndRecordVersion is the one repository method that
-	// deliberately reaches across aggregates: it creates the Application/
-	// Environment rows directly (rather than going through
-	// ApplicationRepository/EnvironmentRepository) so the get-or-create and
-	// the entry write happen atomically under the same advisory lock and
-	// transaction.
-	UpsertEntryAndRecordVersion(ctx context.Context, params UpsertEntryParams) (entry *ConfigEntry, action string, err error)
-
-	ListVersions(ctx context.Context, configEntryID uuid.UUID) ([]ConfigEntryVersion, error)
-	FindVersion(ctx context.Context, configEntryID uuid.UUID, version int) (*ConfigEntryVersion, error)
-}
 
 type gormConfigRepository struct {
 	db *gorm.DB
@@ -60,8 +19,8 @@ func NewConfigRepository(db *gorm.DB) *gormConfigRepository {
 	return &gormConfigRepository{db: db}
 }
 
-func (r *gormConfigRepository) FindByScopeAndKey(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*ConfigEntry, error) {
-	var entry ConfigEntry
+func (r *gormConfigRepository) FindByScopeAndKey(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*model.ConfigEntry, error) {
+	var entry model.ConfigEntry
 	err := r.db.WithContext(ctx).
 		Where("application_id = ? AND environment_id = ? AND key = ?", applicationID, environmentID, key).
 		First(&entry).Error
@@ -71,8 +30,8 @@ func (r *gormConfigRepository) FindByScopeAndKey(ctx context.Context, applicatio
 	return &entry, nil
 }
 
-func (r *gormConfigRepository) FindByScopeAndKeyWithScope(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*ConfigEntry, error) {
-	var entry ConfigEntry
+func (r *gormConfigRepository) FindByScopeAndKeyWithScope(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*model.ConfigEntry, error) {
+	var entry model.ConfigEntry
 	err := r.db.WithContext(ctx).Preload("Application").Preload("Environment").
 		Where("application_id = ? AND environment_id = ? AND key = ?", applicationID, environmentID, key).
 		First(&entry).Error
@@ -82,8 +41,8 @@ func (r *gormConfigRepository) FindByScopeAndKeyWithScope(ctx context.Context, a
 	return &entry, nil
 }
 
-func (r *gormConfigRepository) ListByScope(ctx context.Context, applicationID, environmentID uuid.UUID) ([]ConfigEntry, error) {
-	var entries []ConfigEntry
+func (r *gormConfigRepository) ListByScope(ctx context.Context, applicationID, environmentID uuid.UUID) ([]model.ConfigEntry, error) {
+	var entries []model.ConfigEntry
 	err := r.db.WithContext(ctx).Preload("Application").Preload("Environment").
 		Where("application_id = ? AND environment_id = ?", applicationID, environmentID).
 		Find(&entries).Error
@@ -93,16 +52,16 @@ func (r *gormConfigRepository) ListByScope(ctx context.Context, applicationID, e
 	return entries, nil
 }
 
-func (r *gormConfigRepository) FindByID(ctx context.Context, id uuid.UUID) (*ConfigEntry, error) {
-	var entry ConfigEntry
+func (r *gormConfigRepository) FindByID(ctx context.Context, id uuid.UUID) (*model.ConfigEntry, error) {
+	var entry model.ConfigEntry
 	if err := r.db.WithContext(ctx).First(&entry, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return &entry, nil
 }
 
-func (r *gormConfigRepository) FindByIDWithScope(ctx context.Context, id uuid.UUID) (*ConfigEntry, error) {
-	var entry ConfigEntry
+func (r *gormConfigRepository) FindByIDWithScope(ctx context.Context, id uuid.UUID) (*model.ConfigEntry, error) {
+	var entry model.ConfigEntry
 	err := r.db.WithContext(ctx).Preload("Application").Preload("Environment").First(&entry, "id = ?", id).Error
 	if err != nil {
 		return nil, err
@@ -110,7 +69,7 @@ func (r *gormConfigRepository) FindByIDWithScope(ctx context.Context, id uuid.UU
 	return &entry, nil
 }
 
-func (r *gormConfigRepository) List(ctx context.Context, filter ListConfigEntriesFilter) ([]ConfigEntry, error) {
+func (r *gormConfigRepository) List(ctx context.Context, filter model.ListConfigEntriesFilter) ([]model.ConfigEntry, error) {
 	query := r.db.WithContext(ctx).Preload("Application").Preload("Environment").
 		Joins("JOIN applications ON applications.id = config_entries.application_id").
 		Order("applications.name, config_entries.key, config_entries.is_secret, config_entries.type")
@@ -126,23 +85,23 @@ func (r *gormConfigRepository) List(ctx context.Context, filter ListConfigEntrie
 	if filter.Query != "" {
 		query = query.Where("config_entries.key ILIKE ?", "%"+filter.Query+"%")
 	}
-	var entries []ConfigEntry
+	var entries []model.ConfigEntry
 	if err := query.Find(&entries).Error; err != nil {
 		return nil, err
 	}
 	return entries, nil
 }
 
-func (r *gormConfigRepository) Update(ctx context.Context, entry *ConfigEntry) error {
+func (r *gormConfigRepository) Update(ctx context.Context, entry *model.ConfigEntry) error {
 	return r.db.WithContext(ctx).Save(entry).Error
 }
 
-func (r *gormConfigRepository) Delete(ctx context.Context, entry *ConfigEntry) error {
+func (r *gormConfigRepository) Delete(ctx context.Context, entry *model.ConfigEntry) error {
 	return r.db.WithContext(ctx).Delete(entry).Error
 }
 
-func (r *gormConfigRepository) RecordVersion(ctx context.Context, entry *ConfigEntry, action, changedBy string) (*ConfigEntryVersion, error) {
-	var version *ConfigEntryVersion
+func (r *gormConfigRepository) RecordVersion(ctx context.Context, entry *model.ConfigEntry, action, changedBy string) (*model.ConfigEntryVersion, error) {
+	var version *model.ConfigEntryVersion
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		v, err := recordConfigVersionTx(tx, entry, action, changedBy)
 		if err != nil {
@@ -157,8 +116,8 @@ func (r *gormConfigRepository) RecordVersion(ctx context.Context, entry *ConfigE
 	return version, nil
 }
 
-func (r *gormConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, params UpsertEntryParams) (*ConfigEntry, string, error) {
-	var entry ConfigEntry
+func (r *gormConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, params model.UpsertEntryParams) (*model.ConfigEntry, string, error) {
+	var entry model.ConfigEntry
 	var historyAction string
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Serialize concurrent upserts to the same (service, environment,
@@ -174,13 +133,13 @@ func (r *gormConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, 
 			return err
 		}
 
-		found := ConfigEntry{}
+		found := model.ConfigEntry{}
 		lookupErr := tx.Where("application_id = ? AND environment_id = ? AND key = ?", app.ID, env.ID, params.Key).First(&found).Error
 		created := false
 		switch {
 		case errors.Is(lookupErr, gorm.ErrRecordNotFound):
 			created = true
-			found = ConfigEntry{
+			found = model.ConfigEntry{
 				ApplicationID: app.ID,
 				EnvironmentID: env.ID,
 				Key:           params.Key,
@@ -205,9 +164,9 @@ func (r *gormConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, 
 		historyAction = params.HistoryAction
 		if historyAction == "" {
 			if created {
-				historyAction = ActionCreate
+				historyAction = model.ActionCreate
 			} else {
-				historyAction = ActionUpdate
+				historyAction = model.ActionUpdate
 			}
 		}
 		if _, err := recordConfigVersionTx(tx, &found, historyAction, params.ChangedBy); err != nil {
@@ -223,8 +182,8 @@ func (r *gormConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, 
 	return &entry, historyAction, nil
 }
 
-func (r *gormConfigRepository) ListVersions(ctx context.Context, configEntryID uuid.UUID) ([]ConfigEntryVersion, error) {
-	var versions []ConfigEntryVersion
+func (r *gormConfigRepository) ListVersions(ctx context.Context, configEntryID uuid.UUID) ([]model.ConfigEntryVersion, error) {
+	var versions []model.ConfigEntryVersion
 	err := r.db.WithContext(ctx).Where("config_entry_id = ?", configEntryID).Order("version DESC").Find(&versions).Error
 	if err != nil {
 		return nil, err
@@ -232,8 +191,8 @@ func (r *gormConfigRepository) ListVersions(ctx context.Context, configEntryID u
 	return versions, nil
 }
 
-func (r *gormConfigRepository) FindVersion(ctx context.Context, configEntryID uuid.UUID, version int) (*ConfigEntryVersion, error) {
-	var target ConfigEntryVersion
+func (r *gormConfigRepository) FindVersion(ctx context.Context, configEntryID uuid.UUID, version int) (*model.ConfigEntryVersion, error) {
+	var target model.ConfigEntryVersion
 	err := r.db.WithContext(ctx).Where("config_entry_id = ? AND version = ?", configEntryID, version).First(&target).Error
 	if err != nil {
 		return nil, err
@@ -244,27 +203,27 @@ func (r *gormConfigRepository) FindVersion(ctx context.Context, configEntryID uu
 // getOrCreateScopeTx finds or creates the Application/Environment scope for
 // a (service, environment) pair within tx. It is only called from
 // UpsertEntryAndRecordVersion, under that method's advisory lock - see the
-// ConfigRepository doc comment above for why this reaches across aggregates
+// ConfigRepository doc comment for why this reaches across aggregates
 // instead of going through ApplicationRepository/EnvironmentRepository.
-func getOrCreateScopeTx(tx *gorm.DB, service, environment string) (*Application, *Environment, error) {
-	var app Application
+func getOrCreateScopeTx(tx *gorm.DB, service, environment string) (*model.Application, *model.Environment, error) {
+	var app model.Application
 	if err := tx.Where("name = ?", service).First(&app).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, err
 		}
-		app = Application{Name: service}
+		app = model.Application{Name: service}
 		if err := tx.Create(&app).Error; err != nil {
 			return nil, nil, err
 		}
 	}
 
-	var env Environment
+	var env model.Environment
 	err := tx.Where("application_id = ? AND name = ?", app.ID, environment).First(&env).Error
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil, err
 		}
-		env = Environment{ApplicationID: app.ID, Name: environment}
+		env = model.Environment{ApplicationID: app.ID, Name: environment}
 		if err := tx.Create(&env).Error; err != nil {
 			return nil, nil, err
 		}
@@ -292,12 +251,12 @@ func advisoryLockKey(parts ...string) int64 {
 // concurrent writers to the same config can't both compute the same "next
 // version" number and collide on the (config_entry_id, version) unique
 // constraint.
-func recordConfigVersionTx(tx *gorm.DB, entry *ConfigEntry, action, changedBy string) (*ConfigEntryVersion, error) {
+func recordConfigVersionTx(tx *gorm.DB, entry *model.ConfigEntry, action, changedBy string) (*model.ConfigEntryVersion, error) {
 	if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", advisoryLockKey("config-entry-version", entry.ID.String())).Error; err != nil {
 		return nil, err
 	}
 
-	var last ConfigEntryVersion
+	var last model.ConfigEntryVersion
 	err := tx.Where("config_entry_id = ?", entry.ID).Order("version DESC").First(&last).Error
 	versionNumber := 1
 	if err == nil {
@@ -311,7 +270,7 @@ func recordConfigVersionTx(tx *gorm.DB, entry *ConfigEntry, action, changedBy st
 		changedByPtr = &changedBy
 	}
 
-	version := &ConfigEntryVersion{
+	version := &model.ConfigEntryVersion{
 		ConfigEntryID: entry.ID,
 		Value:         entry.Value,
 		Type:          entry.Type,
@@ -325,3 +284,5 @@ func recordConfigVersionTx(tx *gorm.DB, entry *ConfigEntry, action, changedBy st
 	}
 	return version, nil
 }
+
+var _ model.ConfigRepository = (*gormConfigRepository)(nil)

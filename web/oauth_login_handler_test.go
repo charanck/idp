@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/web"
 )
 
@@ -26,7 +26,7 @@ func TestOAuthLoginHandler_UnknownProviderReturns404(t *testing.T) {
 
 func TestOAuthLoginHandler_RedirectsToAuthorizationURL(t *testing.T) {
 	store := newSessionStore(t)
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "Google"}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "Google"}
 	flow := &fakeOAuthFlow{activeProvider: provider, authURL: "https://provider.example/authorize", state: "abc123"}
 	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
 
@@ -58,7 +58,7 @@ func TestOAuthCallbackHandler_UnknownProviderReturns404(t *testing.T) {
 
 func TestOAuthCallbackHandler_ProviderErrorRedirectsToLogin(t *testing.T) {
 	store := newSessionStore(t)
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "Google"}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "Google"}
 	flow := &fakeOAuthFlow{provider: provider}
 	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
 
@@ -76,7 +76,7 @@ func TestOAuthCallbackHandler_ProviderErrorRedirectsToLogin(t *testing.T) {
 
 func TestOAuthCallbackHandler_MissingCodeRedirectsToLogin(t *testing.T) {
 	store := newSessionStore(t)
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "Google"}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "Google"}
 	flow := &fakeOAuthFlow{provider: provider}
 	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
 
@@ -94,7 +94,7 @@ func TestOAuthCallbackHandler_MissingCodeRedirectsToLogin(t *testing.T) {
 
 func TestOAuthCallbackHandler_StateMismatchRedirectsToLogin(t *testing.T) {
 	store := newSessionStore(t)
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "Google"}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "Google"}
 	flow := &fakeOAuthFlow{provider: provider}
 	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
 

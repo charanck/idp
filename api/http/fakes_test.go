@@ -5,16 +5,17 @@ import (
 	"errors"
 	"time"
 
-	"controlplane/internal/auth"
 	"controlplane/internal/config"
+	authmodel "controlplane/internal/model/auth"
+	configmodel "controlplane/internal/model/config"
 )
 
 type fakeAPIKeyAuthenticator struct {
-	client *auth.ServiceClient
+	client *authmodel.ServiceClient
 	err    error
 }
 
-func (f *fakeAPIKeyAuthenticator) AuthenticateServiceAPIKey(ctx context.Context, apiKey string) (*auth.ServiceClient, error) {
+func (f *fakeAPIKeyAuthenticator) AuthenticateServiceAPIKey(ctx context.Context, apiKey string) (*authmodel.ServiceClient, error) {
 	return f.client, f.err
 }
 
@@ -37,11 +38,11 @@ func (f *fakeConfigLister) ListConfigsForClient(ctx context.Context, service, en
 }
 
 type fakeFeatureFlagLister struct {
-	flags []config.FeatureFlag
+	flags []configmodel.FeatureFlag
 	err   error
 }
 
-func (f *fakeFeatureFlagLister) ListFlags(ctx context.Context, service, environment string) ([]config.FeatureFlag, error) {
+func (f *fakeFeatureFlagLister) ListFlags(ctx context.Context, service, environment string) ([]configmodel.FeatureFlag, error) {
 	return f.flags, f.err
 }
 

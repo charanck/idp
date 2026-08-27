@@ -11,7 +11,7 @@ import (
 	"gorm.io/datatypes"
 
 	apihttp "controlplane/api/http"
-	"controlplane/internal/notification"
+	notificationmodel "controlplane/internal/model/notification"
 )
 
 func newInAppRequest(bearer string) (echo.Context, *httptest.ResponseRecorder) {
@@ -54,8 +54,8 @@ func TestUnread_InvalidTokenReturns401(t *testing.T) {
 }
 
 func TestUnread_ReturnsConsumedNotificationsAsJSON(t *testing.T) {
-	consumer := &fakeUnreadConsumer{notifications: []notification.Notification{
-		{ID: uuid.New(), Channel: "inapp", Status: notification.StatusSent, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`)},
+	consumer := &fakeUnreadConsumer{notifications: []notificationmodel.Notification{
+		{ID: uuid.New(), Channel: "inapp", Status: notificationmodel.StatusSent, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`)},
 	}}
 	h := apihttp.NewInAppHandler(&fakeSessionValidator{userID: "user-1"}, consumer)
 

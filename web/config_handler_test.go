@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web"
 )
 
@@ -30,17 +30,17 @@ func TestConfigsListHandler_GroupsEntriesByKey(t *testing.T) {
 	appID := uuid.New()
 	envAID := uuid.New()
 	envBID := uuid.New()
-	configs.put(config.ConfigEntry{
+	configs.put(configmodel.ConfigEntry{
 		ApplicationID: appID, EnvironmentID: envAID, Key: "DATABASE_URL", Value: "v1",
-		Application: config.Application{ID: appID, Name: "app"}, Environment: config.Environment{ID: envAID, Name: "staging"},
+		Application: configmodel.Application{ID: appID, Name: "app"}, Environment: configmodel.Environment{ID: envAID, Name: "staging"},
 	})
-	configs.put(config.ConfigEntry{
+	configs.put(configmodel.ConfigEntry{
 		ApplicationID: appID, EnvironmentID: envBID, Key: "DATABASE_URL", Value: "v2",
-		Application: config.Application{ID: appID, Name: "app"}, Environment: config.Environment{ID: envBID, Name: "prod"},
+		Application: configmodel.Application{ID: appID, Name: "app"}, Environment: configmodel.Environment{ID: envBID, Name: "prod"},
 	})
-	configs.put(config.ConfigEntry{
+	configs.put(configmodel.ConfigEntry{
 		ApplicationID: appID, EnvironmentID: envAID, Key: "OTHER_KEY", Value: "v3",
-		Application: config.Application{ID: appID, Name: "app"}, Environment: config.Environment{ID: envAID, Name: "staging"},
+		Application: configmodel.Application{ID: appID, Name: "app"}, Environment: configmodel.Environment{ID: envAID, Name: "staging"},
 	})
 
 	rec := callHandler(t, store, http.MethodGet, "/configs/", nil, nil, h.List)
@@ -83,7 +83,7 @@ func TestConfigDeleteHandler_DeletesAndRedirects(t *testing.T) {
 	store := newSessionStore(t)
 	configs, _, _, activity, h := newConfigHandlerFixture()
 
-	entry := configs.put(config.ConfigEntry{Key: "K", Application: config.Application{Name: "a"}, Environment: config.Environment{Name: "e"}})
+	entry := configs.put(configmodel.ConfigEntry{Key: "K", Application: configmodel.Application{Name: "a"}, Environment: configmodel.Environment{Name: "e"}})
 	id := entry.ID.String()
 
 	rec := callHandlerWithParams(t, store, http.MethodPost, "/configs/"+id+"/delete/",

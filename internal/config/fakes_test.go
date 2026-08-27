@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 )
 
 // fakeCache is a real (if trivial) in-memory cache.Cache implementation,
@@ -61,20 +61,20 @@ func (c *fakeCache) BumpVersion(ctx context.Context, key string) error {
 	return nil
 }
 
-// fakeApplicationRepository is an in-memory config.ApplicationRepository.
+// fakeApplicationRepository is an in-memory configmodel.ApplicationRepository.
 type fakeApplicationRepository struct {
 	mu   sync.Mutex
-	apps map[uuid.UUID]config.Application
+	apps map[uuid.UUID]configmodel.Application
 }
 
 func newFakeApplicationRepository() *fakeApplicationRepository {
-	return &fakeApplicationRepository{apps: make(map[uuid.UUID]config.Application)}
+	return &fakeApplicationRepository{apps: make(map[uuid.UUID]configmodel.Application)}
 }
 
-func (f *fakeApplicationRepository) List(ctx context.Context, q string) ([]config.Application, error) {
+func (f *fakeApplicationRepository) List(ctx context.Context, q string) ([]configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []config.Application
+	var out []configmodel.Application
 	for _, a := range f.apps {
 		if q != "" && !strings.Contains(strings.ToLower(a.Name), strings.ToLower(q)) {
 			continue
@@ -85,7 +85,7 @@ func (f *fakeApplicationRepository) List(ctx context.Context, q string) ([]confi
 	return out, nil
 }
 
-func (f *fakeApplicationRepository) FindByID(ctx context.Context, id uuid.UUID) (*config.Application, error) {
+func (f *fakeApplicationRepository) FindByID(ctx context.Context, id uuid.UUID) (*configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if a, ok := f.apps[id]; ok {
@@ -95,7 +95,7 @@ func (f *fakeApplicationRepository) FindByID(ctx context.Context, id uuid.UUID) 
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeApplicationRepository) FindByName(ctx context.Context, name string) (*config.Application, error) {
+func (f *fakeApplicationRepository) FindByName(ctx context.Context, name string) (*configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, a := range f.apps {
@@ -107,7 +107,7 @@ func (f *fakeApplicationRepository) FindByName(ctx context.Context, name string)
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeApplicationRepository) Create(ctx context.Context, app *config.Application) error {
+func (f *fakeApplicationRepository) Create(ctx context.Context, app *configmodel.Application) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if app.ID == uuid.Nil {
@@ -117,14 +117,14 @@ func (f *fakeApplicationRepository) Create(ctx context.Context, app *config.Appl
 	return nil
 }
 
-func (f *fakeApplicationRepository) Update(ctx context.Context, app *config.Application) error {
+func (f *fakeApplicationRepository) Update(ctx context.Context, app *configmodel.Application) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.apps[app.ID] = *app
 	return nil
 }
 
-func (f *fakeApplicationRepository) Delete(ctx context.Context, app *config.Application) error {
+func (f *fakeApplicationRepository) Delete(ctx context.Context, app *configmodel.Application) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.apps, app.ID)
@@ -146,28 +146,28 @@ func (f *fakeApplicationRepository) ListDistinctNames(ctx context.Context) ([]st
 	return names, nil
 }
 
-// fakeEnvironmentRepository is an in-memory config.EnvironmentRepository.
+// fakeEnvironmentRepository is an in-memory configmodel.EnvironmentRepository.
 type fakeEnvironmentRepository struct {
 	mu   sync.Mutex
-	envs map[uuid.UUID]config.Environment
+	envs map[uuid.UUID]configmodel.Environment
 	apps *fakeApplicationRepository // used to fill in the preloaded Application field
 }
 
 func newFakeEnvironmentRepository(apps *fakeApplicationRepository) *fakeEnvironmentRepository {
-	return &fakeEnvironmentRepository{envs: make(map[uuid.UUID]config.Environment), apps: apps}
+	return &fakeEnvironmentRepository{envs: make(map[uuid.UUID]configmodel.Environment), apps: apps}
 }
 
-func (f *fakeEnvironmentRepository) withApplication(env config.Environment) config.Environment {
+func (f *fakeEnvironmentRepository) withApplication(env configmodel.Environment) configmodel.Environment {
 	if app, err := f.apps.FindByID(context.Background(), env.ApplicationID); err == nil {
 		env.Application = *app
 	}
 	return env
 }
 
-func (f *fakeEnvironmentRepository) List(ctx context.Context, filter config.ListEnvironmentsFilter) ([]config.Environment, error) {
+func (f *fakeEnvironmentRepository) List(ctx context.Context, filter configmodel.ListEnvironmentsFilter) ([]configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []config.Environment
+	var out []configmodel.Environment
 	for _, e := range f.envs {
 		if filter.ApplicationID != nil && e.ApplicationID != *filter.ApplicationID {
 			continue
@@ -181,10 +181,10 @@ func (f *fakeEnvironmentRepository) List(ctx context.Context, filter config.List
 	return out, nil
 }
 
-func (f *fakeEnvironmentRepository) ListByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]config.Environment, error) {
+func (f *fakeEnvironmentRepository) ListByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []config.Environment
+	var out []configmodel.Environment
 	for _, e := range f.envs {
 		if e.ApplicationID == applicationID {
 			out = append(out, e)
@@ -194,7 +194,7 @@ func (f *fakeEnvironmentRepository) ListByApplicationID(ctx context.Context, app
 	return out, nil
 }
 
-func (f *fakeEnvironmentRepository) FindByID(ctx context.Context, id uuid.UUID) (*config.Environment, error) {
+func (f *fakeEnvironmentRepository) FindByID(ctx context.Context, id uuid.UUID) (*configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if e, ok := f.envs[id]; ok {
@@ -204,7 +204,7 @@ func (f *fakeEnvironmentRepository) FindByID(ctx context.Context, id uuid.UUID) 
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeEnvironmentRepository) FindByIDWithApplication(ctx context.Context, id uuid.UUID) (*config.Environment, error) {
+func (f *fakeEnvironmentRepository) FindByIDWithApplication(ctx context.Context, id uuid.UUID) (*configmodel.Environment, error) {
 	f.mu.Lock()
 	e, ok := f.envs[id]
 	f.mu.Unlock()
@@ -215,7 +215,7 @@ func (f *fakeEnvironmentRepository) FindByIDWithApplication(ctx context.Context,
 	return &cp, nil
 }
 
-func (f *fakeEnvironmentRepository) FindByApplicationAndName(ctx context.Context, applicationID uuid.UUID, name string) (*config.Environment, error) {
+func (f *fakeEnvironmentRepository) FindByApplicationAndName(ctx context.Context, applicationID uuid.UUID, name string) (*configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, e := range f.envs {
@@ -227,7 +227,7 @@ func (f *fakeEnvironmentRepository) FindByApplicationAndName(ctx context.Context
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeEnvironmentRepository) Create(ctx context.Context, env *config.Environment) error {
+func (f *fakeEnvironmentRepository) Create(ctx context.Context, env *configmodel.Environment) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if env.ID == uuid.Nil {
@@ -237,28 +237,28 @@ func (f *fakeEnvironmentRepository) Create(ctx context.Context, env *config.Envi
 	return nil
 }
 
-func (f *fakeEnvironmentRepository) Update(ctx context.Context, env *config.Environment) error {
+func (f *fakeEnvironmentRepository) Update(ctx context.Context, env *configmodel.Environment) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.envs[env.ID] = *env
 	return nil
 }
 
-func (f *fakeEnvironmentRepository) Delete(ctx context.Context, env *config.Environment) error {
+func (f *fakeEnvironmentRepository) Delete(ctx context.Context, env *configmodel.Environment) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.envs, env.ID)
 	return nil
 }
 
-// fakeConfigRepository is an in-memory config.ConfigRepository.
+// fakeConfigRepository is an in-memory configmodel.ConfigRepository.
 // UpsertEntryAndRecordVersion reaches into apps/envs to get-or-create scope,
 // mirroring the real repository's cross-aggregate transaction but without an
 // actual DB transaction - single-goroutine tests don't need one.
 type fakeConfigRepository struct {
 	mu               sync.Mutex
-	entries          map[uuid.UUID]config.ConfigEntry
-	versions         map[uuid.UUID][]config.ConfigEntryVersion
+	entries          map[uuid.UUID]configmodel.ConfigEntry
+	versions         map[uuid.UUID][]configmodel.ConfigEntryVersion
 	apps             *fakeApplicationRepository
 	envs             *fakeEnvironmentRepository
 	listByScopeCalls int
@@ -266,14 +266,14 @@ type fakeConfigRepository struct {
 
 func newFakeConfigRepository(apps *fakeApplicationRepository, envs *fakeEnvironmentRepository) *fakeConfigRepository {
 	return &fakeConfigRepository{
-		entries:  make(map[uuid.UUID]config.ConfigEntry),
-		versions: make(map[uuid.UUID][]config.ConfigEntryVersion),
+		entries:  make(map[uuid.UUID]configmodel.ConfigEntry),
+		versions: make(map[uuid.UUID][]configmodel.ConfigEntryVersion),
 		apps:     apps,
 		envs:     envs,
 	}
 }
 
-func (f *fakeConfigRepository) withScope(e config.ConfigEntry) config.ConfigEntry {
+func (f *fakeConfigRepository) withScope(e configmodel.ConfigEntry) configmodel.ConfigEntry {
 	if app, err := f.apps.FindByID(context.Background(), e.ApplicationID); err == nil {
 		e.Application = *app
 	}
@@ -283,7 +283,7 @@ func (f *fakeConfigRepository) withScope(e config.ConfigEntry) config.ConfigEntr
 	return e
 }
 
-func (f *fakeConfigRepository) FindByScopeAndKey(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*config.ConfigEntry, error) {
+func (f *fakeConfigRepository) FindByScopeAndKey(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*configmodel.ConfigEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, e := range f.entries {
@@ -295,7 +295,7 @@ func (f *fakeConfigRepository) FindByScopeAndKey(ctx context.Context, applicatio
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeConfigRepository) FindByScopeAndKeyWithScope(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*config.ConfigEntry, error) {
+func (f *fakeConfigRepository) FindByScopeAndKeyWithScope(ctx context.Context, applicationID, environmentID uuid.UUID, key string) (*configmodel.ConfigEntry, error) {
 	entry, err := f.FindByScopeAndKey(ctx, applicationID, environmentID, key)
 	if err != nil {
 		return nil, err
@@ -304,24 +304,24 @@ func (f *fakeConfigRepository) FindByScopeAndKeyWithScope(ctx context.Context, a
 	return &cp, nil
 }
 
-func (f *fakeConfigRepository) ListByScope(ctx context.Context, applicationID, environmentID uuid.UUID) ([]config.ConfigEntry, error) {
+func (f *fakeConfigRepository) ListByScope(ctx context.Context, applicationID, environmentID uuid.UUID) ([]configmodel.ConfigEntry, error) {
 	f.mu.Lock()
 	f.listByScopeCalls++
-	var matches []config.ConfigEntry
+	var matches []configmodel.ConfigEntry
 	for _, e := range f.entries {
 		if e.ApplicationID == applicationID && e.EnvironmentID == environmentID {
 			matches = append(matches, e)
 		}
 	}
 	f.mu.Unlock()
-	out := make([]config.ConfigEntry, len(matches))
+	out := make([]configmodel.ConfigEntry, len(matches))
 	for i, e := range matches {
 		out[i] = f.withScope(e)
 	}
 	return out, nil
 }
 
-func (f *fakeConfigRepository) FindByID(ctx context.Context, id uuid.UUID) (*config.ConfigEntry, error) {
+func (f *fakeConfigRepository) FindByID(ctx context.Context, id uuid.UUID) (*configmodel.ConfigEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if e, ok := f.entries[id]; ok {
@@ -331,7 +331,7 @@ func (f *fakeConfigRepository) FindByID(ctx context.Context, id uuid.UUID) (*con
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeConfigRepository) FindByIDWithScope(ctx context.Context, id uuid.UUID) (*config.ConfigEntry, error) {
+func (f *fakeConfigRepository) FindByIDWithScope(ctx context.Context, id uuid.UUID) (*configmodel.ConfigEntry, error) {
 	entry, err := f.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -340,9 +340,9 @@ func (f *fakeConfigRepository) FindByIDWithScope(ctx context.Context, id uuid.UU
 	return &cp, nil
 }
 
-func (f *fakeConfigRepository) List(ctx context.Context, filter config.ListConfigEntriesFilter) ([]config.ConfigEntry, error) {
+func (f *fakeConfigRepository) List(ctx context.Context, filter configmodel.ListConfigEntriesFilter) ([]configmodel.ConfigEntry, error) {
 	f.mu.Lock()
-	var matches []config.ConfigEntry
+	var matches []configmodel.ConfigEntry
 	for _, e := range f.entries {
 		if filter.ApplicationID != nil && e.ApplicationID != *filter.ApplicationID {
 			continue
@@ -359,7 +359,7 @@ func (f *fakeConfigRepository) List(ctx context.Context, filter config.ListConfi
 		matches = append(matches, e)
 	}
 	f.mu.Unlock()
-	out := make([]config.ConfigEntry, len(matches))
+	out := make([]configmodel.ConfigEntry, len(matches))
 	for i, e := range matches {
 		out[i] = f.withScope(e)
 	}
@@ -367,14 +367,14 @@ func (f *fakeConfigRepository) List(ctx context.Context, filter config.ListConfi
 	return out, nil
 }
 
-func (f *fakeConfigRepository) Update(ctx context.Context, entry *config.ConfigEntry) error {
+func (f *fakeConfigRepository) Update(ctx context.Context, entry *configmodel.ConfigEntry) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.entries[entry.ID] = *entry
 	return nil
 }
 
-func (f *fakeConfigRepository) Delete(ctx context.Context, entry *config.ConfigEntry) error {
+func (f *fakeConfigRepository) Delete(ctx context.Context, entry *configmodel.ConfigEntry) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.entries, entry.ID)
@@ -382,13 +382,13 @@ func (f *fakeConfigRepository) Delete(ctx context.Context, entry *config.ConfigE
 	return nil
 }
 
-func (f *fakeConfigRepository) RecordVersion(ctx context.Context, entry *config.ConfigEntry, action, changedBy string) (*config.ConfigEntryVersion, error) {
+func (f *fakeConfigRepository) RecordVersion(ctx context.Context, entry *configmodel.ConfigEntry, action, changedBy string) (*configmodel.ConfigEntryVersion, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.recordVersionLocked(entry, action, changedBy)
 }
 
-func (f *fakeConfigRepository) recordVersionLocked(entry *config.ConfigEntry, action, changedBy string) (*config.ConfigEntryVersion, error) {
+func (f *fakeConfigRepository) recordVersionLocked(entry *configmodel.ConfigEntry, action, changedBy string) (*configmodel.ConfigEntryVersion, error) {
 	existing := f.versions[entry.ID]
 	versionNumber := 1
 	if len(existing) > 0 {
@@ -398,7 +398,7 @@ func (f *fakeConfigRepository) recordVersionLocked(entry *config.ConfigEntry, ac
 	if changedBy != "" {
 		changedByPtr = &changedBy
 	}
-	v := config.ConfigEntryVersion{
+	v := configmodel.ConfigEntryVersion{
 		ID:            uuid.New(),
 		ConfigEntryID: entry.ID,
 		Value:         entry.Value,
@@ -413,10 +413,10 @@ func (f *fakeConfigRepository) recordVersionLocked(entry *config.ConfigEntry, ac
 	return &v, nil
 }
 
-func (f *fakeConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, params config.UpsertEntryParams) (*config.ConfigEntry, string, error) {
+func (f *fakeConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, params configmodel.UpsertEntryParams) (*configmodel.ConfigEntry, string, error) {
 	app, err := f.apps.FindByName(ctx, params.Service)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		app = &config.Application{Name: params.Service}
+		app = &configmodel.Application{Name: params.Service}
 		if err := f.apps.Create(ctx, app); err != nil {
 			return nil, "", err
 		}
@@ -426,7 +426,7 @@ func (f *fakeConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, 
 
 	env, err := f.envs.FindByApplicationAndName(ctx, app.ID, params.Environment)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		env = &config.Environment{ApplicationID: app.ID, Name: params.Environment}
+		env = &configmodel.Environment{ApplicationID: app.ID, Name: params.Environment}
 		if err := f.envs.Create(ctx, env); err != nil {
 			return nil, "", err
 		}
@@ -435,7 +435,7 @@ func (f *fakeConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, 
 	}
 
 	f.mu.Lock()
-	var found *config.ConfigEntry
+	var found *configmodel.ConfigEntry
 	for _, e := range f.entries {
 		if e.ApplicationID == app.ID && e.EnvironmentID == env.ID && e.Key == params.Key {
 			cp := e
@@ -445,7 +445,7 @@ func (f *fakeConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, 
 	}
 	created := found == nil
 	if created {
-		found = &config.ConfigEntry{
+		found = &configmodel.ConfigEntry{
 			ID:            uuid.New(),
 			ApplicationID: app.ID,
 			EnvironmentID: env.ID,
@@ -464,9 +464,9 @@ func (f *fakeConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, 
 	historyAction := params.HistoryAction
 	if historyAction == "" {
 		if created {
-			historyAction = config.ActionCreate
+			historyAction = configmodel.ActionCreate
 		} else {
-			historyAction = config.ActionUpdate
+			historyAction = configmodel.ActionUpdate
 		}
 	}
 	if _, err := f.recordVersionLocked(found, historyAction, params.ChangedBy); err != nil {
@@ -478,15 +478,15 @@ func (f *fakeConfigRepository) UpsertEntryAndRecordVersion(ctx context.Context, 
 	return found, historyAction, nil
 }
 
-func (f *fakeConfigRepository) ListVersions(ctx context.Context, configEntryID uuid.UUID) ([]config.ConfigEntryVersion, error) {
+func (f *fakeConfigRepository) ListVersions(ctx context.Context, configEntryID uuid.UUID) ([]configmodel.ConfigEntryVersion, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	versions := append([]config.ConfigEntryVersion(nil), f.versions[configEntryID]...)
+	versions := append([]configmodel.ConfigEntryVersion(nil), f.versions[configEntryID]...)
 	sort.Slice(versions, func(i, j int) bool { return versions[i].Version > versions[j].Version })
 	return versions, nil
 }
 
-func (f *fakeConfigRepository) FindVersion(ctx context.Context, configEntryID uuid.UUID, version int) (*config.ConfigEntryVersion, error) {
+func (f *fakeConfigRepository) FindVersion(ctx context.Context, configEntryID uuid.UUID, version int) (*configmodel.ConfigEntryVersion, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, v := range f.versions[configEntryID] {
@@ -498,20 +498,20 @@ func (f *fakeConfigRepository) FindVersion(ctx context.Context, configEntryID uu
 	return nil, gorm.ErrRecordNotFound
 }
 
-// fakeFeatureFlagRepository is an in-memory config.FeatureFlagRepository.
+// fakeFeatureFlagRepository is an in-memory configmodel.FeatureFlagRepository.
 type fakeFeatureFlagRepository struct {
 	mu                     sync.Mutex
-	flags                  map[uuid.UUID]config.FeatureFlag
+	flags                  map[uuid.UUID]configmodel.FeatureFlag
 	apps                   *fakeApplicationRepository
 	envs                   *fakeEnvironmentRepository
 	listActiveByScopeCalls int
 }
 
 func newFakeFeatureFlagRepository(apps *fakeApplicationRepository, envs *fakeEnvironmentRepository) *fakeFeatureFlagRepository {
-	return &fakeFeatureFlagRepository{flags: make(map[uuid.UUID]config.FeatureFlag), apps: apps, envs: envs}
+	return &fakeFeatureFlagRepository{flags: make(map[uuid.UUID]configmodel.FeatureFlag), apps: apps, envs: envs}
 }
 
-func (f *fakeFeatureFlagRepository) withScope(flag config.FeatureFlag) config.FeatureFlag {
+func (f *fakeFeatureFlagRepository) withScope(flag configmodel.FeatureFlag) configmodel.FeatureFlag {
 	if app, err := f.apps.FindByID(context.Background(), flag.ApplicationID); err == nil {
 		flag.Application = *app
 	}
@@ -521,7 +521,7 @@ func (f *fakeFeatureFlagRepository) withScope(flag config.FeatureFlag) config.Fe
 	return flag
 }
 
-func (f *fakeFeatureFlagRepository) FindByScopeAndName(ctx context.Context, applicationID, environmentID uuid.UUID, name string) (*config.FeatureFlag, error) {
+func (f *fakeFeatureFlagRepository) FindByScopeAndName(ctx context.Context, applicationID, environmentID uuid.UUID, name string) (*configmodel.FeatureFlag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, flag := range f.flags {
@@ -533,7 +533,7 @@ func (f *fakeFeatureFlagRepository) FindByScopeAndName(ctx context.Context, appl
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeFeatureFlagRepository) FindActiveByScopeAndName(ctx context.Context, applicationID, environmentID uuid.UUID, name string) (*config.FeatureFlag, error) {
+func (f *fakeFeatureFlagRepository) FindActiveByScopeAndName(ctx context.Context, applicationID, environmentID uuid.UUID, name string) (*configmodel.FeatureFlag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, flag := range f.flags {
@@ -545,17 +545,17 @@ func (f *fakeFeatureFlagRepository) FindActiveByScopeAndName(ctx context.Context
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeFeatureFlagRepository) ListActiveByScope(ctx context.Context, applicationID, environmentID uuid.UUID) ([]config.FeatureFlag, error) {
+func (f *fakeFeatureFlagRepository) ListActiveByScope(ctx context.Context, applicationID, environmentID uuid.UUID) ([]configmodel.FeatureFlag, error) {
 	f.mu.Lock()
 	f.listActiveByScopeCalls++
-	var matches []config.FeatureFlag
+	var matches []configmodel.FeatureFlag
 	for _, flag := range f.flags {
 		if flag.ApplicationID == applicationID && flag.EnvironmentID == environmentID && flag.DeletedAt == nil {
 			matches = append(matches, flag)
 		}
 	}
 	f.mu.Unlock()
-	out := make([]config.FeatureFlag, len(matches))
+	out := make([]configmodel.FeatureFlag, len(matches))
 	for i, flag := range matches {
 		out[i] = f.withScope(flag)
 	}
@@ -563,7 +563,7 @@ func (f *fakeFeatureFlagRepository) ListActiveByScope(ctx context.Context, appli
 	return out, nil
 }
 
-func (f *fakeFeatureFlagRepository) Create(ctx context.Context, flag *config.FeatureFlag) error {
+func (f *fakeFeatureFlagRepository) Create(ctx context.Context, flag *configmodel.FeatureFlag) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if flag.ID == uuid.Nil {
@@ -573,14 +573,14 @@ func (f *fakeFeatureFlagRepository) Create(ctx context.Context, flag *config.Fea
 	return nil
 }
 
-func (f *fakeFeatureFlagRepository) Update(ctx context.Context, flag *config.FeatureFlag) error {
+func (f *fakeFeatureFlagRepository) Update(ctx context.Context, flag *configmodel.FeatureFlag) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.flags[flag.ID] = *flag
 	return nil
 }
 
-func (f *fakeFeatureFlagRepository) FindByID(ctx context.Context, id uuid.UUID) (*config.FeatureFlag, error) {
+func (f *fakeFeatureFlagRepository) FindByID(ctx context.Context, id uuid.UUID) (*configmodel.FeatureFlag, error) {
 	f.mu.Lock()
 	flag, ok := f.flags[id]
 	f.mu.Unlock()
@@ -591,9 +591,9 @@ func (f *fakeFeatureFlagRepository) FindByID(ctx context.Context, id uuid.UUID) 
 	return &cp, nil
 }
 
-func (f *fakeFeatureFlagRepository) List(ctx context.Context, filter config.ListFlagsFilter) ([]config.FeatureFlag, error) {
+func (f *fakeFeatureFlagRepository) List(ctx context.Context, filter configmodel.ListFlagsFilter) ([]configmodel.FeatureFlag, error) {
 	f.mu.Lock()
-	var matches []config.FeatureFlag
+	var matches []configmodel.FeatureFlag
 	for _, flag := range f.flags {
 		if flag.DeletedAt != nil {
 			continue
@@ -610,7 +610,7 @@ func (f *fakeFeatureFlagRepository) List(ctx context.Context, filter config.List
 		matches = append(matches, flag)
 	}
 	f.mu.Unlock()
-	out := make([]config.FeatureFlag, len(matches))
+	out := make([]configmodel.FeatureFlag, len(matches))
 	for i, flag := range matches {
 		out[i] = f.withScope(flag)
 	}

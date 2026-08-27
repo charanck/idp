@@ -1,4 +1,4 @@
-package notification
+package repository
 
 import (
 	"context"
@@ -7,25 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-)
 
-// NotificationRepository is the persistence seam for Notification rows.
-type NotificationRepository interface {
-	FindByIdempotencyKey(ctx context.Context, key string) (*Notification, error)
-	FindByID(ctx context.Context, id uuid.UUID) (*Notification, error)
-	List(ctx context.Context, filter ListNotificationsFilter) ([]Notification, error)
-	Create(ctx context.Context, n *Notification) error
-	// ConsumeUnreadInApp atomically lists and marks-read a user's unread
-	// InApp notifications, newest first - kept as one transactional
-	// repository method (rather than List+Update called separately by the
-	// service) so a client catching up on missed notifications is
-	// guaranteed to see each one exactly once.
-	ConsumeUnreadInApp(ctx context.Context, userID string) ([]Notification, error)
-	MarkProcessing(ctx context.Context, id uuid.UUID) error
-	MarkSent(ctx context.Context, id uuid.UUID, provider, providerMessageID string) error
-	MarkRetrying(ctx context.Context, id uuid.UUID, attempt int, sendErr error) error
-	MarkFailed(ctx context.Context, id uuid.UUID, attempt int, sendErr error) error
-}
+	model "controlplane/internal/model/notification"
+)
 
 type gormNotificationRepository struct {
 	db *gorm.DB
@@ -35,8 +19,8 @@ func NewNotificationRepository(db *gorm.DB) *gormNotificationRepository {
 	return &gormNotificationRepository{db: db}
 }
 
-func (r *gormNotificationRepository) FindByIdempotencyKey(ctx context.Context, key string) (*Notification, error) {
-	var n Notification
+func (r *gormNotificationRepository) FindByIdempotencyKey(ctx context.Context, key string) (*model.Notification, error) {
+	var n model.Notification
 	err := r.db.WithContext(ctx).Where("idempotency_key = ?", key).First(&n).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
@@ -47,8 +31,8 @@ func (r *gormNotificationRepository) FindByIdempotencyKey(ctx context.Context, k
 	return &n, nil
 }
 
-func (r *gormNotificationRepository) FindByID(ctx context.Context, id uuid.UUID) (*Notification, error) {
-	var n Notification
+func (r *gormNotificationRepository) FindByID(ctx context.Context, id uuid.UUID) (*model.Notification, error) {
+	var n model.Notification
 	err := r.db.WithContext(ctx).First(&n, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
@@ -59,7 +43,7 @@ func (r *gormNotificationRepository) FindByID(ctx context.Context, id uuid.UUID)
 	return &n, nil
 }
 
-func (r *gormNotificationRepository) List(ctx context.Context, filter ListNotificationsFilter) ([]Notification, error) {
+func (r *gormNotificationRepository) List(ctx context.Context, filter model.ListNotificationsFilter) ([]model.Notification, error) {
 	query := r.db.WithContext(ctx).Order("created_at DESC")
 	if filter.Channel != "" {
 		query = query.Where("channel = ?", filter.Channel)
@@ -67,22 +51,22 @@ func (r *gormNotificationRepository) List(ctx context.Context, filter ListNotifi
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
 	}
-	var notifications []Notification
+	var notifications []model.Notification
 	if err := query.Find(&notifications).Error; err != nil {
 		return nil, err
 	}
 	return notifications, nil
 }
 
-func (r *gormNotificationRepository) Create(ctx context.Context, n *Notification) error {
+func (r *gormNotificationRepository) Create(ctx context.Context, n *model.Notification) error {
 	return r.db.WithContext(ctx).Create(n).Error
 }
 
-func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string) ([]Notification, error) {
-	var notifications []Notification
+func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string) ([]model.Notification, error) {
+	var notifications []model.Notification
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.
-			Where("channel = ?", ChannelInApp).
+			Where("channel = ?", model.ChannelInApp).
 			Where("recipient ->> 'user_id' = ?", userID).
 			Where("read_at IS NULL").
 			Order("created_at DESC").
@@ -97,7 +81,7 @@ func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, use
 		for i := range notifications {
 			ids[i] = notifications[i].ID
 		}
-		return tx.Model(&Notification{}).Where("id IN ?", ids).Update("read_at", time.Now()).Error
+		return tx.Model(&model.Notification{}).Where("id IN ?", ids).Update("read_at", time.Now()).Error
 	})
 	if err != nil {
 		return nil, err
@@ -106,14 +90,14 @@ func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, use
 }
 
 func (r *gormNotificationRepository) MarkProcessing(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Model(&Notification{}).Where("id = ?", id).
-		Updates(map[string]any{"status": StatusProcessing}).Error
+	return r.db.WithContext(ctx).Model(&model.Notification{}).Where("id = ?", id).
+		Updates(map[string]any{"status": model.StatusProcessing}).Error
 }
 
 func (r *gormNotificationRepository) MarkSent(ctx context.Context, id uuid.UUID, provider, providerMessageID string) error {
-	return r.db.WithContext(ctx).Model(&Notification{}).Where("id = ?", id).
+	return r.db.WithContext(ctx).Model(&model.Notification{}).Where("id = ?", id).
 		Updates(map[string]any{
-			"status":              StatusSent,
+			"status":              model.StatusSent,
 			"provider":            provider,
 			"provider_message_id": providerMessageID,
 			"error":               nil,
@@ -121,21 +105,21 @@ func (r *gormNotificationRepository) MarkSent(ctx context.Context, id uuid.UUID,
 }
 
 func (r *gormNotificationRepository) MarkRetrying(ctx context.Context, id uuid.UUID, attempt int, sendErr error) error {
-	return r.db.WithContext(ctx).Model(&Notification{}).Where("id = ?", id).
+	return r.db.WithContext(ctx).Model(&model.Notification{}).Where("id = ?", id).
 		Updates(map[string]any{
-			"status":  StatusRetrying,
+			"status":  model.StatusRetrying,
 			"attempt": attempt,
 			"error":   sendErr.Error(),
 		}).Error
 }
 
 func (r *gormNotificationRepository) MarkFailed(ctx context.Context, id uuid.UUID, attempt int, sendErr error) error {
-	return r.db.WithContext(ctx).Model(&Notification{}).Where("id = ?", id).
+	return r.db.WithContext(ctx).Model(&model.Notification{}).Where("id = ?", id).
 		Updates(map[string]any{
-			"status":  StatusFailed,
+			"status":  model.StatusFailed,
 			"attempt": attempt,
 			"error":   sendErr.Error(),
 		}).Error
 }
 
-var _ NotificationRepository = (*gormNotificationRepository)(nil)
+var _ model.NotificationRepository = (*gormNotificationRepository)(nil)

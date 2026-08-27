@@ -11,6 +11,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 )
 
 func newTestOAuthService() (*auth.OAuthService, *fakeOAuthProviderRepository, *fakeOAuthUserTokenRepository, *fakeUserRepository) {
@@ -30,7 +31,7 @@ func TestExchangeCodeForToken_TranslatesProviderRejection(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	provider := &auth.OAuthProvider{
+	provider := &authmodel.OAuthProvider{
 		Name:             "Google",
 		ClientID:         "client-id",
 		ClientSecret:     "client-secret",
@@ -47,7 +48,7 @@ func TestExchangeCodeForToken_TranslatesProviderRejection(t *testing.T) {
 func TestGetUserInfo_RaisesWhenNoUserinfoURL(t *testing.T) {
 	svc, _, _, _ := newTestOAuthService()
 
-	provider := &auth.OAuthProvider{Name: "Google"}
+	provider := &authmodel.OAuthProvider{Name: "Google"}
 	_, err := svc.GetUserInfo(context.Background(), provider, "access-token")
 	if err == nil {
 		t.Fatal("expected error when userinfo_url is not configured")
@@ -66,7 +67,7 @@ func TestGetUserInfo_ReturnsParsedJSONOnSuccess(t *testing.T) {
 	defer ts.Close()
 
 	url := ts.URL
-	provider := &auth.OAuthProvider{Name: "Google", UserinfoURL: &url}
+	provider := &authmodel.OAuthProvider{Name: "Google", UserinfoURL: &url}
 	info, err := svc.GetUserInfo(context.Background(), provider, "access-token")
 	if err != nil {
 		t.Fatalf("GetUserInfo: %v", err)
@@ -85,7 +86,7 @@ func TestGetUserInfo_RaisesOnHTTPError(t *testing.T) {
 	defer ts.Close()
 
 	url := ts.URL
-	provider := &auth.OAuthProvider{Name: "Google", UserinfoURL: &url}
+	provider := &authmodel.OAuthProvider{Name: "Google", UserinfoURL: &url}
 	if _, err := svc.GetUserInfo(context.Background(), provider, "access-token"); err == nil {
 		t.Fatal("expected error on HTTP 500")
 	}
@@ -100,7 +101,7 @@ func TestGetUserInfo_RaisesOnUnparseableResponse(t *testing.T) {
 	defer ts.Close()
 
 	url := ts.URL
-	provider := &auth.OAuthProvider{Name: "Google", UserinfoURL: &url}
+	provider := &authmodel.OAuthProvider{Name: "Google", UserinfoURL: &url}
 	if _, err := svc.GetUserInfo(context.Background(), provider, "access-token"); err == nil {
 		t.Fatal("expected error on unparseable response")
 	}
@@ -108,7 +109,7 @@ func TestGetUserInfo_RaisesOnUnparseableResponse(t *testing.T) {
 
 func TestAuthenticateOrCreateUser_RaisesWhenProviderUserIDMissing(t *testing.T) {
 	svc, _, _, _ := newTestOAuthService()
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
 
 	_, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, &oauth2.Token{}, map[string]any{"email": "a@example.com"})
 	if err == nil {
@@ -118,7 +119,7 @@ func TestAuthenticateOrCreateUser_RaisesWhenProviderUserIDMissing(t *testing.T) 
 
 func TestAuthenticateOrCreateUser_RaisesWhenEmailMissing(t *testing.T) {
 	svc, _, _, _ := newTestOAuthService()
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
 
 	_, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, &oauth2.Token{}, map[string]any{"sub": "123"})
 	if err == nil {
@@ -130,7 +131,7 @@ func TestAuthenticateOrCreateUser_AutoCreatesUserWhenAllowed(t *testing.T) {
 	svc, _, _, users := newTestOAuthService()
 	ctx := context.Background()
 
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
 	token := &oauth2.Token{AccessToken: "access-token", RefreshToken: "rtok", Expiry: time.Now().Add(time.Hour)}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "new@example.com"}
 
@@ -163,7 +164,7 @@ func TestAuthenticateOrCreateUser_RejectsWhenAutoCreateDisabled(t *testing.T) {
 	svc, _, _, _ := newTestOAuthService()
 	ctx := context.Background()
 
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: false}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: false}
 	token := &oauth2.Token{AccessToken: "access-token"}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "unknown@example.com"}
 
@@ -177,8 +178,8 @@ func TestAuthenticateOrCreateUser_LinksExistingUserByEmailWhenNoOAuthTokenYet(t 
 	svc, _, _, users := newTestOAuthService()
 	ctx := context.Background()
 
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta"}
-	existing := &auth.User{ID: uuid.New(), Email: "existing@example.com", Username: "existing", IsActive: true}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "okta"}
+	existing := &authmodel.User{ID: uuid.New(), Email: "existing@example.com", Username: "existing", IsActive: true}
 	if err := users.Create(ctx, existing); err != nil {
 		t.Fatalf("seed existing user: %v", err)
 	}
@@ -202,8 +203,8 @@ func TestAuthenticateOrCreateUser_ResolvesUsernameCollisionWhenCreatingUser(t *t
 	svc, _, _, users := newTestOAuthService()
 	ctx := context.Background()
 
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
-	other := &auth.User{ID: uuid.New(), Email: "other@example.com", Username: "newperson"}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
+	other := &authmodel.User{ID: uuid.New(), Email: "other@example.com", Username: "newperson"}
 	if err := users.Create(ctx, other); err != nil {
 		t.Fatalf("seed other user: %v", err)
 	}
@@ -224,12 +225,12 @@ func TestAuthenticateOrCreateUser_UpdatesExistingToken(t *testing.T) {
 	svc, _, tokens, users := newTestOAuthService()
 	ctx := context.Background()
 
-	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta"}
-	existingUser := &auth.User{ID: uuid.New(), Email: "existing@example.com", IsActive: true}
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "okta"}
+	existingUser := &authmodel.User{ID: uuid.New(), Email: "existing@example.com", IsActive: true}
 	if err := users.Create(ctx, existingUser); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
-	if err := tokens.Create(ctx, &auth.OAuthUserToken{
+	if err := tokens.Create(ctx, &authmodel.OAuthUserToken{
 		ID:             uuid.New(),
 		UserID:         existingUser.ID,
 		ProviderID:     provider.ID,
@@ -261,7 +262,7 @@ func TestGetActiveProviderByID_InactiveProviderReturnsNil(t *testing.T) {
 	svc, providers, _, _ := newTestOAuthService()
 	ctx := context.Background()
 
-	p := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", IsActive: false}
+	p := &authmodel.OAuthProvider{ID: uuid.New(), Name: "okta", IsActive: false}
 	if err := providers.Create(ctx, p); err != nil {
 		t.Fatalf("seed provider: %v", err)
 	}

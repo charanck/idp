@@ -1,8 +1,7 @@
 // Package session implements Redis-backed server-side sessions for the web
-// UI, mirroring Django's session framework (django.contrib.sessions) plus its
-// messages framework (django.contrib.messages): a signed session-ID cookie
-// points at a JSON blob in Redis, and flash messages/CSRF tokens ride inside
-// that same blob rather than needing separate storage.
+// UI: a signed session-ID cookie points at a JSON blob in Redis, and flash
+// messages/CSRF tokens ride inside that same blob rather than needing
+// separate storage.
 package session
 
 import (
@@ -21,7 +20,7 @@ import (
 )
 
 const (
-	// CookieName is the session-ID cookie, analogous to Django's "sessionid".
+	// CookieName is the session-ID cookie.
 	CookieName = "cp_session"
 	contextKey = "webui_session"
 	defaultTTL = 14 * 24 * time.Hour
@@ -45,8 +44,8 @@ func NewStore(rdb *redis.Client, secret string, ttl time.Duration) *Store {
 	return &Store{rdb: rdb, secret: []byte(secret), ttl: ttl}
 }
 
-// Flash is a one-time message queued for the next page render, mirroring
-// django.contrib.messages (tags: success/info/warning/error/danger).
+// Flash is a one-time message queued for the next page render
+// (tags: success/info/warning/error/danger).
 type Flash struct {
 	Tag  string `json:"tag"`
 	Text string `json:"text"`
@@ -256,8 +255,8 @@ func (s *Session) PopString(key string) (string, bool) {
 }
 
 // Regenerate rotates the session ID (deleting the old Redis entry on
-// persist), mirroring Django login()'s session-fixation protection: call
-// this when a session transitions from anonymous to authenticated.
+// persist) as session-fixation protection: call this when a session
+// transitions from anonymous to authenticated.
 func (s *Session) Regenerate() {
 	if s.id != "" {
 		s.oldID = s.id
@@ -267,8 +266,7 @@ func (s *Session) Regenerate() {
 	s.dirty = true
 }
 
-// Destroy deletes the session from Redis and clears the cookie, mirroring
-// Django's logout().
+// Destroy deletes the session from Redis and clears the cookie, for logout.
 func (s *Session) Destroy() {
 	s.destroyed = true
 }
@@ -287,7 +285,7 @@ func (s *Session) ClearUserID() {
 	s.Delete(userIDKey)
 }
 
-// AddFlash queues a one-time message, mirroring django.contrib.messages.
+// AddFlash queues a one-time message for the next page render.
 func (s *Session) AddFlash(tag, text string) {
 	flashes := s.peekFlashes()
 	flashes = append(flashes, Flash{Tag: tag, Text: text})

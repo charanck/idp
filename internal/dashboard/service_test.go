@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/config"
 	"controlplane/internal/dashboard"
+	configmodel "controlplane/internal/model/config"
 )
 
 func TestGetCounts_AggregatesAllCounters(t *testing.T) {
@@ -43,7 +43,7 @@ func TestRecentConfigs_RespectsLimit(t *testing.T) {
 	repo := newFakeDashboardRepository()
 	now := time.Now()
 	for i := 0; i < 5; i++ {
-		repo.recentConfigEntries = append(repo.recentConfigEntries, config.ConfigEntry{
+		repo.recentConfigEntries = append(repo.recentConfigEntries, configmodel.ConfigEntry{
 			ID:        uuid.New(),
 			Key:       "KEY",
 			UpdatedAt: now.Add(time.Duration(i) * time.Minute),

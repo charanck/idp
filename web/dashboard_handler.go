@@ -5,15 +5,15 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"controlplane/internal/config"
 	"controlplane/internal/dashboard"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web/template/pages"
 )
 
 // DashboardReader is what the dashboard page needs. Satisfied by *dashboard.Service.
 type DashboardReader interface {
 	GetCounts(ctx context.Context) (dashboard.Counts, error)
-	RecentConfigs(ctx context.Context, limit int) ([]config.ConfigEntry, error)
+	RecentConfigs(ctx context.Context, limit int) ([]configmodel.ConfigEntry, error)
 }
 
 type DashboardHandler struct {

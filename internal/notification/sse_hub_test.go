@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/datatypes"
 
+	model "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 )
 
@@ -38,11 +39,11 @@ func TestHub_PublishSentDeliversToSubscriber(t *testing.T) {
 	}
 
 	providerStr := "email-sim"
-	n := &notification.Notification{
+	n := &model.Notification{
 		ID:        uuid.New(),
-		Channel:   notification.ChannelEmail,
+		Channel:   model.ChannelEmail,
 		Recipient: datatypes.JSON(`{"user_id":"user-1"}`),
-		Status:    notification.StatusSent,
+		Status:    model.StatusSent,
 		Provider:  &providerStr,
 	}
 	if err := hub.PublishSent(ctx, n); err != nil {
@@ -55,7 +56,7 @@ func TestHub_PublishSentDeliversToSubscriber(t *testing.T) {
 		if err := json.Unmarshal([]byte(msg.Payload), &event); err != nil {
 			t.Fatalf("unmarshal event: %v", err)
 		}
-		if event.ID != n.ID.String() || event.Status != notification.StatusSent {
+		if event.ID != n.ID.String() || event.Status != model.StatusSent {
 			t.Fatalf("event = %+v", event)
 		}
 	case <-ctx.Done():
@@ -67,11 +68,11 @@ func TestHub_PublishSentNoOpWithoutRecipientUserID(t *testing.T) {
 	hub := newTestHub(t)
 	ctx := context.Background()
 
-	n := &notification.Notification{
+	n := &model.Notification{
 		ID:        uuid.New(),
-		Channel:   notification.ChannelEmail,
+		Channel:   model.ChannelEmail,
 		Recipient: datatypes.JSON(`{"email":"a@example.com"}`),
-		Status:    notification.StatusSent,
+		Status:    model.StatusSent,
 	}
 	if err := hub.PublishSent(ctx, n); err != nil {
 		t.Fatalf("PublishSent should no-op without user_id, got err: %v", err)

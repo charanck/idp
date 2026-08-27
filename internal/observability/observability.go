@@ -5,11 +5,9 @@
 // env var: if it's unset, Setup does nothing and leaves the otel SDK's own
 // no-op global providers in place, so running the server (and every existing
 // test) without a collector configured behaves exactly as it did before this
-// package existed. This mirrors the fact that Django's settings.py has no
-// OTEL wiring at all today - there is nothing to keep in parity with, so
-// "off by default, on when a collector is configured" is the safest choice
-// rather than making a collector a hard startup dependency the way Postgres
-// and Redis are.
+// package existed. "Off by default, on when a collector is configured" is
+// the safest choice rather than making a collector a hard startup dependency
+// the way Postgres and Redis are.
 //
 // Once enabled, per-request/query/command spans, RED-style metrics, and the
 // server's existing log/slog output are all exported over OTLP/gRPC using
@@ -38,9 +36,7 @@ import (
 )
 
 // ServiceName is the service.name resource attribute reported on every
-// span/metric/log, matching the Django project name so traces from either
-// implementation are identifiable as the same logical service during the
-// migration.
+// span/metric/log.
 const ServiceName = "control-plane"
 
 // Shutdown flushes and closes every OTEL provider that Setup started. It is

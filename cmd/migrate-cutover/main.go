@@ -1,8 +1,8 @@
 // Command migrate-cutover is a standalone operator tool for validating a
-// Django -> Go cutover before flipping traffic: it runs the exact same
-// locked schema reconciliation main.go runs automatically on every server
-// startup (see internal/db.Migrate), so an operator can do it ahead of time
-// against the shared production Postgres database and confirm it's clean.
+// schema cutover before flipping traffic: it runs the exact same locked
+// schema reconciliation main.go runs automatically on every server startup
+// (see internal/db.Migrate), so an operator can do it ahead of time against
+// the shared production Postgres database and confirm it's clean.
 //
 // Usage:
 //
@@ -41,7 +41,7 @@ func main() {
 		log.Fatalf("detect pre-existing schema: %v", err)
 	}
 	if preExisting {
-		slog.Info("found pre-existing database schema (e.g. Django-managed)")
+		slog.Info("found pre-existing database schema (e.g. from a previously-managed migration tool)")
 	} else {
 		slog.Info("no pre-existing schema found; this would be a fresh baseline")
 	}

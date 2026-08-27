@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 
+	model "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 )
 
@@ -37,14 +38,14 @@ func TestCreateNotification_InsertsQueuedAndEnqueues(t *testing.T) {
 	svc := notification.NewNotificationService(repo, enqueuer)
 
 	n, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
-		Channel:   notification.ChannelEmail,
+		Channel:   model.ChannelEmail,
 		Recipient: datatypes.JSON(`{"email":"a@example.com"}`),
 		Content:   datatypes.JSON(`{"subject":"hi"}`),
 	})
 	if err != nil {
 		t.Fatalf("CreateNotification: %v", err)
 	}
-	if n.Status != notification.StatusQueued {
+	if n.Status != model.StatusQueued {
 		t.Fatalf("status = %q, want queued", n.Status)
 	}
 	if enqueuer.count() != 1 {
@@ -67,7 +68,7 @@ func TestCreateNotification_IdempotentQueuedReEnqueues(t *testing.T) {
 	ctx := context.Background()
 
 	in := notification.CreateNotificationInput{
-		Channel:        notification.ChannelInApp,
+		Channel:        model.ChannelInApp,
 		Recipient:      datatypes.JSON(`{"user_id":"u1"}`),
 		Content:        datatypes.JSON(`{"message":"hi"}`),
 		IdempotencyKey: "key-1",
@@ -111,25 +112,25 @@ func TestListNotifications_FiltersByChannelAndStatus(t *testing.T) {
 	svc := notification.NewNotificationService(newFakeNotificationRepository(), &fakeEnqueuer{})
 
 	if _, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
-		Channel: notification.ChannelEmail, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`),
+		Channel: model.ChannelEmail, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`),
 	}); err != nil {
 		t.Fatalf("CreateNotification: %v", err)
 	}
 	if _, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
-		Channel: notification.ChannelSMS, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`),
+		Channel: model.ChannelSMS, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`),
 	}); err != nil {
 		t.Fatalf("CreateNotification: %v", err)
 	}
 
-	emails, err := svc.ListNotifications(context.Background(), notification.ListNotificationsFilter{Channel: notification.ChannelEmail})
+	emails, err := svc.ListNotifications(context.Background(), model.ListNotificationsFilter{Channel: model.ChannelEmail})
 	if err != nil {
 		t.Fatalf("ListNotifications: %v", err)
 	}
-	if len(emails) != 1 || emails[0].Channel != notification.ChannelEmail {
+	if len(emails) != 1 || emails[0].Channel != model.ChannelEmail {
 		t.Fatalf("emails = %+v", emails)
 	}
 
-	queued, err := svc.ListNotifications(context.Background(), notification.ListNotificationsFilter{Status: notification.StatusQueued})
+	queued, err := svc.ListNotifications(context.Background(), model.ListNotificationsFilter{Status: model.StatusQueued})
 	if err != nil {
 		t.Fatalf("ListNotifications: %v", err)
 	}
@@ -143,7 +144,7 @@ func TestConsumeUnreadInAppForUser_OnlyInAppChannelAndMarksRead(t *testing.T) {
 	svc := notification.NewNotificationService(repo, &fakeEnqueuer{})
 	ctx := context.Background()
 
-	mustCreate := func(channel, userID string) *notification.Notification {
+	mustCreate := func(channel, userID string) *model.Notification {
 		n, err := svc.CreateNotification(ctx, notification.CreateNotificationInput{
 			Channel:   channel,
 			Recipient: datatypes.JSON(`{"user_id":"` + userID + `"}`),
@@ -155,9 +156,9 @@ func TestConsumeUnreadInAppForUser_OnlyInAppChannelAndMarksRead(t *testing.T) {
 		return n
 	}
 
-	inApp := mustCreate(notification.ChannelInApp, "u1")
-	mustCreate(notification.ChannelEmail, "u1")
-	mustCreate(notification.ChannelInApp, "u2")
+	inApp := mustCreate(model.ChannelInApp, "u1")
+	mustCreate(model.ChannelEmail, "u1")
+	mustCreate(model.ChannelInApp, "u2")
 
 	unread, err := svc.ConsumeUnreadInAppForUser(ctx, "u1")
 	if err != nil {

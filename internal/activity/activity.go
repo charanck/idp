@@ -10,14 +10,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/config"
+	model "controlplane/internal/model/activity"
 )
 
 type Logger struct {
-	repo Repository
+	repo model.Repository
 }
 
-func NewLogger(repo Repository) *Logger {
+func NewLogger(repo model.Repository) *Logger {
 	return &Logger{repo: repo}
 }
 
@@ -75,7 +75,7 @@ func (l *Logger) log(ctx context.Context, typ, resource, resourceID, resourceNam
 		emailPtr = &userEmail
 	}
 
-	a := config.Activity{
+	a := model.Activity{
 		ID:           uuid.New(),
 		Type:         typ,
 		Resource:     resource,
@@ -92,48 +92,41 @@ func (l *Logger) log(ctx context.Context, typ, resource, resourceID, resourceNam
 }
 
 func (l *Logger) LogCreate(ctx context.Context, resource, resourceID, resourceName string, details any) {
-	l.log(ctx, config.ActivityTypeCreate, resource, resourceID, resourceName, "", details)
+	l.log(ctx, model.ActivityTypeCreate, resource, resourceID, resourceName, "", details)
 }
 
 func (l *Logger) LogUpdate(ctx context.Context, resource, resourceID, resourceName string, details any) {
-	l.log(ctx, config.ActivityTypeUpdate, resource, resourceID, resourceName, "", details)
+	l.log(ctx, model.ActivityTypeUpdate, resource, resourceID, resourceName, "", details)
 }
 
 func (l *Logger) LogDelete(ctx context.Context, resource, resourceID, resourceName string, details any) {
-	l.log(ctx, config.ActivityTypeDelete, resource, resourceID, resourceName, "", details)
+	l.log(ctx, model.ActivityTypeDelete, resource, resourceID, resourceName, "", details)
 }
 
 func (l *Logger) LogToggle(ctx context.Context, resource, resourceID, resourceName string, details any) {
-	l.log(ctx, config.ActivityTypeToggle, resource, resourceID, resourceName, "", details)
+	l.log(ctx, model.ActivityTypeToggle, resource, resourceID, resourceName, "", details)
 }
 
 func (l *Logger) LogLogin(ctx context.Context, userEmail string, details any) {
-	l.log(ctx, config.ActivityTypeLogin, "user", userEmail, userEmail, userEmail, details)
+	l.log(ctx, model.ActivityTypeLogin, "user", userEmail, userEmail, userEmail, details)
 }
 
 func (l *Logger) LogLogout(ctx context.Context, userEmail string) {
-	l.log(ctx, config.ActivityTypeLogout, "user", userEmail, userEmail, userEmail, nil)
+	l.log(ctx, model.ActivityTypeLogout, "user", userEmail, userEmail, userEmail, nil)
 }
 
 // LogLoginFailed records a failed authentication attempt (bad password, unknown user, etc.).
 func (l *Logger) LogLoginFailed(ctx context.Context, identifier string, details any) {
-	l.log(ctx, config.ActivityTypeLoginFailed, "user", identifier, identifier, identifier, details)
+	l.log(ctx, model.ActivityTypeLoginFailed, "user", identifier, identifier, identifier, details)
 }
 
 // LogAuthFailed records a failed non-user authentication attempt (e.g. an invalid S2S API key).
 func (l *Logger) LogAuthFailed(ctx context.Context, resource, identifier string, details any) {
-	l.log(ctx, config.ActivityTypeAuthFailed, resource, identifier, identifier, "", details)
-}
-
-// ListFilter filters List.
-type ListFilter struct {
-	Resource string
-	Type     string
-	UserLike string // case-insensitive substring match on user_email
+	l.log(ctx, model.ActivityTypeAuthFailed, resource, identifier, identifier, "", details)
 }
 
 // List lists activity rows matching filter, newest first.
-func (l *Logger) List(ctx context.Context, filter ListFilter) ([]config.Activity, error) {
+func (l *Logger) List(ctx context.Context, filter model.ListFilter) ([]model.Activity, error) {
 	return l.repo.List(ctx, filter)
 }
 

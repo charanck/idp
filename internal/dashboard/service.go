@@ -5,14 +5,15 @@ package dashboard
 import (
 	"context"
 
-	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
+	dashboardmodel "controlplane/internal/model/dashboard"
 )
 
 type Service struct {
-	repo Repository
+	repo dashboardmodel.Repository
 }
 
-func NewService(repo Repository) *Service {
+func NewService(repo dashboardmodel.Repository) *Service {
 	return &Service{repo: repo}
 }
 
@@ -54,6 +55,6 @@ func (s *Service) GetCounts(ctx context.Context) (Counts, error) {
 
 // RecentConfigs lists the most recently updated config entries (with
 // Application/Environment preloaded), newest first.
-func (s *Service) RecentConfigs(ctx context.Context, limit int) ([]config.ConfigEntry, error) {
+func (s *Service) RecentConfigs(ctx context.Context, limit int) ([]configmodel.ConfigEntry, error) {
 	return s.repo.RecentConfigEntries(ctx, limit)
 }

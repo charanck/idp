@@ -8,12 +8,13 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 )
 
 // FeatureFlagLister is the narrow slice of *config.FeatureFlagService that
 // FeatureFlagHandler needs.
 type FeatureFlagLister interface {
-	ListFlags(ctx context.Context, service, environment string) ([]config.FeatureFlag, error)
+	ListFlags(ctx context.Context, service, environment string) ([]configmodel.FeatureFlag, error)
 }
 
 type featureFlagResponse struct {

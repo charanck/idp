@@ -26,7 +26,7 @@ templ ConfirmDelete(flashes []session.Flash, user layout.NavUser, activeNav stri
 
 // PaginationNav renders page links for a Page[T], preserving any existing
 // filter query string (extraQuery, e.g. "resource=foo&type=bar") alongside
-// the "page" param, mirroring the Django template's pagination controls.
+// the "page" param.
 templ PaginationNav(path string, extraQuery string, page int, numPages int, hasPrev bool, hasNext bool, prevNum int, nextNum int, window []int) {
 	if numPages > 1 {
 		<nav aria-label="Pagination">

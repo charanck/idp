@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"controlplane/internal/appconfig"
-	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/internal/security"
 )
 
@@ -26,7 +26,7 @@ func bootstrapAdmin(gdb *gorm.DB, cfg *appconfig.Config) error {
 		password = "admin123"
 	}
 
-	var user auth.User
+	var user authmodel.User
 	err := gdb.Where("email = ?", cfg.AdminEmail).First(&user).Error
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
@@ -34,7 +34,7 @@ func bootstrapAdmin(gdb *gorm.DB, cfg *appconfig.Config) error {
 		if hashErr != nil {
 			return hashErr
 		}
-		newUser := auth.User{
+		newUser := authmodel.User{
 			Email:              cfg.AdminEmail,
 			Username:           strings.SplitN(cfg.AdminEmail, "@", 2)[0],
 			Password:           hashed,

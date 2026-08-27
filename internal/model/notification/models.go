@@ -1,11 +1,6 @@
-// Package notification implements the S2S notification API: creating
-// notifications and delivering them asynchronously over skeleton Email/SMS/
-// WhatsApp/InApp channels via asynq, a fire-and-forget SSE gateway for
-// real-time delivery notices, and (for the InApp channel only) a
-// bearer-token endpoint for a recipient to list and mark read their unread
-// notifications. This package deliberately does not import internal/auth -
-// see Authenticator in middleware.go.
-package notification
+// Package model contains the Notification and ProviderSetting models used by
+// the S2S notification API.
+package model
 
 import (
 	"time"

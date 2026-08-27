@@ -7,16 +7,16 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web"
 )
 
 func TestEnvironmentListHandler_ReturnsOK(t *testing.T) {
 	store := newSessionStore(t)
 	apps := newFakeApplicationStore()
-	app := apps.put(config.Application{Name: "app-a"})
+	app := apps.put(configmodel.Application{Name: "app-a"})
 	envs := newFakeEnvironmentStore()
-	envs.put(config.Environment{ApplicationID: app.ID, Name: "prod"})
+	envs.put(configmodel.Environment{ApplicationID: app.ID, Name: "prod"})
 	activity := &fakeActivityRecorder{}
 	h := web.NewEnvironmentHandler(envs, apps, activity)
 
@@ -30,9 +30,9 @@ func TestEnvironmentListHandler_ReturnsOK(t *testing.T) {
 func TestEnvironmentCreateHandler_DuplicateNameShowsError(t *testing.T) {
 	store := newSessionStore(t)
 	apps := newFakeApplicationStore()
-	app := apps.put(config.Application{Name: "app-a"})
+	app := apps.put(configmodel.Application{Name: "app-a"})
 	envs := newFakeEnvironmentStore()
-	envs.put(config.Environment{ApplicationID: app.ID, Name: "prod"})
+	envs.put(configmodel.Environment{ApplicationID: app.ID, Name: "prod"})
 	activity := &fakeActivityRecorder{}
 	h := web.NewEnvironmentHandler(envs, apps, activity)
 

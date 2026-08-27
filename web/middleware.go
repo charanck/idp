@@ -10,6 +10,7 @@ import (
 
 	"controlplane/internal/activity"
 	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/internal/ratelimit"
 	"controlplane/internal/session"
 )
@@ -17,15 +18,15 @@ import (
 const contextKeyUser = "webui_current_user"
 
 // CurrentUser returns the logged-in user attached by AuthMiddleware.LoadUser, if any.
-func CurrentUser(c echo.Context) *auth.User {
-	u, _ := c.Get(contextKeyUser).(*auth.User)
+func CurrentUser(c echo.Context) *authmodel.User {
+	u, _ := c.Get(contextKeyUser).(*authmodel.User)
 	return u
 }
 
 // UserLoader resolves the logged-in user for a session, used by
 // AuthMiddleware.LoadUser. Satisfied by *auth.AuthService.
 type UserLoader interface {
-	GetUserByID(ctx context.Context, id uuid.UUID) (*auth.User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
 }
 
 // AuthMiddleware groups the session/user-aware middleware every route needs:
@@ -59,8 +60,8 @@ func (m *AuthMiddleware) LoadUser() echo.MiddlewareFunc {
 	}
 }
 
-// LoginRequired mirrors Django's @login_required: redirects to /login/ (with
-// ?next=) when there is no authenticated user in session.
+// LoginRequired redirects to /login/ (with ?next=) when there is no
+// authenticated user in session.
 func (m *AuthMiddleware) LoginRequired() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -73,9 +74,8 @@ func (m *AuthMiddleware) LoginRequired() echo.MiddlewareFunc {
 	}
 }
 
-// AdminRequired mirrors web_ui/views.py's admin_required decorator:
-// @login_required plus an is_staff check, flashing an error and redirecting
-// to the dashboard when the logged-in user isn't staff.
+// AdminRequired is LoginRequired plus an is_staff check, flashing an error
+// and redirecting to the dashboard when the logged-in user isn't staff.
 func (m *AuthMiddleware) AdminRequired() echo.MiddlewareFunc {
 	loginRequired := m.LoginRequired()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -91,8 +91,7 @@ func (m *AuthMiddleware) AdminRequired() echo.MiddlewareFunc {
 }
 
 // CSRFProtect ensures a CSRF token exists in session (so GET pages can embed
-// it in forms) and validates it on state-changing requests, mirroring
-// Django's CsrfViewMiddleware for form-encoded POSTs.
+// it in forms) and validates it on state-changing, form-encoded POSTs.
 func CSRFProtect() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -111,8 +110,8 @@ func CSRFProtect() echo.MiddlewareFunc {
 	}
 }
 
-// AddFlash queues a one-time message for the next page render, mirroring
-// django.contrib.messages. Recognized tags: success, info, warning, danger.
+// AddFlash queues a one-time message for the next page render. Recognized
+// tags: success, info, warning, danger.
 func AddFlash(c echo.Context, tag, text string) {
 	if sess := session.FromContext(c); sess != nil {
 		sess.AddFlash(tag, text)

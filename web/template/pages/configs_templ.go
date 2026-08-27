@@ -9,7 +9,7 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import "encoding/json"
-import "controlplane/internal/config"
+import configmodel "controlplane/internal/model/config"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
@@ -33,7 +33,7 @@ type ConfigGroupEntry struct {
 
 type ConfigsListData struct {
 	Groups                []ConfigGroup
-	Applications          []config.Application
+	Applications          []configmodel.Application
 	EnvironmentsByAppJSON string
 	CurrentAppID          string
 	CurrentEnvID          string
@@ -412,7 +412,7 @@ func ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsListD
 
 type ConfigFormData struct {
 	CSRFToken             string
-	Applications          []config.Application
+	Applications          []configmodel.Application
 	EnvironmentsByAppJSON string
 	ApplicationID         string
 	EnvironmentID         string
@@ -634,23 +634,23 @@ func ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDat
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = typeOption(data.Type, config.TypeString, "String").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = typeOption(data.Type, configmodel.TypeString, "String").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = typeOption(data.Type, config.TypeBoolean, "Boolean").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = typeOption(data.Type, configmodel.TypeBoolean, "Boolean").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = typeOption(data.Type, config.TypeNumber, "Number").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = typeOption(data.Type, configmodel.TypeNumber, "Number").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = typeOption(data.Type, config.TypeObject, "Object").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = typeOption(data.Type, configmodel.TypeObject, "Object").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = typeOption(data.Type, config.TypeArray, "Array").Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = typeOption(data.Type, configmodel.TypeArray, "Array").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

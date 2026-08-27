@@ -16,10 +16,13 @@ import (
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/oauth2"
 
-	"controlplane/internal/activity"
 	"controlplane/internal/auth"
 	"controlplane/internal/config"
 	"controlplane/internal/dashboard"
+	activitymodel "controlplane/internal/model/activity"
+	authmodel "controlplane/internal/model/auth"
+	configmodel "controlplane/internal/model/config"
+	notificationmodel "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 	"controlplane/internal/session"
 	"controlplane/web"
@@ -45,7 +48,7 @@ func newSessionStore(t *testing.T) *session.Store {
 // directly - bypassing routing/CSRF middleware, since these tests exercise
 // handler logic rather than the middleware stack (that's covered by the
 // existing HTTP-level integration tests in webui_test.go).
-func callHandler(t *testing.T, store *session.Store, method, target string, form url.Values, user *auth.User, fn echo.HandlerFunc) *httptest.ResponseRecorder {
+func callHandler(t *testing.T, store *session.Store, method, target string, form url.Values, user *authmodel.User, fn echo.HandlerFunc) *httptest.ResponseRecorder {
 	t.Helper()
 	return callHandlerWithParams(t, store, method, target, nil, form, user, fn)
 }
@@ -53,7 +56,7 @@ func callHandler(t *testing.T, store *session.Store, method, target string, form
 // callHandlerWithParams is callHandler plus Echo route params (c.Param(...)),
 // needed since fn is invoked directly rather than through Echo's router/mux,
 // which is normally what populates them from the URL path.
-func callHandlerWithParams(t *testing.T, store *session.Store, method, target string, params map[string]string, form url.Values, user *auth.User, fn echo.HandlerFunc) *httptest.ResponseRecorder {
+func callHandlerWithParams(t *testing.T, store *session.Store, method, target string, params map[string]string, form url.Values, user *authmodel.User, fn echo.HandlerFunc) *httptest.ResponseRecorder {
 	t.Helper()
 	e := echo.New()
 
@@ -97,9 +100,9 @@ func callHandlerWithParams(t *testing.T, store *session.Store, method, target st
 }
 
 // fakeUserLoader implements web.UserLoader.
-type fakeUserLoader map[uuid.UUID]auth.User
+type fakeUserLoader map[uuid.UUID]authmodel.User
 
-func (f fakeUserLoader) GetUserByID(ctx context.Context, id uuid.UUID) (*auth.User, error) {
+func (f fakeUserLoader) GetUserByID(ctx context.Context, id uuid.UUID) (*authmodel.User, error) {
 	if u, ok := f[id]; ok {
 		cp := u
 		return &cp, nil
@@ -150,13 +153,13 @@ func (f *fakeActivityRecorder) LogLoginFailed(ctx context.Context, identifier st
 
 // fakeActivityReader implements web.ActivityReader with static, test-set results.
 type fakeActivityReader struct {
-	rows      []config.Activity
+	rows      []activitymodel.Activity
 	resources []string
 	types     []string
 }
 
-func (f *fakeActivityReader) List(ctx context.Context, filter activity.ListFilter) ([]config.Activity, error) {
-	var out []config.Activity
+func (f *fakeActivityReader) List(ctx context.Context, filter activitymodel.ListFilter) ([]activitymodel.Activity, error) {
+	var out []activitymodel.Activity
 	for _, r := range f.rows {
 		if filter.Resource != "" && r.Resource != filter.Resource {
 			continue
@@ -183,14 +186,14 @@ func (f *fakeActivityReader) DistinctTypes(ctx context.Context) ([]string, error
 // fakeDashboardReader implements web.DashboardReader.
 type fakeDashboardReader struct {
 	counts        dashboard.Counts
-	recentConfigs []config.ConfigEntry
+	recentConfigs []configmodel.ConfigEntry
 }
 
 func (f *fakeDashboardReader) GetCounts(ctx context.Context) (dashboard.Counts, error) {
 	return f.counts, nil
 }
 
-func (f *fakeDashboardReader) RecentConfigs(ctx context.Context, limit int) ([]config.ConfigEntry, error) {
+func (f *fakeDashboardReader) RecentConfigs(ctx context.Context, limit int) ([]configmodel.ConfigEntry, error) {
 	if limit >= 0 && limit < len(f.recentConfigs) {
 		return f.recentConfigs[:limit], nil
 	}
@@ -200,14 +203,14 @@ func (f *fakeDashboardReader) RecentConfigs(ctx context.Context, limit int) ([]c
 // fakeApplicationStore implements web.ApplicationStore in-memory.
 type fakeApplicationStore struct {
 	mu   sync.Mutex
-	apps map[uuid.UUID]config.Application
+	apps map[uuid.UUID]configmodel.Application
 }
 
 func newFakeApplicationStore() *fakeApplicationStore {
-	return &fakeApplicationStore{apps: map[uuid.UUID]config.Application{}}
+	return &fakeApplicationStore{apps: map[uuid.UUID]configmodel.Application{}}
 }
 
-func (f *fakeApplicationStore) put(a config.Application) config.Application {
+func (f *fakeApplicationStore) put(a configmodel.Application) configmodel.Application {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if a.ID == uuid.Nil {
@@ -217,10 +220,10 @@ func (f *fakeApplicationStore) put(a config.Application) config.Application {
 	return a
 }
 
-func (f *fakeApplicationStore) ListAllApplications(ctx context.Context, q string) ([]config.Application, error) {
+func (f *fakeApplicationStore) ListAllApplications(ctx context.Context, q string) ([]configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []config.Application
+	var out []configmodel.Application
 	for _, a := range f.apps {
 		if q != "" && !strings.Contains(strings.ToLower(a.Name), strings.ToLower(q)) {
 			continue
@@ -230,7 +233,7 @@ func (f *fakeApplicationStore) ListAllApplications(ctx context.Context, q string
 	return out, nil
 }
 
-func (f *fakeApplicationStore) GetApplicationByID(ctx context.Context, id uuid.UUID) (*config.Application, error) {
+func (f *fakeApplicationStore) GetApplicationByID(ctx context.Context, id uuid.UUID) (*configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if a, ok := f.apps[id]; ok {
@@ -240,7 +243,7 @@ func (f *fakeApplicationStore) GetApplicationByID(ctx context.Context, id uuid.U
 	return nil, nil
 }
 
-func (f *fakeApplicationStore) CreateApplication(ctx context.Context, name string) (*config.Application, error) {
+func (f *fakeApplicationStore) CreateApplication(ctx context.Context, name string) (*configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, a := range f.apps {
@@ -248,12 +251,12 @@ func (f *fakeApplicationStore) CreateApplication(ctx context.Context, name strin
 			return nil, config.ErrAlreadyExists
 		}
 	}
-	a := config.Application{ID: uuid.New(), Name: name}
+	a := configmodel.Application{ID: uuid.New(), Name: name}
 	f.apps[a.ID] = a
 	return &a, nil
 }
 
-func (f *fakeApplicationStore) UpdateApplication(ctx context.Context, id uuid.UUID, name string) (*config.Application, error) {
+func (f *fakeApplicationStore) UpdateApplication(ctx context.Context, id uuid.UUID, name string) (*configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	a, ok := f.apps[id]
@@ -265,7 +268,7 @@ func (f *fakeApplicationStore) UpdateApplication(ctx context.Context, id uuid.UU
 	return &a, nil
 }
 
-func (f *fakeApplicationStore) DeleteApplication(ctx context.Context, id uuid.UUID) (*config.Application, error) {
+func (f *fakeApplicationStore) DeleteApplication(ctx context.Context, id uuid.UUID) (*configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	a, ok := f.apps[id]
@@ -279,14 +282,14 @@ func (f *fakeApplicationStore) DeleteApplication(ctx context.Context, id uuid.UU
 // fakeEnvironmentStore implements web.EnvironmentStore in-memory.
 type fakeEnvironmentStore struct {
 	mu   sync.Mutex
-	envs map[uuid.UUID]config.Environment
+	envs map[uuid.UUID]configmodel.Environment
 }
 
 func newFakeEnvironmentStore() *fakeEnvironmentStore {
-	return &fakeEnvironmentStore{envs: map[uuid.UUID]config.Environment{}}
+	return &fakeEnvironmentStore{envs: map[uuid.UUID]configmodel.Environment{}}
 }
 
-func (f *fakeEnvironmentStore) put(e config.Environment) config.Environment {
+func (f *fakeEnvironmentStore) put(e configmodel.Environment) configmodel.Environment {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if e.ID == uuid.Nil {
@@ -296,10 +299,10 @@ func (f *fakeEnvironmentStore) put(e config.Environment) config.Environment {
 	return e
 }
 
-func (f *fakeEnvironmentStore) ListAllEnvironments(ctx context.Context, filter config.ListEnvironmentsFilter) ([]config.Environment, error) {
+func (f *fakeEnvironmentStore) ListAllEnvironments(ctx context.Context, filter configmodel.ListEnvironmentsFilter) ([]configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []config.Environment
+	var out []configmodel.Environment
 	for _, e := range f.envs {
 		if filter.ApplicationID != nil && e.ApplicationID != *filter.ApplicationID {
 			continue
@@ -312,10 +315,10 @@ func (f *fakeEnvironmentStore) ListAllEnvironments(ctx context.Context, filter c
 	return out, nil
 }
 
-func (f *fakeEnvironmentStore) ListEnvironmentsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]config.Environment, error) {
+func (f *fakeEnvironmentStore) ListEnvironmentsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []config.Environment
+	var out []configmodel.Environment
 	for _, e := range f.envs {
 		if e.ApplicationID == applicationID {
 			out = append(out, e)
@@ -324,7 +327,7 @@ func (f *fakeEnvironmentStore) ListEnvironmentsByApplicationID(ctx context.Conte
 	return out, nil
 }
 
-func (f *fakeEnvironmentStore) GetEnvironmentByID(ctx context.Context, id uuid.UUID) (*config.Environment, error) {
+func (f *fakeEnvironmentStore) GetEnvironmentByID(ctx context.Context, id uuid.UUID) (*configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if e, ok := f.envs[id]; ok {
@@ -334,11 +337,11 @@ func (f *fakeEnvironmentStore) GetEnvironmentByID(ctx context.Context, id uuid.U
 	return nil, nil
 }
 
-func (f *fakeEnvironmentStore) GetEnvironmentWithApplicationByID(ctx context.Context, id uuid.UUID) (*config.Environment, error) {
+func (f *fakeEnvironmentStore) GetEnvironmentWithApplicationByID(ctx context.Context, id uuid.UUID) (*configmodel.Environment, error) {
 	return f.GetEnvironmentByID(ctx, id)
 }
 
-func (f *fakeEnvironmentStore) CreateEnvironment(ctx context.Context, applicationID uuid.UUID, name string) (*config.Environment, error) {
+func (f *fakeEnvironmentStore) CreateEnvironment(ctx context.Context, applicationID uuid.UUID, name string) (*configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, e := range f.envs {
@@ -346,12 +349,12 @@ func (f *fakeEnvironmentStore) CreateEnvironment(ctx context.Context, applicatio
 			return nil, config.ErrAlreadyExists
 		}
 	}
-	e := config.Environment{ID: uuid.New(), ApplicationID: applicationID, Name: name}
+	e := configmodel.Environment{ID: uuid.New(), ApplicationID: applicationID, Name: name}
 	f.envs[e.ID] = e
 	return &e, nil
 }
 
-func (f *fakeEnvironmentStore) UpdateEnvironment(ctx context.Context, id, applicationID uuid.UUID, name string) (*config.Environment, error) {
+func (f *fakeEnvironmentStore) UpdateEnvironment(ctx context.Context, id, applicationID uuid.UUID, name string) (*configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	e, ok := f.envs[id]
@@ -364,7 +367,7 @@ func (f *fakeEnvironmentStore) UpdateEnvironment(ctx context.Context, id, applic
 	return &e, nil
 }
 
-func (f *fakeEnvironmentStore) DeleteEnvironment(ctx context.Context, id uuid.UUID) (*config.Environment, error) {
+func (f *fakeEnvironmentStore) DeleteEnvironment(ctx context.Context, id uuid.UUID) (*configmodel.Environment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	e, ok := f.envs[id]
@@ -381,15 +384,15 @@ func (f *fakeEnvironmentStore) DeleteEnvironment(ctx context.Context, id uuid.UU
 // handler tests a controllable double.
 type fakeConfigStore struct {
 	mu       sync.Mutex
-	entries  map[uuid.UUID]config.ConfigEntry
-	versions map[uuid.UUID][]config.ConfigEntryVersion
+	entries  map[uuid.UUID]configmodel.ConfigEntry
+	versions map[uuid.UUID][]configmodel.ConfigEntryVersion
 }
 
 func newFakeConfigStore() *fakeConfigStore {
-	return &fakeConfigStore{entries: map[uuid.UUID]config.ConfigEntry{}, versions: map[uuid.UUID][]config.ConfigEntryVersion{}}
+	return &fakeConfigStore{entries: map[uuid.UUID]configmodel.ConfigEntry{}, versions: map[uuid.UUID][]configmodel.ConfigEntryVersion{}}
 }
 
-func (f *fakeConfigStore) put(e config.ConfigEntry) config.ConfigEntry {
+func (f *fakeConfigStore) put(e configmodel.ConfigEntry) configmodel.ConfigEntry {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if e.ID == uuid.Nil {
@@ -399,16 +402,16 @@ func (f *fakeConfigStore) put(e config.ConfigEntry) config.ConfigEntry {
 	return e
 }
 
-func (f *fakeConfigStore) putVersions(id uuid.UUID, versions []config.ConfigEntryVersion) {
+func (f *fakeConfigStore) putVersions(id uuid.UUID, versions []configmodel.ConfigEntryVersion) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.versions[id] = versions
 }
 
-func (f *fakeConfigStore) ListAllConfigEntries(ctx context.Context, filter config.ListConfigEntriesFilter) ([]config.ConfigEntry, error) {
+func (f *fakeConfigStore) ListAllConfigEntries(ctx context.Context, filter configmodel.ListConfigEntriesFilter) ([]configmodel.ConfigEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []config.ConfigEntry
+	var out []configmodel.ConfigEntry
 	for _, e := range f.entries {
 		if filter.ApplicationID != nil && e.ApplicationID != *filter.ApplicationID {
 			continue
@@ -427,7 +430,7 @@ func (f *fakeConfigStore) ListAllConfigEntries(ctx context.Context, filter confi
 	return out, nil
 }
 
-func (f *fakeConfigStore) GetConfigByID(ctx context.Context, id uuid.UUID) (*config.ConfigEntry, error) {
+func (f *fakeConfigStore) GetConfigByID(ctx context.Context, id uuid.UUID) (*configmodel.ConfigEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if e, ok := f.entries[id]; ok {
@@ -437,7 +440,7 @@ func (f *fakeConfigStore) GetConfigByID(ctx context.Context, id uuid.UUID) (*con
 	return nil, nil
 }
 
-func (f *fakeConfigStore) UpsertConfig(ctx context.Context, service, environment, key, value string, opts config.UpsertOptions) (*config.ConfigEntry, error) {
+func (f *fakeConfigStore) UpsertConfig(ctx context.Context, service, environment, key, value string, opts config.UpsertOptions) (*configmodel.ConfigEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for id, e := range f.entries {
@@ -451,12 +454,12 @@ func (f *fakeConfigStore) UpsertConfig(ctx context.Context, service, environment
 			return &e, nil
 		}
 	}
-	e := config.ConfigEntry{ID: uuid.New(), Key: key, Value: value, IsSecret: opts.IsSecret, Type: opts.ConfigType}
+	e := configmodel.ConfigEntry{ID: uuid.New(), Key: key, Value: value, IsSecret: opts.IsSecret, Type: opts.ConfigType}
 	f.entries[e.ID] = e
 	return &e, nil
 }
 
-func (f *fakeConfigStore) UpdateConfigEntry(ctx context.Context, id uuid.UUID, in config.UpdateConfigEntryInput) (*config.ConfigEntry, error) {
+func (f *fakeConfigStore) UpdateConfigEntry(ctx context.Context, id uuid.UUID, in config.UpdateConfigEntryInput) (*configmodel.ConfigEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	e, ok := f.entries[id]
@@ -488,7 +491,7 @@ func (f *fakeConfigStore) DeleteConfig(ctx context.Context, configID string) (bo
 	return true, nil
 }
 
-func (f *fakeConfigStore) GetConfigHistory(ctx context.Context, configID string) ([]config.ConfigEntryVersion, error) {
+func (f *fakeConfigStore) GetConfigHistory(ctx context.Context, configID string) ([]configmodel.ConfigEntryVersion, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	id, err := uuid.Parse(configID)
@@ -498,7 +501,7 @@ func (f *fakeConfigStore) GetConfigHistory(ctx context.Context, configID string)
 	return f.versions[id], nil
 }
 
-func (f *fakeConfigStore) RollbackConfig(ctx context.Context, configID string, version int, changedBy string) (*config.ConfigEntry, error) {
+func (f *fakeConfigStore) RollbackConfig(ctx context.Context, configID string, version int, changedBy string) (*configmodel.ConfigEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	id, err := uuid.Parse(configID)
@@ -512,21 +515,21 @@ func (f *fakeConfigStore) RollbackConfig(ctx context.Context, configID string, v
 	return &e, nil
 }
 
-func (f *fakeConfigStore) DecryptConfigValueOrOriginal(entry *config.ConfigEntry) string {
+func (f *fakeConfigStore) DecryptConfigValueOrOriginal(entry *configmodel.ConfigEntry) string {
 	return entry.Value
 }
 
 // fakeFlagStore implements web.FlagStore in-memory.
 type fakeFlagStore struct {
 	mu    sync.Mutex
-	flags map[uuid.UUID]config.FeatureFlag
+	flags map[uuid.UUID]configmodel.FeatureFlag
 }
 
 func newFakeFlagStore() *fakeFlagStore {
-	return &fakeFlagStore{flags: map[uuid.UUID]config.FeatureFlag{}}
+	return &fakeFlagStore{flags: map[uuid.UUID]configmodel.FeatureFlag{}}
 }
 
-func (f *fakeFlagStore) put(fl config.FeatureFlag) config.FeatureFlag {
+func (f *fakeFlagStore) put(fl configmodel.FeatureFlag) configmodel.FeatureFlag {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if fl.ID == uuid.Nil {
@@ -536,10 +539,10 @@ func (f *fakeFlagStore) put(fl config.FeatureFlag) config.FeatureFlag {
 	return fl
 }
 
-func (f *fakeFlagStore) ListAllFlags(ctx context.Context, filter config.ListFlagsFilter) ([]config.FeatureFlag, error) {
+func (f *fakeFlagStore) ListAllFlags(ctx context.Context, filter configmodel.ListFlagsFilter) ([]configmodel.FeatureFlag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []config.FeatureFlag
+	var out []configmodel.FeatureFlag
 	for _, fl := range f.flags {
 		if fl.DeletedAt != nil {
 			continue
@@ -558,18 +561,18 @@ func (f *fakeFlagStore) ListAllFlags(ctx context.Context, filter config.ListFlag
 	return out, nil
 }
 
-func (f *fakeFlagStore) CreateFlag(ctx context.Context, service, name string, opts config.CreateFlagOptions) ([]config.FeatureFlag, error) {
+func (f *fakeFlagStore) CreateFlag(ctx context.Context, service, name string, opts config.CreateFlagOptions) ([]configmodel.FeatureFlag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	fl := config.FeatureFlag{ID: uuid.New(), Name: name, IsEnabled: opts.IsEnabled}
+	fl := configmodel.FeatureFlag{ID: uuid.New(), Name: name, IsEnabled: opts.IsEnabled}
 	if opts.Description != "" {
 		fl.Description = &opts.Description
 	}
 	f.flags[fl.ID] = fl
-	return []config.FeatureFlag{fl}, nil
+	return []configmodel.FeatureFlag{fl}, nil
 }
 
-func (f *fakeFlagStore) ToggleFlagByID(ctx context.Context, id uuid.UUID) (*config.FeatureFlag, error) {
+func (f *fakeFlagStore) ToggleFlagByID(ctx context.Context, id uuid.UUID) (*configmodel.FeatureFlag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	fl, ok := f.flags[id]
@@ -581,7 +584,7 @@ func (f *fakeFlagStore) ToggleFlagByID(ctx context.Context, id uuid.UUID) (*conf
 	return &fl, nil
 }
 
-func (f *fakeFlagStore) GetFlagByID(ctx context.Context, id uuid.UUID) (*config.FeatureFlag, error) {
+func (f *fakeFlagStore) GetFlagByID(ctx context.Context, id uuid.UUID) (*configmodel.FeatureFlag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if fl, ok := f.flags[id]; ok {
@@ -591,7 +594,7 @@ func (f *fakeFlagStore) GetFlagByID(ctx context.Context, id uuid.UUID) (*config.
 	return nil, nil
 }
 
-func (f *fakeFlagStore) SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*config.FeatureFlag, error) {
+func (f *fakeFlagStore) SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*configmodel.FeatureFlag, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	fl, ok := f.flags[id]
@@ -607,14 +610,14 @@ func (f *fakeFlagStore) SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*
 // fakeClientStore implements web.ClientStore in-memory.
 type fakeClientStore struct {
 	mu      sync.Mutex
-	clients map[uuid.UUID]auth.ServiceClient
+	clients map[uuid.UUID]authmodel.ServiceClient
 }
 
 func newFakeClientStore() *fakeClientStore {
-	return &fakeClientStore{clients: map[uuid.UUID]auth.ServiceClient{}}
+	return &fakeClientStore{clients: map[uuid.UUID]authmodel.ServiceClient{}}
 }
 
-func (f *fakeClientStore) put(c auth.ServiceClient) auth.ServiceClient {
+func (f *fakeClientStore) put(c authmodel.ServiceClient) authmodel.ServiceClient {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if c.ID == uuid.Nil {
@@ -624,10 +627,10 @@ func (f *fakeClientStore) put(c auth.ServiceClient) auth.ServiceClient {
 	return c
 }
 
-func (f *fakeClientStore) ListServiceClients(ctx context.Context, q string, isActive *bool) ([]auth.ServiceClient, error) {
+func (f *fakeClientStore) ListServiceClients(ctx context.Context, q string, isActive *bool) ([]authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []auth.ServiceClient
+	var out []authmodel.ServiceClient
 	for _, c := range f.clients {
 		if q != "" && !strings.Contains(strings.ToLower(c.Name), strings.ToLower(q)) {
 			continue
@@ -648,12 +651,12 @@ func (f *fakeClientStore) CreateServiceClient(ctx context.Context, name string) 
 			return nil, auth.ErrAlreadyExists
 		}
 	}
-	c := auth.ServiceClient{ID: uuid.New(), Name: name, EncryptionKey: "key-1", IsActive: true}
+	c := authmodel.ServiceClient{ID: uuid.New(), Name: name, EncryptionKey: "key-1", IsActive: true}
 	f.clients[c.ID] = c
 	return &auth.ServiceClientCredentials{Client: &c, APIKey: "test-api-key"}, nil
 }
 
-func (f *fakeClientStore) GetServiceClientByIDAny(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error) {
+func (f *fakeClientStore) GetServiceClientByIDAny(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if c, ok := f.clients[id]; ok {
@@ -663,7 +666,7 @@ func (f *fakeClientStore) GetServiceClientByIDAny(ctx context.Context, id uuid.U
 	return nil, nil
 }
 
-func (f *fakeClientStore) ToggleServiceClient(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error) {
+func (f *fakeClientStore) ToggleServiceClient(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	c, ok := f.clients[id]
@@ -675,7 +678,7 @@ func (f *fakeClientStore) ToggleServiceClient(ctx context.Context, id uuid.UUID)
 	return &c, nil
 }
 
-func (f *fakeClientStore) DeleteServiceClient(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error) {
+func (f *fakeClientStore) DeleteServiceClient(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	c, ok := f.clients[id]
@@ -686,7 +689,7 @@ func (f *fakeClientStore) DeleteServiceClient(ctx context.Context, id uuid.UUID)
 	return &c, nil
 }
 
-func (f *fakeClientStore) RegenerateServiceClientKey(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error) {
+func (f *fakeClientStore) RegenerateServiceClientKey(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	c, ok := f.clients[id]
@@ -701,14 +704,14 @@ func (f *fakeClientStore) RegenerateServiceClientKey(ctx context.Context, id uui
 // fakeUserStore implements web.UserStore in-memory.
 type fakeUserStore struct {
 	mu    sync.Mutex
-	users map[uuid.UUID]auth.User
+	users map[uuid.UUID]authmodel.User
 }
 
 func newFakeUserStore() *fakeUserStore {
-	return &fakeUserStore{users: map[uuid.UUID]auth.User{}}
+	return &fakeUserStore{users: map[uuid.UUID]authmodel.User{}}
 }
 
-func (f *fakeUserStore) put(u auth.User) auth.User {
+func (f *fakeUserStore) put(u authmodel.User) authmodel.User {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if u.ID == uuid.Nil {
@@ -718,10 +721,10 @@ func (f *fakeUserStore) put(u auth.User) auth.User {
 	return u
 }
 
-func (f *fakeUserStore) ListUsers(ctx context.Context, q string, isStaff *bool) ([]auth.User, error) {
+func (f *fakeUserStore) ListUsers(ctx context.Context, q string, isStaff *bool) ([]authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []auth.User
+	var out []authmodel.User
 	for _, u := range f.users {
 		if q != "" && !strings.Contains(strings.ToLower(u.Email), strings.ToLower(q)) {
 			continue
@@ -734,7 +737,7 @@ func (f *fakeUserStore) ListUsers(ctx context.Context, q string, isStaff *bool) 
 	return out, nil
 }
 
-func (f *fakeUserStore) CreateUserAdmin(ctx context.Context, in auth.CreateUserAdminInput) (*auth.User, error) {
+func (f *fakeUserStore) CreateUserAdmin(ctx context.Context, in auth.CreateUserAdminInput) (*authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, u := range f.users {
@@ -742,12 +745,12 @@ func (f *fakeUserStore) CreateUserAdmin(ctx context.Context, in auth.CreateUserA
 			return nil, auth.ErrAlreadyExists
 		}
 	}
-	u := auth.User{ID: uuid.New(), Email: in.Email, Username: in.Username, IsActive: in.IsActive}
+	u := authmodel.User{ID: uuid.New(), Email: in.Email, Username: in.Username, IsActive: in.IsActive}
 	f.users[u.ID] = u
 	return &u, nil
 }
 
-func (f *fakeUserStore) GetUserByIDAny(ctx context.Context, id uuid.UUID) (*auth.User, error) {
+func (f *fakeUserStore) GetUserByIDAny(ctx context.Context, id uuid.UUID) (*authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if u, ok := f.users[id]; ok {
@@ -757,7 +760,7 @@ func (f *fakeUserStore) GetUserByIDAny(ctx context.Context, id uuid.UUID) (*auth
 	return nil, nil
 }
 
-func (f *fakeUserStore) UpdateUserAdmin(ctx context.Context, id uuid.UUID, in auth.UpdateUserAdminInput) (*auth.User, error) {
+func (f *fakeUserStore) UpdateUserAdmin(ctx context.Context, id uuid.UUID, in auth.UpdateUserAdminInput) (*authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	u, ok := f.users[id]
@@ -772,7 +775,7 @@ func (f *fakeUserStore) UpdateUserAdmin(ctx context.Context, id uuid.UUID, in au
 	return &u, nil
 }
 
-func (f *fakeUserStore) DeleteUser(ctx context.Context, id uuid.UUID) (*auth.User, error) {
+func (f *fakeUserStore) DeleteUser(ctx context.Context, id uuid.UUID) (*authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	u, ok := f.users[id]
@@ -786,15 +789,15 @@ func (f *fakeUserStore) DeleteUser(ctx context.Context, id uuid.UUID) (*auth.Use
 // fakeAuthStore implements web.AuthStore.
 type fakeAuthStore struct {
 	mu           sync.Mutex
-	usersByEmail map[string]auth.User
-	authenticate func(email, password string) (*auth.User, error)
+	usersByEmail map[string]authmodel.User
+	authenticate func(email, password string) (*authmodel.User, error)
 }
 
 func newFakeAuthStore() *fakeAuthStore {
-	return &fakeAuthStore{usersByEmail: map[string]auth.User{}}
+	return &fakeAuthStore{usersByEmail: map[string]authmodel.User{}}
 }
 
-func (f *fakeAuthStore) put(u auth.User) {
+func (f *fakeAuthStore) put(u authmodel.User) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if u.ID == uuid.Nil {
@@ -803,7 +806,7 @@ func (f *fakeAuthStore) put(u auth.User) {
 	f.usersByEmail[u.Email] = u
 }
 
-func (f *fakeAuthStore) AuthenticateUser(ctx context.Context, email, password string) (*auth.User, error) {
+func (f *fakeAuthStore) AuthenticateUser(ctx context.Context, email, password string) (*authmodel.User, error) {
 	if f.authenticate != nil {
 		return f.authenticate(email, password)
 	}
@@ -822,10 +825,10 @@ func (f *fakeAuthStore) SetPassword(ctx context.Context, userID uuid.UUID, hashe
 
 // fakeOAuthActiveLister implements web.OAuthActiveLister.
 type fakeOAuthActiveLister struct {
-	providers []auth.OAuthProvider
+	providers []authmodel.OAuthProvider
 }
 
-func (f fakeOAuthActiveLister) ListActiveProviders(ctx context.Context) ([]auth.OAuthProvider, error) {
+func (f fakeOAuthActiveLister) ListActiveProviders(ctx context.Context) ([]authmodel.OAuthProvider, error) {
 	return f.providers, nil
 }
 
@@ -842,8 +845,8 @@ func (f fakeRateLimiter) IsRateLimited(ctx context.Context, key, clientIP string
 // fakeOAuthFlow implements web.OAuthFlow with per-call stub functions,
 // since it drives a multi-step external redirect flow rather than CRUD.
 type fakeOAuthFlow struct {
-	activeProvider  *auth.OAuthProvider
-	provider        *auth.OAuthProvider
+	activeProvider  *authmodel.OAuthProvider
+	provider        *authmodel.OAuthProvider
 	authURL         string
 	state           string
 	authErr         error
@@ -851,31 +854,31 @@ type fakeOAuthFlow struct {
 	exchangeErr     error
 	userInfo        map[string]any
 	userInfoErr     error
-	user            *auth.User
+	user            *authmodel.User
 	authenticateErr error
 }
 
-func (f *fakeOAuthFlow) GetActiveProviderByID(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error) {
+func (f *fakeOAuthFlow) GetActiveProviderByID(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error) {
 	return f.activeProvider, nil
 }
 
-func (f *fakeOAuthFlow) GetProviderByID(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error) {
+func (f *fakeOAuthFlow) GetProviderByID(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error) {
 	return f.provider, nil
 }
 
-func (f *fakeOAuthFlow) GetAuthorizationURL(provider *auth.OAuthProvider, redirectURI string) (string, string, error) {
+func (f *fakeOAuthFlow) GetAuthorizationURL(provider *authmodel.OAuthProvider, redirectURI string) (string, string, error) {
 	return f.authURL, f.state, f.authErr
 }
 
-func (f *fakeOAuthFlow) ExchangeCodeForToken(ctx context.Context, provider *auth.OAuthProvider, code, redirectURI string) (*oauth2.Token, error) {
+func (f *fakeOAuthFlow) ExchangeCodeForToken(ctx context.Context, provider *authmodel.OAuthProvider, code, redirectURI string) (*oauth2.Token, error) {
 	return f.token, f.exchangeErr
 }
 
-func (f *fakeOAuthFlow) GetUserInfo(ctx context.Context, provider *auth.OAuthProvider, accessToken string) (map[string]any, error) {
+func (f *fakeOAuthFlow) GetUserInfo(ctx context.Context, provider *authmodel.OAuthProvider, accessToken string) (map[string]any, error) {
 	return f.userInfo, f.userInfoErr
 }
 
-func (f *fakeOAuthFlow) AuthenticateOrCreateUser(ctx context.Context, provider *auth.OAuthProvider, token *oauth2.Token, userInfo map[string]any) (*auth.User, *auth.OAuthUserToken, error) {
+func (f *fakeOAuthFlow) AuthenticateOrCreateUser(ctx context.Context, provider *authmodel.OAuthProvider, token *oauth2.Token, userInfo map[string]any) (*authmodel.User, *authmodel.OAuthUserToken, error) {
 	if f.authenticateErr != nil {
 		return nil, nil, f.authenticateErr
 	}
@@ -885,14 +888,14 @@ func (f *fakeOAuthFlow) AuthenticateOrCreateUser(ctx context.Context, provider *
 // fakeOAuthProviderStore implements web.OAuthProviderStore in-memory.
 type fakeOAuthProviderStore struct {
 	mu        sync.Mutex
-	providers map[uuid.UUID]auth.OAuthProvider
+	providers map[uuid.UUID]authmodel.OAuthProvider
 }
 
 func newFakeOAuthProviderStore() *fakeOAuthProviderStore {
-	return &fakeOAuthProviderStore{providers: map[uuid.UUID]auth.OAuthProvider{}}
+	return &fakeOAuthProviderStore{providers: map[uuid.UUID]authmodel.OAuthProvider{}}
 }
 
-func (f *fakeOAuthProviderStore) put(p auth.OAuthProvider) auth.OAuthProvider {
+func (f *fakeOAuthProviderStore) put(p authmodel.OAuthProvider) authmodel.OAuthProvider {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if p.ID == uuid.Nil {
@@ -902,10 +905,10 @@ func (f *fakeOAuthProviderStore) put(p auth.OAuthProvider) auth.OAuthProvider {
 	return p
 }
 
-func (f *fakeOAuthProviderStore) ListProviders(ctx context.Context, q string, isActive *bool) ([]auth.OAuthProvider, error) {
+func (f *fakeOAuthProviderStore) ListProviders(ctx context.Context, q string, isActive *bool) ([]authmodel.OAuthProvider, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []auth.OAuthProvider
+	var out []authmodel.OAuthProvider
 	for _, p := range f.providers {
 		if q != "" && !strings.Contains(strings.ToLower(p.Name), strings.ToLower(q)) {
 			continue
@@ -918,7 +921,7 @@ func (f *fakeOAuthProviderStore) ListProviders(ctx context.Context, q string, is
 	return out, nil
 }
 
-func (f *fakeOAuthProviderStore) GetProviderByID(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error) {
+func (f *fakeOAuthProviderStore) GetProviderByID(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if p, ok := f.providers[id]; ok {
@@ -928,7 +931,7 @@ func (f *fakeOAuthProviderStore) GetProviderByID(ctx context.Context, id uuid.UU
 	return nil, nil
 }
 
-func (f *fakeOAuthProviderStore) CreateProvider(ctx context.Context, p auth.OAuthProvider) (*auth.OAuthProvider, error) {
+func (f *fakeOAuthProviderStore) CreateProvider(ctx context.Context, p authmodel.OAuthProvider) (*authmodel.OAuthProvider, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if p.ID == uuid.Nil {
@@ -938,7 +941,7 @@ func (f *fakeOAuthProviderStore) CreateProvider(ctx context.Context, p auth.OAut
 	return &p, nil
 }
 
-func (f *fakeOAuthProviderStore) UpdateProvider(ctx context.Context, p auth.OAuthProvider) (*auth.OAuthProvider, error) {
+func (f *fakeOAuthProviderStore) UpdateProvider(ctx context.Context, p authmodel.OAuthProvider) (*authmodel.OAuthProvider, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.providers[p.ID]; !ok {
@@ -948,7 +951,7 @@ func (f *fakeOAuthProviderStore) UpdateProvider(ctx context.Context, p auth.OAut
 	return &p, nil
 }
 
-func (f *fakeOAuthProviderStore) DeleteProvider(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error) {
+func (f *fakeOAuthProviderStore) DeleteProvider(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	p, ok := f.providers[id]
@@ -959,7 +962,7 @@ func (f *fakeOAuthProviderStore) DeleteProvider(ctx context.Context, id uuid.UUI
 	return &p, nil
 }
 
-func (f *fakeOAuthProviderStore) ToggleProvider(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error) {
+func (f *fakeOAuthProviderStore) ToggleProvider(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	p, ok := f.providers[id]
@@ -974,14 +977,14 @@ func (f *fakeOAuthProviderStore) ToggleProvider(ctx context.Context, id uuid.UUI
 // fakeProviderSettingStore implements web.ProviderSettingStore in-memory.
 type fakeProviderSettingStore struct {
 	mu       sync.Mutex
-	settings map[string]notification.ProviderSetting
+	settings map[string]notificationmodel.ProviderSetting
 }
 
 func newFakeProviderSettingStore() *fakeProviderSettingStore {
-	return &fakeProviderSettingStore{settings: map[string]notification.ProviderSetting{}}
+	return &fakeProviderSettingStore{settings: map[string]notificationmodel.ProviderSetting{}}
 }
 
-func (f *fakeProviderSettingStore) put(s notification.ProviderSetting) {
+func (f *fakeProviderSettingStore) put(s notificationmodel.ProviderSetting) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if s.ID == uuid.Nil {
@@ -990,7 +993,7 @@ func (f *fakeProviderSettingStore) put(s notification.ProviderSetting) {
 	f.settings[s.Channel] = s
 }
 
-func (f *fakeProviderSettingStore) Get(ctx context.Context, channel string) (*notification.ProviderSetting, error) {
+func (f *fakeProviderSettingStore) Get(ctx context.Context, channel string) (*notificationmodel.ProviderSetting, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if s, ok := f.settings[channel]; ok {
@@ -1000,17 +1003,17 @@ func (f *fakeProviderSettingStore) Get(ctx context.Context, channel string) (*no
 	return nil, nil
 }
 
-func (f *fakeProviderSettingStore) List(ctx context.Context) ([]notification.ProviderSetting, error) {
+func (f *fakeProviderSettingStore) List(ctx context.Context) ([]notificationmodel.ProviderSetting, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []notification.ProviderSetting
+	var out []notificationmodel.ProviderSetting
 	for _, s := range f.settings {
 		out = append(out, s)
 	}
 	return out, nil
 }
 
-func (f *fakeProviderSettingStore) Upsert(ctx context.Context, in notification.UpsertInput) (*notification.ProviderSetting, error) {
+func (f *fakeProviderSettingStore) Upsert(ctx context.Context, in notification.UpsertInput) (*notificationmodel.ProviderSetting, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s := f.settings[in.Channel]

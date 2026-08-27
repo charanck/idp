@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/datatypes"
 
+	notificationmodel "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 )
 
@@ -35,7 +36,7 @@ type notificationResponse struct {
 	UpdatedAt         string          `json:"updated_at"`
 }
 
-func toNotificationResponse(n *notification.Notification) notificationResponse {
+func toNotificationResponse(n *notificationmodel.Notification) notificationResponse {
 	resp := notificationResponse{
 		ID:        n.ID.String(),
 		Channel:   n.Channel,
@@ -64,19 +65,19 @@ func toNotificationResponse(n *notification.Notification) notificationResponse {
 // NotificationCreator is the narrow slice of *notification.NotificationService that
 // NotificationHandler.Create needs.
 type NotificationCreator interface {
-	CreateNotification(ctx context.Context, input notification.CreateNotificationInput) (*notification.Notification, error)
+	CreateNotification(ctx context.Context, input notification.CreateNotificationInput) (*notificationmodel.Notification, error)
 }
 
 // NotificationLister is the narrow slice of *notification.NotificationService that
 // NotificationHandler.List needs.
 type NotificationLister interface {
-	ListNotifications(ctx context.Context, filter notification.ListNotificationsFilter) ([]notification.Notification, error)
+	ListNotifications(ctx context.Context, filter notificationmodel.ListNotificationsFilter) ([]notificationmodel.Notification, error)
 }
 
 // NotificationGetter is the narrow slice of *notification.NotificationService that
 // NotificationHandler.Get needs.
 type NotificationGetter interface {
-	GetNotification(ctx context.Context, id uuid.UUID) (*notification.Notification, error)
+	GetNotification(ctx context.Context, id uuid.UUID) (*notificationmodel.Notification, error)
 }
 
 // NotificationHandler serves the S2S notification create/list/get endpoints.
@@ -121,7 +122,7 @@ func (h *NotificationHandler) Create(c echo.Context) error {
 
 // List serves GET /notifications.
 func (h *NotificationHandler) List(c echo.Context) error {
-	filter := notification.ListNotificationsFilter{
+	filter := notificationmodel.ListNotificationsFilter{
 		Channel: c.QueryParam("channel"),
 		Status:  c.QueryParam("status"),
 	}

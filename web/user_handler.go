@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/web/template/pages"
 )
 
@@ -18,11 +19,11 @@ const usersPageSize = 20
 
 // UserStore is what user CRUD handlers need. Satisfied by *auth.AuthService.
 type UserStore interface {
-	ListUsers(ctx context.Context, q string, isStaff *bool) ([]auth.User, error)
-	CreateUserAdmin(ctx context.Context, in auth.CreateUserAdminInput) (*auth.User, error)
-	GetUserByIDAny(ctx context.Context, id uuid.UUID) (*auth.User, error)
-	UpdateUserAdmin(ctx context.Context, id uuid.UUID, in auth.UpdateUserAdminInput) (*auth.User, error)
-	DeleteUser(ctx context.Context, id uuid.UUID) (*auth.User, error)
+	ListUsers(ctx context.Context, q string, isStaff *bool) ([]authmodel.User, error)
+	CreateUserAdmin(ctx context.Context, in auth.CreateUserAdminInput) (*authmodel.User, error)
+	GetUserByIDAny(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
+	UpdateUserAdmin(ctx context.Context, id uuid.UUID, in auth.UpdateUserAdminInput) (*authmodel.User, error)
+	DeleteUser(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
 }
 
 type UserHandler struct {

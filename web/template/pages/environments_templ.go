@@ -8,18 +8,18 @@ package pages
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "controlplane/internal/config"
+import configmodel "controlplane/internal/model/config"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
 type EnvironmentGroup struct {
-	Application  config.Application
-	Environments []config.Environment
+	Application  configmodel.Application
+	Environments []configmodel.Environment
 }
 
 type EnvironmentsListData struct {
 	Groups       []EnvironmentGroup
-	Applications []config.Application
+	Applications []configmodel.Application
 	CurrentAppID string
 	CurrentQ     string
 	Page         int
@@ -245,7 +245,7 @@ func EnvironmentsList(flashes []session.Flash, user layout.NavUser, data Environ
 
 type EnvironmentFormData struct {
 	CSRFToken     string
-	Applications  []config.Application
+	Applications  []configmodel.Application
 	ApplicationID string
 	Name          string
 	Error         string

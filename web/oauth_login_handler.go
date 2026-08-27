@@ -10,18 +10,19 @@ import (
 	"golang.org/x/oauth2"
 
 	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/internal/session"
 )
 
 // OAuthFlow is what the OAuth login/callback handlers need to drive the
 // authorization-code flow. Satisfied by *auth.OAuthService.
 type OAuthFlow interface {
-	GetActiveProviderByID(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error)
-	GetProviderByID(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error)
-	GetAuthorizationURL(provider *auth.OAuthProvider, redirectURI string) (authURL, state string, err error)
-	ExchangeCodeForToken(ctx context.Context, provider *auth.OAuthProvider, code, redirectURI string) (*oauth2.Token, error)
-	GetUserInfo(ctx context.Context, provider *auth.OAuthProvider, accessToken string) (map[string]any, error)
-	AuthenticateOrCreateUser(ctx context.Context, provider *auth.OAuthProvider, token *oauth2.Token, userInfo map[string]any) (*auth.User, *auth.OAuthUserToken, error)
+	GetActiveProviderByID(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error)
+	GetProviderByID(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error)
+	GetAuthorizationURL(provider *authmodel.OAuthProvider, redirectURI string) (authURL, state string, err error)
+	ExchangeCodeForToken(ctx context.Context, provider *authmodel.OAuthProvider, code, redirectURI string) (*oauth2.Token, error)
+	GetUserInfo(ctx context.Context, provider *authmodel.OAuthProvider, accessToken string) (map[string]any, error)
+	AuthenticateOrCreateUser(ctx context.Context, provider *authmodel.OAuthProvider, token *oauth2.Token, userInfo map[string]any) (*authmodel.User, *authmodel.OAuthUserToken, error)
 }
 
 type OAuthLoginHandler struct {

@@ -6,6 +6,7 @@ import (
 	"gorm.io/datatypes"
 
 	"controlplane/internal/crypto"
+	model "controlplane/internal/model/notification"
 )
 
 // ProviderSettingService manages per-channel provider configuration.
@@ -13,21 +14,21 @@ import (
 // from a handler - the admin UI only shows a masked "configured" indicator,
 // mirroring ConfigService's "***ENCRYPTED***" convention.
 type ProviderSettingService struct {
-	repo       ProviderSettingRepository
+	repo       model.ProviderSettingRepository
 	encryption *crypto.EncryptionService
 }
 
-func NewProviderSettingService(repo ProviderSettingRepository, encryption *crypto.EncryptionService) *ProviderSettingService {
+func NewProviderSettingService(repo model.ProviderSettingRepository, encryption *crypto.EncryptionService) *ProviderSettingService {
 	return &ProviderSettingService{repo: repo, encryption: encryption}
 }
 
 // Get returns the provider setting for a channel, or nil if never configured.
-func (s *ProviderSettingService) Get(ctx context.Context, channel string) (*ProviderSetting, error) {
+func (s *ProviderSettingService) Get(ctx context.Context, channel string) (*model.ProviderSetting, error) {
 	return s.repo.FindByChannel(ctx, channel)
 }
 
 // List returns provider settings for all channels that have been configured.
-func (s *ProviderSettingService) List(ctx context.Context) ([]ProviderSetting, error) {
+func (s *ProviderSettingService) List(ctx context.Context) ([]model.ProviderSetting, error) {
 	return s.repo.List(ctx)
 }
 
@@ -43,7 +44,7 @@ type UpsertInput struct {
 
 // Upsert creates or updates a channel's provider setting, encrypting
 // Credentials with the master key before storage.
-func (s *ProviderSettingService) Upsert(ctx context.Context, in UpsertInput) (*ProviderSetting, error) {
+func (s *ProviderSettingService) Upsert(ctx context.Context, in UpsertInput) (*model.ProviderSetting, error) {
 	existing, err := s.Get(ctx, in.Channel)
 	if err != nil {
 		return nil, err
@@ -61,7 +62,7 @@ func (s *ProviderSettingService) Upsert(ctx context.Context, in UpsertInput) (*P
 	}
 
 	if existing == nil {
-		setting := &ProviderSetting{
+		setting := &model.ProviderSetting{
 			Channel:     in.Channel,
 			Config:      in.Config,
 			Credentials: encryptedCredentials,
@@ -84,7 +85,7 @@ func (s *ProviderSettingService) Upsert(ctx context.Context, in UpsertInput) (*P
 
 // DecryptCredentials decrypts a provider setting's credentials for use by
 // the worker's send path only.
-func (s *ProviderSettingService) DecryptCredentials(setting *ProviderSetting) (string, error) {
+func (s *ProviderSettingService) DecryptCredentials(setting *model.ProviderSetting) (string, error) {
 	if setting.Credentials == "" {
 		return "", nil
 	}

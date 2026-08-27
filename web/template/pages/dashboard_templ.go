@@ -8,7 +8,7 @@ package pages
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "controlplane/internal/config"
+import configmodel "controlplane/internal/model/config"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
@@ -19,7 +19,7 @@ type DashboardData struct {
 	SecretCount      int64
 	FlagCount        int64
 	ClientCount      int64
-	RecentConfigs    []config.ConfigEntry
+	RecentConfigs    []configmodel.ConfigEntry
 }
 
 func Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData) templ.Component {

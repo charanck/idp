@@ -9,20 +9,19 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/activity"
-	"controlplane/internal/config"
+	model "controlplane/internal/model/activity"
 )
 
 type fakeActivityRepository struct {
 	mu         sync.Mutex
-	activities []config.Activity
+	activities []model.Activity
 }
 
 func newFakeActivityRepository() *fakeActivityRepository {
 	return &fakeActivityRepository{}
 }
 
-func (f *fakeActivityRepository) Create(ctx context.Context, a *config.Activity) error {
+func (f *fakeActivityRepository) Create(ctx context.Context, a *model.Activity) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if a.ID == uuid.Nil {
@@ -35,11 +34,11 @@ func (f *fakeActivityRepository) Create(ctx context.Context, a *config.Activity)
 	return nil
 }
 
-func (f *fakeActivityRepository) List(ctx context.Context, filter activity.ListFilter) ([]config.Activity, error) {
+func (f *fakeActivityRepository) List(ctx context.Context, filter model.ListFilter) ([]model.Activity, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	var out []config.Activity
+	var out []model.Activity
 	for _, a := range f.activities {
 		if filter.Resource != "" && a.Resource != filter.Resource {
 			continue
@@ -90,4 +89,4 @@ func (f *fakeActivityRepository) DistinctTypes(ctx context.Context) ([]string, e
 	return out, nil
 }
 
-var _ activity.Repository = (*fakeActivityRepository)(nil)
+var _ model.Repository = (*fakeActivityRepository)(nil)

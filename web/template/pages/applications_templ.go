@@ -8,12 +8,12 @@ package pages
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "controlplane/internal/config"
+import configmodel "controlplane/internal/model/config"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
 type ApplicationsListData struct {
-	Apps       []config.Application
+	Apps       []configmodel.Application
 	CurrentQ   string
 	Page       int
 	NumPages   int

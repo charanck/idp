@@ -1,7 +1,7 @@
-// Package config contains the Application/Environment/ConfigEntry/FeatureFlag/
-// Activity models and services, mirroring config_management/models.py and
-// services.py.
-package config
+// Package model contains the Application/Environment/ConfigEntry/FeatureFlag
+// gorm models and their repository interfaces. Concrete gorm implementations
+// live in internal/repository/config; business logic lives in internal/config.
+package model
 
 import (
 	"time"
@@ -124,39 +124,6 @@ func (FeatureFlag) TableName() string { return "feature_flags" }
 func (f *FeatureFlag) BeforeCreate(tx *gorm.DB) error {
 	if f.ID == uuid.Nil {
 		f.ID = uuid.New()
-	}
-	return nil
-}
-
-const (
-	ActivityTypeCreate      = "create"
-	ActivityTypeUpdate      = "update"
-	ActivityTypeDelete      = "delete"
-	ActivityTypeRead        = "read"
-	ActivityTypeToggle      = "toggle"
-	ActivityTypeLogin       = "login"
-	ActivityTypeLogout      = "logout"
-	ActivityTypeLoginFailed = "login_failed"
-	ActivityTypeAuthFailed  = "auth_failed"
-)
-
-type Activity struct {
-	ID           uuid.UUID `gorm:"column:id;type:uuid;primaryKey"`
-	Type         string    `gorm:"column:type"`
-	Resource     string    `gorm:"column:resource"`
-	ResourceID   string    `gorm:"column:resource_id"`
-	ResourceName *string   `gorm:"column:resource_name"`
-	UserEmail    *string   `gorm:"column:user_email"`
-	Details      *string   `gorm:"column:details"`
-	IPAddress    *string   `gorm:"column:ip_address"`
-	Timestamp    time.Time `gorm:"column:timestamp;autoCreateTime"`
-}
-
-func (Activity) TableName() string { return "activities" }
-
-func (a *Activity) BeforeCreate(tx *gorm.DB) error {
-	if a.ID == uuid.Nil {
-		a.ID = uuid.New()
 	}
 	return nil
 }

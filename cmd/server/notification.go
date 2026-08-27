@@ -7,6 +7,7 @@ import (
 
 	"controlplane/internal/crypto"
 	"controlplane/internal/notification"
+	notificationrepo "controlplane/internal/repository/notification"
 )
 
 // notificationStack owns construction and lifecycle of the notification
@@ -25,12 +26,12 @@ type notificationStack struct {
 }
 
 func newNotificationStack(gdb *gorm.DB, rdb *redis.Client, encryption *crypto.EncryptionService) *notificationStack {
-	settings := notification.NewProviderSettingService(notification.NewProviderSettingRepository(gdb), encryption)
+	settings := notification.NewProviderSettingService(notificationrepo.NewProviderSettingRepository(gdb), encryption)
 	tokenIssuer := notification.NewTokenIssuer(encryption)
 	channels := notification.NewChannelRegistry()
 	asynqClient := notification.NewAsynqClient(rdb)
 	enqueuer := notification.NewTaskEnqueuer(asynqClient)
-	service := notification.NewNotificationService(notification.NewNotificationRepository(gdb), enqueuer)
+	service := notification.NewNotificationService(notificationrepo.NewNotificationRepository(gdb), enqueuer)
 	hub := notification.NewHub(rdb)
 	worker := notification.NewWorker(service, settings, channels, hub)
 

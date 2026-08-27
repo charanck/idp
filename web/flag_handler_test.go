@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web"
 )
 
@@ -24,8 +24,8 @@ func newFlagHandlerFixture() (*fakeFlagStore, *fakeApplicationStore, *fakeEnviro
 func TestFlagListHandler_ReturnsOK(t *testing.T) {
 	store := newSessionStore(t)
 	flags, apps, _, _, h := newFlagHandlerFixture()
-	app := apps.put(config.Application{Name: "app-a"})
-	flags.put(config.FeatureFlag{ApplicationID: app.ID, Name: "flag-a", Application: config.Application{Name: "app-a"}})
+	app := apps.put(configmodel.Application{Name: "app-a"})
+	flags.put(configmodel.FeatureFlag{ApplicationID: app.ID, Name: "flag-a", Application: configmodel.Application{Name: "app-a"}})
 
 	rec := callHandler(t, store, http.MethodGet, "/flags/", nil, nil, h.List)
 
@@ -65,7 +65,7 @@ func TestFlagToggleHandler_UnknownIDReturns404(t *testing.T) {
 func TestFlagToggleHandler_TogglesEnabledState(t *testing.T) {
 	store := newSessionStore(t)
 	flags, _, _, activity, h := newFlagHandlerFixture()
-	fl := flags.put(config.FeatureFlag{Name: "flag-a", IsEnabled: false, Application: config.Application{Name: "a"}, Environment: config.Environment{Name: "e"}})
+	fl := flags.put(configmodel.FeatureFlag{Name: "flag-a", IsEnabled: false, Application: configmodel.Application{Name: "a"}, Environment: configmodel.Environment{Name: "e"}})
 	id := fl.ID.String()
 
 	rec := callHandlerWithParams(t, store, http.MethodPost, "/flags/"+id+"/toggle/",

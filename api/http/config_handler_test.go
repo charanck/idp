@@ -9,8 +9,8 @@ import (
 	"github.com/labstack/echo/v4"
 
 	apihttp "controlplane/api/http"
-	"controlplane/internal/auth"
 	"controlplane/internal/config"
+	authmodel "controlplane/internal/model/auth"
 )
 
 func newConfigListRequest(service, environment string) (echo.Context, *httptest.ResponseRecorder) {
@@ -18,7 +18,7 @@ func newConfigListRequest(service, environment string) (echo.Context, *httptest.
 	req := httptest.NewRequest(http.MethodGet, "/configs/list?service="+service+"&environment="+environment, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
-	c.Set("service_client", &auth.ServiceClient{Name: "billing-service", EncryptionKey: "key"})
+	c.Set("service_client", &authmodel.ServiceClient{Name: "billing-service", EncryptionKey: "key"})
 	return c, rec
 }
 

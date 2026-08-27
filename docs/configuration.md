@@ -9,7 +9,7 @@ template).
 | Variable | Default | Notes |
 |---|---|---|
 | `DEBUG` | `false` | Set `false` in every non-local environment. |
-| `SESSION_SECRET` | falls back to `DJANGO_SECRET_KEY`, then an insecure dev default | Signs session cookies and CSRF tokens. Set explicitly outside local dev. |
+| `SESSION_SECRET` | insecure dev default | Signs session cookies and CSRF tokens. Set explicitly outside local dev. |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma-separated. |
 | `CSRF_TRUSTED_ORIGINS` | *(empty)* | Comma-separated `scheme://host` origins allowed to POST; only needed behind HTTPS/a reverse proxy. |
 | `PORT` | `8000` | HTTP listen port. |

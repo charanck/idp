@@ -7,7 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/activity"
-	"controlplane/internal/config"
+	activitymodel "controlplane/internal/model/activity"
 	"controlplane/web/template/pages"
 )
 
@@ -16,7 +16,7 @@ const activityPageSize = 50
 // ActivityReader is the read side of the audit log, used by the activity log
 // page. Satisfied by *activity.Logger.
 type ActivityReader interface {
-	List(ctx context.Context, filter activity.ListFilter) ([]config.Activity, error)
+	List(ctx context.Context, filter activitymodel.ListFilter) ([]activitymodel.Activity, error)
 	DistinctResources(ctx context.Context) ([]string, error)
 	DistinctTypes(ctx context.Context) ([]string, error)
 }
@@ -34,7 +34,7 @@ func (h *ActivityHandler) List(c echo.Context) error {
 	typeFilter := c.QueryParam("type")
 	userFilter := c.QueryParam("user")
 
-	activities, err := h.reader.List(c.Request().Context(), activity.ListFilter{
+	activities, err := h.reader.List(c.Request().Context(), activitymodel.ListFilter{
 		Resource: resourceFilter, Type: typeFilter, UserLike: userFilter,
 	})
 	if err != nil {

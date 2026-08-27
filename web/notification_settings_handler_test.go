@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"testing"
 
-	"controlplane/internal/notification"
+	notificationmodel "controlplane/internal/model/notification"
 	"controlplane/web"
 )
 
@@ -19,7 +19,7 @@ func newNotificationSettingsHandlerFixture() (*fakeProviderSettingStore, *fakeAc
 func TestNotificationSettingsListHandler_ReturnsOK(t *testing.T) {
 	store := newSessionStore(t)
 	settings, _, h := newNotificationSettingsHandlerFixture()
-	settings.put(notification.ProviderSetting{Channel: notification.ChannelEmail, Credentials: "secret", IsActive: true})
+	settings.put(notificationmodel.ProviderSetting{Channel: notificationmodel.ChannelEmail, Credentials: "secret", IsActive: true})
 
 	rec := callHandler(t, store, http.MethodGet, "/notification-settings/", nil, nil, h.List)
 
@@ -46,7 +46,7 @@ func TestNotificationSettingsEditHandler_InvalidJSONShowsError(t *testing.T) {
 
 	form := url.Values{"config": {"{not-json"}, "credentials": {"secret"}}
 	rec := callHandlerWithParams(t, store, http.MethodPost, "/notification-settings/email/edit/",
-		map[string]string{"channel": notification.ChannelEmail}, form, nil, h.Edit)
+		map[string]string{"channel": notificationmodel.ChannelEmail}, form, nil, h.Edit)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d (re-rendered form); body=%s", rec.Code, http.StatusOK, rec.Body.String())
@@ -62,7 +62,7 @@ func TestNotificationSettingsEditHandler_SavesAndRedirects(t *testing.T) {
 
 	form := url.Values{"config": {"{}"}, "credentials": {"secret"}, "is_active": {"on"}}
 	rec := callHandlerWithParams(t, store, http.MethodPost, "/notification-settings/email/edit/",
-		map[string]string{"channel": notification.ChannelEmail}, form, nil, h.Edit)
+		map[string]string{"channel": notificationmodel.ChannelEmail}, form, nil, h.Edit)
 
 	if rec.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusFound, rec.Body.String())

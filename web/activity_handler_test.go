@@ -4,14 +4,14 @@ import (
 	"net/http"
 	"testing"
 
-	"controlplane/internal/config"
+	activitymodel "controlplane/internal/model/activity"
 	"controlplane/web"
 )
 
 func TestActivityListHandler_FiltersByResourceAndType(t *testing.T) {
 	store := newSessionStore(t)
 	reader := &fakeActivityReader{
-		rows: []config.Activity{
+		rows: []activitymodel.Activity{
 			{Type: "create", Resource: "application"},
 			{Type: "update", Resource: "application"},
 			{Type: "create", Resource: "config"},

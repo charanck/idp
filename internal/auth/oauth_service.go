@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 	"gorm.io/gorm"
+
+	model "controlplane/internal/model/auth"
 )
 
 // OAuthService mirrors authentication/oauth_service.py's OAuthService: a
@@ -20,17 +22,17 @@ import (
 // details (endpoints, scopes) coming entirely from the OAuthProvider model
 // rather than a specific provider's SDK.
 type OAuthService struct {
-	providers  OAuthProviderRepository
-	tokens     OAuthUserTokenRepository
-	users      UserRepository
+	providers  model.OAuthProviderRepository
+	tokens     model.OAuthUserTokenRepository
+	users      model.UserRepository
 	httpClient *http.Client
 }
 
-func NewOAuthService(providers OAuthProviderRepository, tokens OAuthUserTokenRepository, users UserRepository) *OAuthService {
+func NewOAuthService(providers model.OAuthProviderRepository, tokens model.OAuthUserTokenRepository, users model.UserRepository) *OAuthService {
 	return &OAuthService{providers: providers, tokens: tokens, users: users, httpClient: http.DefaultClient}
 }
 
-func (s *OAuthService) oauth2Config(provider *OAuthProvider, redirectURI string) *oauth2.Config {
+func (s *OAuthService) oauth2Config(provider *model.OAuthProvider, redirectURI string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID:     provider.ClientID,
 		ClientSecret: provider.ClientSecret,
@@ -45,7 +47,7 @@ func (s *OAuthService) oauth2Config(provider *OAuthProvider, redirectURI string)
 
 // GetAuthorizationURL returns the OAuth2 authorization URL and the state
 // value to store for CSRF validation on callback.
-func (s *OAuthService) GetAuthorizationURL(provider *OAuthProvider, redirectURI string) (authURL, state string, err error) {
+func (s *OAuthService) GetAuthorizationURL(provider *model.OAuthProvider, redirectURI string) (authURL, state string, err error) {
 	state, err = randomURLSafe(24)
 	if err != nil {
 		return "", "", err
@@ -55,7 +57,7 @@ func (s *OAuthService) GetAuthorizationURL(provider *OAuthProvider, redirectURI 
 }
 
 // ExchangeCodeForToken exchanges an authorization code for an access token.
-func (s *OAuthService) ExchangeCodeForToken(ctx context.Context, provider *OAuthProvider, code, redirectURI string) (*oauth2.Token, error) {
+func (s *OAuthService) ExchangeCodeForToken(ctx context.Context, provider *model.OAuthProvider, code, redirectURI string) (*oauth2.Token, error) {
 	cfg := s.oauth2Config(provider, redirectURI)
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, s.httpClient)
 
@@ -67,7 +69,7 @@ func (s *OAuthService) ExchangeCodeForToken(ctx context.Context, provider *OAuth
 }
 
 // GetUserInfo fetches the userinfo payload from the provider's userinfo endpoint.
-func (s *OAuthService) GetUserInfo(ctx context.Context, provider *OAuthProvider, accessToken string) (map[string]any, error) {
+func (s *OAuthService) GetUserInfo(ctx context.Context, provider *model.OAuthProvider, accessToken string) (map[string]any, error) {
 	if provider.UserinfoURL == nil || *provider.UserinfoURL == "" {
 		return nil, errors.New("provider does not have userinfo_url configured")
 	}
@@ -102,7 +104,7 @@ func (s *OAuthService) GetUserInfo(ctx context.Context, provider *OAuthProvider,
 // AuthenticateOrCreateUser finds or creates a User + OAuthUserToken from the
 // provider's token/userinfo response, mirroring
 // OAuthService.authenticate_or_create_user().
-func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *OAuthProvider, token *oauth2.Token, userInfo map[string]any) (*User, *OAuthUserToken, error) {
+func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *model.OAuthProvider, token *oauth2.Token, userInfo map[string]any) (*model.User, *model.OAuthUserToken, error) {
 	providerUserID, _ := firstNonEmpty(userInfo, "sub", "id")
 	email, _ := stringField(userInfo, "email")
 
@@ -150,12 +152,12 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *O
 			if genErr != nil {
 				return nil, nil, genErr
 			}
-			user = &User{
+			user = &model.User{
 				ID:       uuid.New(),
 				Email:    email,
 				Username: username,
 				IsActive: false,
-				Password: "!unusable", // mirrors Django's set_unusable_password(): no valid hash will ever match this.
+				Password: "!unusable", // sentinel: no valid hash will ever match this, so password login for OAuth-created accounts always fails closed.
 			}
 			if err := s.users.Create(ctx, user); err != nil {
 				return nil, nil, err
@@ -178,7 +180,7 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *O
 			tokenType = "Bearer"
 		}
 
-		newToken := &OAuthUserToken{
+		newToken := &model.OAuthUserToken{
 			ID:                uuid.New(),
 			UserID:            user.ID,
 			ProviderID:        provider.ID,

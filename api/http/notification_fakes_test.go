@@ -6,33 +6,34 @@ import (
 
 	"github.com/google/uuid"
 
+	notificationmodel "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 )
 
 type fakeNotificationCreator struct {
-	notification *notification.Notification
+	notification *notificationmodel.Notification
 	err          error
 }
 
-func (f *fakeNotificationCreator) CreateNotification(ctx context.Context, input notification.CreateNotificationInput) (*notification.Notification, error) {
+func (f *fakeNotificationCreator) CreateNotification(ctx context.Context, input notification.CreateNotificationInput) (*notificationmodel.Notification, error) {
 	return f.notification, f.err
 }
 
 type fakeNotificationLister struct {
-	notifications []notification.Notification
+	notifications []notificationmodel.Notification
 	err           error
 }
 
-func (f *fakeNotificationLister) ListNotifications(ctx context.Context, filter notification.ListNotificationsFilter) ([]notification.Notification, error) {
+func (f *fakeNotificationLister) ListNotifications(ctx context.Context, filter notificationmodel.ListNotificationsFilter) ([]notificationmodel.Notification, error) {
 	return f.notifications, f.err
 }
 
 type fakeNotificationGetter struct {
-	notification *notification.Notification
+	notification *notificationmodel.Notification
 	err          error
 }
 
-func (f *fakeNotificationGetter) GetNotification(ctx context.Context, id uuid.UUID) (*notification.Notification, error) {
+func (f *fakeNotificationGetter) GetNotification(ctx context.Context, id uuid.UUID) (*notificationmodel.Notification, error) {
 	return f.notification, f.err
 }
 
@@ -55,11 +56,11 @@ func (f *fakeSessionValidator) Validate(token string) (string, error) {
 }
 
 type fakeUnreadConsumer struct {
-	notifications []notification.Notification
+	notifications []notificationmodel.Notification
 	err           error
 }
 
-func (f *fakeUnreadConsumer) ConsumeUnreadInAppForUser(ctx context.Context, userID string) ([]notification.Notification, error) {
+func (f *fakeUnreadConsumer) ConsumeUnreadInAppForUser(ctx context.Context, userID string) ([]notificationmodel.Notification, error) {
 	return f.notifications, f.err
 }
 

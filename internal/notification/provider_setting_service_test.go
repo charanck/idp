@@ -7,6 +7,7 @@ import (
 	"gorm.io/datatypes"
 
 	"controlplane/internal/crypto"
+	model "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 )
 
@@ -26,7 +27,7 @@ func TestUpsert_PreservesExistingCredentialsWhenBlank(t *testing.T) {
 	ctx := context.Background()
 
 	created, err := svc.Upsert(ctx, notification.UpsertInput{
-		Channel:     notification.ChannelEmail,
+		Channel:     model.ChannelEmail,
 		Config:      datatypes.JSON(`{"from":"noreply@example.com"}`),
 		Credentials: "super-secret",
 		IsActive:    true,
@@ -39,7 +40,7 @@ func TestUpsert_PreservesExistingCredentialsWhenBlank(t *testing.T) {
 	}
 
 	updated, err := svc.Upsert(ctx, notification.UpsertInput{
-		Channel:  notification.ChannelEmail,
+		Channel:  model.ChannelEmail,
 		Config:   datatypes.JSON(`{"from":"updated@example.com"}`),
 		IsActive: false,
 		// Credentials left blank - should leave the existing value unchanged.
@@ -69,7 +70,7 @@ func TestUpsert_PreservesExistingCredentialsWhenBlank(t *testing.T) {
 func TestProviderSettingGet_ReturnsNilWhenNotConfigured(t *testing.T) {
 	svc, _ := newUnitProviderSettingService(t)
 
-	got, err := svc.Get(context.Background(), notification.ChannelWhatsApp)
+	got, err := svc.Get(context.Background(), model.ChannelWhatsApp)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestProviderSettingGet_ReturnsNilWhenNotConfigured(t *testing.T) {
 func TestProviderSettingList_ReturnsOnlyConfiguredChannels(t *testing.T) {
 	svc, _ := newUnitProviderSettingService(t)
 
-	if _, err := svc.Upsert(context.Background(), notification.UpsertInput{Channel: notification.ChannelSMS, Config: datatypes.JSON(`{}`), Credentials: "k", IsActive: true}); err != nil {
+	if _, err := svc.Upsert(context.Background(), notification.UpsertInput{Channel: model.ChannelSMS, Config: datatypes.JSON(`{}`), Credentials: "k", IsActive: true}); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 
@@ -89,7 +90,7 @@ func TestProviderSettingList_ReturnsOnlyConfiguredChannels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	if len(settings) != 1 || settings[0].Channel != notification.ChannelSMS {
+	if len(settings) != 1 || settings[0].Channel != model.ChannelSMS {
 		t.Fatalf("settings = %+v", settings)
 	}
 }

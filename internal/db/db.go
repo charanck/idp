@@ -46,9 +46,9 @@ const migrationLockKey int64 = 0x636f6e74726f6c31 // "controlplane1" packed into
 // every container restart: it applies any pending goose migrations embedded
 // in migrations/, whose baseline migration uses CREATE TABLE IF NOT EXISTS
 // so it also no-ops cleanly (rather than colliding with existing tables)
-// against a database whose schema was created by Django's own migrations
-// instead of goose - "migrating" onto that DB is then just goose recording
-// its own version-tracking bookkeeping, since there is no row data to copy
+// against a database whose schema was created by a previous, non-goose
+// migration tool - "migrating" onto that DB is then just goose recording its
+// own version-tracking bookkeeping, since there is no row data to copy
 // between the two: they share one physical schema (see 00001_baseline.sql).
 // The whole step is wrapped in a session-level Postgres advisory lock so
 // concurrent replicas serialize on it instead of racing.
@@ -91,9 +91,9 @@ func Migrate(sqlDB *sql.DB) error {
 }
 
 // hasPreExistingSchema reports whether the target database already has
-// domain tables (e.g. from Django's own migrations) before goose has run,
-// purely for the startup log line above - goose's own IF NOT EXISTS baseline
-// behaves correctly either way.
+// domain tables (e.g. from a previous, non-goose migration tool) before
+// goose has run, purely for the startup log line above - goose's own IF NOT
+// EXISTS baseline behaves correctly either way.
 func hasPreExistingSchema(ctx context.Context, conn *sql.Conn) (bool, error) {
 	var exists bool
 	err := conn.QueryRowContext(ctx,

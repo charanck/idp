@@ -5,8 +5,8 @@ import (
 	"sort"
 	"sync"
 
-	"controlplane/internal/config"
-	"controlplane/internal/dashboard"
+	configmodel "controlplane/internal/model/config"
+	dashboardmodel "controlplane/internal/model/dashboard"
 )
 
 type fakeDashboardRepository struct {
@@ -17,7 +17,7 @@ type fakeDashboardRepository struct {
 	secretCount         int64
 	activeFeatureFlags  int64
 	serviceClientCount  int64
-	recentConfigEntries []config.ConfigEntry
+	recentConfigEntries []configmodel.ConfigEntry
 }
 
 func newFakeDashboardRepository() *fakeDashboardRepository {
@@ -57,11 +57,11 @@ func (f *fakeDashboardRepository) CountServiceClients(ctx context.Context) (int6
 	return f.serviceClientCount, nil
 }
 
-func (f *fakeDashboardRepository) RecentConfigEntries(ctx context.Context, limit int) ([]config.ConfigEntry, error) {
+func (f *fakeDashboardRepository) RecentConfigEntries(ctx context.Context, limit int) ([]configmodel.ConfigEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	entries := make([]config.ConfigEntry, len(f.recentConfigEntries))
+	entries := make([]configmodel.ConfigEntry, len(f.recentConfigEntries))
 	copy(entries, f.recentConfigEntries)
 	sort.Slice(entries, func(i, j int) bool { return entries[i].UpdatedAt.After(entries[j].UpdatedAt) })
 	if limit >= 0 && limit < len(entries) {
@@ -70,4 +70,4 @@ func (f *fakeDashboardRepository) RecentConfigEntries(ctx context.Context, limit
 	return entries, nil
 }
 
-var _ dashboard.Repository = (*fakeDashboardRepository)(nil)
+var _ dashboardmodel.Repository = (*fakeDashboardRepository)(nil)

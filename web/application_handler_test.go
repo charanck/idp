@@ -6,14 +6,14 @@ import (
 	"net/url"
 	"testing"
 
-	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web"
 )
 
 func TestApplicationListHandler_ReturnsOK(t *testing.T) {
 	store := newSessionStore(t)
 	apps := newFakeApplicationStore()
-	apps.put(config.Application{Name: "svc-a"})
+	apps.put(configmodel.Application{Name: "svc-a"})
 	activity := &fakeActivityRecorder{}
 	h := web.NewApplicationHandler(apps, activity)
 
@@ -48,7 +48,7 @@ func TestApplicationCreateHandler_PersistsAndRedirects(t *testing.T) {
 func TestApplicationCreateHandler_DuplicateNameShowsError(t *testing.T) {
 	store := newSessionStore(t)
 	apps := newFakeApplicationStore()
-	apps.put(config.Application{Name: "dup"})
+	apps.put(configmodel.Application{Name: "dup"})
 	activity := &fakeActivityRecorder{}
 	h := web.NewApplicationHandler(apps, activity)
 

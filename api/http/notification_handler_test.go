@@ -14,6 +14,7 @@ import (
 	"gorm.io/datatypes"
 
 	apihttp "controlplane/api/http"
+	notificationmodel "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 )
 
@@ -62,12 +63,12 @@ func TestCreate_ServiceErrorReturns500(t *testing.T) {
 }
 
 func TestCreate_ReturnsCreatedNotificationAsJSON(t *testing.T) {
-	n := &notification.Notification{
+	n := &notificationmodel.Notification{
 		ID:        uuid.New(),
 		Channel:   "email",
 		Recipient: datatypes.JSON(`{"email":"a@example.com"}`),
 		Content:   datatypes.JSON(`{"subject":"hi"}`),
-		Status:    notification.StatusQueued,
+		Status:    notificationmodel.StatusQueued,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -89,14 +90,14 @@ func TestCreate_ReturnsCreatedNotificationAsJSON(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Channel != "email" || resp.Status != notification.StatusQueued {
+	if resp.Channel != "email" || resp.Status != notificationmodel.StatusQueued {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
 }
 
 func TestList_ReturnsNotificationsAsJSON(t *testing.T) {
-	lister := &fakeNotificationLister{notifications: []notification.Notification{
-		{ID: uuid.New(), Channel: "sms", Status: notification.StatusQueued, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`)},
+	lister := &fakeNotificationLister{notifications: []notificationmodel.Notification{
+		{ID: uuid.New(), Channel: "sms", Status: notificationmodel.StatusQueued, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`)},
 	}}
 	h := apihttp.NewNotificationHandler(&fakeNotificationCreator{}, lister, &fakeNotificationGetter{}, notification.NewChannelRegistry())
 

@@ -10,7 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	apihttp "controlplane/api/http"
-	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 )
 
 func newFeatureFlagListRequest(service, environment string) (echo.Context, *httptest.ResponseRecorder) {
@@ -23,14 +23,14 @@ func newFeatureFlagListRequest(service, environment string) (echo.Context, *http
 
 func TestFeatureFlagList_ReturnsFlagsAsJSON(t *testing.T) {
 	description := "new checkout flow"
-	lister := &fakeFeatureFlagLister{flags: []config.FeatureFlag{
+	lister := &fakeFeatureFlagLister{flags: []configmodel.FeatureFlag{
 		{
 			ID:          uuid.New(),
 			Name:        "new-checkout",
 			Description: &description,
 			IsEnabled:   true,
-			Application: config.Application{Name: "payments"},
-			Environment: config.Environment{Name: "prod"},
+			Application: configmodel.Application{Name: "payments"},
+			Environment: configmodel.Environment{Name: "prod"},
 		},
 	}}
 	h := apihttp.NewFeatureFlagHandler(lister)

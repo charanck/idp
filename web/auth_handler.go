@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/internal/ratelimit"
 	"controlplane/internal/security"
 	"controlplane/internal/session"
@@ -17,14 +18,14 @@ import (
 
 // AuthStore is what login/password-change handlers need. Satisfied by *auth.AuthService.
 type AuthStore interface {
-	AuthenticateUser(ctx context.Context, email, password string) (*auth.User, error)
+	AuthenticateUser(ctx context.Context, email, password string) (*authmodel.User, error)
 	SetPassword(ctx context.Context, userID uuid.UUID, hashedPassword string) error
 }
 
 // OAuthActiveLister feeds the "log in with..." buttons on the login page.
 // Satisfied by *auth.OAuthService.
 type OAuthActiveLister interface {
-	ListActiveProviders(ctx context.Context) ([]auth.OAuthProvider, error)
+	ListActiveProviders(ctx context.Context) ([]authmodel.OAuthProvider, error)
 }
 
 // RateLimiter throttles login attempts. Satisfied by *ratelimit.Limiter.

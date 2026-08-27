@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 )
 
 func newTestFlagService(t *testing.T) (*config.FeatureFlagService, *fakeApplicationRepository, *fakeEnvironmentRepository, *fakeFeatureFlagRepository) {
@@ -18,15 +19,15 @@ func newTestFlagService(t *testing.T) (*config.FeatureFlagService, *fakeApplicat
 	return svc, apps, envs, flags
 }
 
-func seedFlagApp(t *testing.T, apps *fakeApplicationRepository, envs *fakeEnvironmentRepository, name string, envNames ...string) *config.Application {
+func seedFlagApp(t *testing.T, apps *fakeApplicationRepository, envs *fakeEnvironmentRepository, name string, envNames ...string) *configmodel.Application {
 	t.Helper()
 	ctx := context.Background()
-	app := &config.Application{Name: name}
+	app := &configmodel.Application{Name: name}
 	if err := apps.Create(ctx, app); err != nil {
 		t.Fatalf("create application: %v", err)
 	}
 	for _, envName := range envNames {
-		if err := envs.Create(ctx, &config.Environment{ApplicationID: app.ID, Name: envName}); err != nil {
+		if err := envs.Create(ctx, &configmodel.Environment{ApplicationID: app.ID, Name: envName}); err != nil {
 			t.Fatalf("create environment %s: %v", envName, err)
 		}
 	}

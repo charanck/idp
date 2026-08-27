@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/internal/ratelimit"
 )
 
@@ -19,7 +20,7 @@ const s2sRateLimitBucket = "s2s-api-key"
 // APIKeyAuthenticator is the narrow slice of *auth.AuthService that
 // APIKeyAuthMiddleware needs.
 type APIKeyAuthenticator interface {
-	AuthenticateServiceAPIKey(ctx context.Context, apiKey string) (*auth.ServiceClient, error)
+	AuthenticateServiceAPIKey(ctx context.Context, apiKey string) (*authmodel.ServiceClient, error)
 }
 
 // RateLimiter is the narrow slice of *ratelimit.Limiter that

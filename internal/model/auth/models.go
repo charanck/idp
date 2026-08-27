@@ -1,7 +1,7 @@
-// Package auth contains the user/service-client/OAuth-provider models and
-// services, mirroring authentication/models.py, oauth_models.py and
-// services.py.
-package auth
+// Package model contains the user/service-client/OAuth-provider gorm models
+// and their repository interfaces. Concrete gorm implementations live in
+// internal/repository/auth; business logic lives in internal/auth.
+package model
 
 import (
 	"time"
@@ -10,10 +10,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// User mirrors authentication/models.py's User (a Django AbstractUser
-// subclass). Some AbstractUser columns (username, first_name, last_name,
-// last_login, date_joined, is_superuser) are kept only because they exist in
-// the shared "users" table already - the Go side doesn't use groups/permissions.
+// User is a custom, email-based login user. Some legacy columns (username,
+// first_name, last_name, last_login, date_joined, is_superuser) are kept only
+// because they exist in the shared "users" table already - they aren't all
+// actively used by the current feature set.
 type User struct {
 	ID                 uuid.UUID  `gorm:"column:id;type:uuid;primaryKey"`
 	Password           string     `gorm:"column:password"`
@@ -43,7 +43,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// ServiceClient mirrors authentication/models.py's ServiceClient.
+// ServiceClient is an S2S API-key holder with its own per-client encryption key.
 type ServiceClient struct {
 	ID            uuid.UUID `gorm:"column:id;type:uuid;primaryKey"`
 	Name          string    `gorm:"column:name"`
@@ -64,7 +64,7 @@ func (c *ServiceClient) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// OAuthProvider mirrors authentication/oauth_models.py's OAuthProvider.
+// OAuthProvider is an OAuth2/OIDC identity provider configuration.
 type OAuthProvider struct {
 	ID               uuid.UUID `gorm:"column:id;type:uuid;primaryKey"`
 	Name             string    `gorm:"column:name"`
@@ -89,7 +89,7 @@ func (p *OAuthProvider) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// OAuthUserToken mirrors authentication/oauth_models.py's OAuthUserToken.
+// OAuthUserToken stores the token issued to a User by an OAuthProvider.
 type OAuthUserToken struct {
 	ID                uuid.UUID  `gorm:"column:id;type:uuid;primaryKey"`
 	UserID            uuid.UUID  `gorm:"column:user_id"`

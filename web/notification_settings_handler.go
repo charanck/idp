@@ -8,6 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/datatypes"
 
+	notificationmodel "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 	"controlplane/web/template/pages"
 )
@@ -15,9 +16,9 @@ import (
 // ProviderSettingStore is what notification-settings CRUD handlers need.
 // Satisfied by *notification.ProviderSettingService.
 type ProviderSettingStore interface {
-	Get(ctx context.Context, channel string) (*notification.ProviderSetting, error)
-	List(ctx context.Context) ([]notification.ProviderSetting, error)
-	Upsert(ctx context.Context, in notification.UpsertInput) (*notification.ProviderSetting, error)
+	Get(ctx context.Context, channel string) (*notificationmodel.ProviderSetting, error)
+	List(ctx context.Context) ([]notificationmodel.ProviderSetting, error)
+	Upsert(ctx context.Context, in notification.UpsertInput) (*notificationmodel.ProviderSetting, error)
 }
 
 type NotificationSettingsHandler struct {
@@ -33,9 +34,9 @@ var notificationChannelLabels = []struct {
 	Channel string
 	Label   string
 }{
-	{notification.ChannelEmail, "Email"},
-	{notification.ChannelSMS, "SMS"},
-	{notification.ChannelWhatsApp, "WhatsApp"},
+	{notificationmodel.ChannelEmail, "Email"},
+	{notificationmodel.ChannelSMS, "SMS"},
+	{notificationmodel.ChannelWhatsApp, "WhatsApp"},
 }
 
 func notificationChannelLabel(channel string) string {

@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web/template/pages"
 )
 
@@ -19,13 +20,13 @@ const environmentsPageSize = 20
 
 // EnvironmentStore is what environment CRUD handlers need. Satisfied by *config.ConfigService.
 type EnvironmentStore interface {
-	ListAllEnvironments(ctx context.Context, filter config.ListEnvironmentsFilter) ([]config.Environment, error)
-	ListEnvironmentsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]config.Environment, error)
-	GetEnvironmentByID(ctx context.Context, id uuid.UUID) (*config.Environment, error)
-	GetEnvironmentWithApplicationByID(ctx context.Context, id uuid.UUID) (*config.Environment, error)
-	CreateEnvironment(ctx context.Context, applicationID uuid.UUID, name string) (*config.Environment, error)
-	UpdateEnvironment(ctx context.Context, id, applicationID uuid.UUID, name string) (*config.Environment, error)
-	DeleteEnvironment(ctx context.Context, id uuid.UUID) (*config.Environment, error)
+	ListAllEnvironments(ctx context.Context, filter configmodel.ListEnvironmentsFilter) ([]configmodel.Environment, error)
+	ListEnvironmentsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]configmodel.Environment, error)
+	GetEnvironmentByID(ctx context.Context, id uuid.UUID) (*configmodel.Environment, error)
+	GetEnvironmentWithApplicationByID(ctx context.Context, id uuid.UUID) (*configmodel.Environment, error)
+	CreateEnvironment(ctx context.Context, applicationID uuid.UUID, name string) (*configmodel.Environment, error)
+	UpdateEnvironment(ctx context.Context, id, applicationID uuid.UUID, name string) (*configmodel.Environment, error)
+	DeleteEnvironment(ctx context.Context, id uuid.UUID) (*configmodel.Environment, error)
 }
 
 type EnvironmentHandler struct {
@@ -42,7 +43,7 @@ func (h *EnvironmentHandler) List(c echo.Context) error {
 	appIDFilter := c.QueryParam("application_id")
 	q := strings.TrimSpace(c.QueryParam("q"))
 
-	filter := config.ListEnvironmentsFilter{Query: q}
+	filter := configmodel.ListEnvironmentsFilter{Query: q}
 	if appIDFilter != "" {
 		if id, err := uuid.Parse(appIDFilter); err == nil {
 			filter.ApplicationID = &id

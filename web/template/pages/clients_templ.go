@@ -8,12 +8,12 @@ package pages
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "controlplane/internal/auth"
+import authmodel "controlplane/internal/model/auth"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
 type ClientsListData struct {
-	Clients       []auth.ServiceClient
+	Clients       []authmodel.ServiceClient
 	CurrentQ      string
 	CurrentStatus string
 	Page          int

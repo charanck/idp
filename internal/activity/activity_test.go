@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"controlplane/internal/activity"
+	model "controlplane/internal/model/activity"
 )
 
 func TestLog_AttachesRequestInfoFromContext(t *testing.T) {
@@ -18,7 +19,7 @@ func TestLog_AttachesRequestInfoFromContext(t *testing.T) {
 
 	logger.LogCreate(ctx, "config", "abc-123", "API_URL", nil)
 
-	rows, err := repo.List(context.Background(), activity.ListFilter{})
+	rows, err := repo.List(context.Background(), model.ListFilter{})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestList_FiltersByResourceAndType(t *testing.T) {
 	logger.LogUpdate(ctx, "config", "1", "A", nil)
 	logger.LogCreate(ctx, "flag", "2", "B", nil)
 
-	configRows, err := repo.List(ctx, activity.ListFilter{Resource: "config"})
+	configRows, err := repo.List(ctx, model.ListFilter{Resource: "config"})
 	if err != nil {
 		t.Fatalf("List by resource: %v", err)
 	}
@@ -54,7 +55,7 @@ func TestList_FiltersByResourceAndType(t *testing.T) {
 		t.Fatalf("expected 2 config rows, got %d", len(configRows))
 	}
 
-	createRows, err := repo.List(ctx, activity.ListFilter{Type: "create"})
+	createRows, err := repo.List(ctx, model.ListFilter{Type: "create"})
 	if err != nil {
 		t.Fatalf("List by type: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestList_FiltersByResourceAndType(t *testing.T) {
 		t.Fatalf("expected 2 create rows, got %d", len(createRows))
 	}
 
-	combined, err := repo.List(ctx, activity.ListFilter{Resource: "config", Type: "update"})
+	combined, err := repo.List(ctx, model.ListFilter{Resource: "config", Type: "update"})
 	if err != nil {
 		t.Fatalf("List by resource+type: %v", err)
 	}

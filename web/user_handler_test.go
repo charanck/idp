@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/web"
 )
 
@@ -22,7 +22,7 @@ func newUserHandlerFixture() (*fakeUserStore, *fakeActivityRecorder, *web.UserHa
 func TestUserListHandler_ReturnsOK(t *testing.T) {
 	store := newSessionStore(t)
 	users, _, h := newUserHandlerFixture()
-	users.put(auth.User{Email: "a@example.com", Username: "a"})
+	users.put(authmodel.User{Email: "a@example.com", Username: "a"})
 
 	rec := callHandler(t, store, http.MethodGet, "/users/", nil, nil, h.List)
 
@@ -52,7 +52,7 @@ func TestUserCreateHandler_PasswordMismatchShowsError(t *testing.T) {
 func TestUserCreateHandler_DuplicateEmailShowsError(t *testing.T) {
 	store := newSessionStore(t)
 	users, activity, h := newUserHandlerFixture()
-	users.put(auth.User{Email: "dup@example.com", Username: "dup"})
+	users.put(authmodel.User{Email: "dup@example.com", Username: "dup"})
 
 	form := url.Values{
 		"email": {"dup@example.com"}, "username": {"other"},
@@ -74,7 +74,7 @@ func TestUserCreateHandler_DuplicateEmailShowsError(t *testing.T) {
 func TestUserEditHandler_CannotEscalateOwnRole(t *testing.T) {
 	store := newSessionStore(t)
 	users, _, h := newUserHandlerFixture()
-	self := users.put(auth.User{Email: "self@example.com", Username: "self", IsActive: true, IsStaff: true})
+	self := users.put(authmodel.User{Email: "self@example.com", Username: "self", IsActive: true, IsStaff: true})
 	id := self.ID.String()
 
 	form := url.Values{
@@ -112,7 +112,7 @@ func TestUserEditHandler_UnknownIDReturns404(t *testing.T) {
 func TestUserDeleteHandler_CannotDeleteOwnAccount(t *testing.T) {
 	store := newSessionStore(t)
 	users, activity, h := newUserHandlerFixture()
-	self := users.put(auth.User{Email: "self@example.com", Username: "self"})
+	self := users.put(authmodel.User{Email: "self@example.com", Username: "self"})
 	id := self.ID.String()
 
 	rec := callHandlerWithParams(t, store, http.MethodPost, "/users/"+id+"/delete/",

@@ -9,19 +9,19 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/notification"
+	model "controlplane/internal/model/notification"
 )
 
 type fakeNotificationRepository struct {
 	mu            sync.Mutex
-	notifications map[uuid.UUID]notification.Notification
+	notifications map[uuid.UUID]model.Notification
 }
 
 func newFakeNotificationRepository() *fakeNotificationRepository {
-	return &fakeNotificationRepository{notifications: make(map[uuid.UUID]notification.Notification)}
+	return &fakeNotificationRepository{notifications: make(map[uuid.UUID]model.Notification)}
 }
 
-func (f *fakeNotificationRepository) FindByIdempotencyKey(ctx context.Context, key string) (*notification.Notification, error) {
+func (f *fakeNotificationRepository) FindByIdempotencyKey(ctx context.Context, key string) (*model.Notification, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, n := range f.notifications {
@@ -33,7 +33,7 @@ func (f *fakeNotificationRepository) FindByIdempotencyKey(ctx context.Context, k
 	return nil, nil
 }
 
-func (f *fakeNotificationRepository) FindByID(ctx context.Context, id uuid.UUID) (*notification.Notification, error) {
+func (f *fakeNotificationRepository) FindByID(ctx context.Context, id uuid.UUID) (*model.Notification, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	n, ok := f.notifications[id]
@@ -43,11 +43,11 @@ func (f *fakeNotificationRepository) FindByID(ctx context.Context, id uuid.UUID)
 	return &n, nil
 }
 
-func (f *fakeNotificationRepository) List(ctx context.Context, filter notification.ListNotificationsFilter) ([]notification.Notification, error) {
+func (f *fakeNotificationRepository) List(ctx context.Context, filter model.ListNotificationsFilter) ([]model.Notification, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	var out []notification.Notification
+	var out []model.Notification
 	for _, n := range f.notifications {
 		if filter.Channel != "" && n.Channel != filter.Channel {
 			continue
@@ -61,7 +61,7 @@ func (f *fakeNotificationRepository) List(ctx context.Context, filter notificati
 	return out, nil
 }
 
-func (f *fakeNotificationRepository) Create(ctx context.Context, n *notification.Notification) error {
+func (f *fakeNotificationRepository) Create(ctx context.Context, n *model.Notification) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if n.ID == uuid.Nil {
@@ -74,13 +74,13 @@ func (f *fakeNotificationRepository) Create(ctx context.Context, n *notification
 	return nil
 }
 
-func (f *fakeNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string) ([]notification.Notification, error) {
+func (f *fakeNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string) ([]model.Notification, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	var out []notification.Notification
+	var out []model.Notification
 	for _, n := range f.notifications {
-		if n.Channel != notification.ChannelInApp || n.ReadAt != nil {
+		if n.Channel != model.ChannelInApp || n.ReadAt != nil {
 			continue
 		}
 		var recipient struct {
@@ -110,7 +110,7 @@ func (f *fakeNotificationRepository) MarkProcessing(ctx context.Context, id uuid
 	if !ok {
 		return nil
 	}
-	n.Status = notification.StatusProcessing
+	n.Status = model.StatusProcessing
 	f.notifications[id] = n
 	return nil
 }
@@ -122,7 +122,7 @@ func (f *fakeNotificationRepository) MarkSent(ctx context.Context, id uuid.UUID,
 	if !ok {
 		return nil
 	}
-	n.Status = notification.StatusSent
+	n.Status = model.StatusSent
 	n.Provider = &provider
 	n.ProviderMessageID = &providerMessageID
 	n.Error = nil
@@ -137,7 +137,7 @@ func (f *fakeNotificationRepository) MarkRetrying(ctx context.Context, id uuid.U
 	if !ok {
 		return nil
 	}
-	n.Status = notification.StatusRetrying
+	n.Status = model.StatusRetrying
 	n.Attempt = attempt
 	errMsg := sendErr.Error()
 	n.Error = &errMsg
@@ -152,7 +152,7 @@ func (f *fakeNotificationRepository) MarkFailed(ctx context.Context, id uuid.UUI
 	if !ok {
 		return nil
 	}
-	n.Status = notification.StatusFailed
+	n.Status = model.StatusFailed
 	n.Attempt = attempt
 	errMsg := sendErr.Error()
 	n.Error = &errMsg
@@ -160,18 +160,18 @@ func (f *fakeNotificationRepository) MarkFailed(ctx context.Context, id uuid.UUI
 	return nil
 }
 
-var _ notification.NotificationRepository = (*fakeNotificationRepository)(nil)
+var _ model.NotificationRepository = (*fakeNotificationRepository)(nil)
 
 type fakeProviderSettingRepository struct {
 	mu       sync.Mutex
-	settings map[string]notification.ProviderSetting
+	settings map[string]model.ProviderSetting
 }
 
 func newFakeProviderSettingRepository() *fakeProviderSettingRepository {
-	return &fakeProviderSettingRepository{settings: make(map[string]notification.ProviderSetting)}
+	return &fakeProviderSettingRepository{settings: make(map[string]model.ProviderSetting)}
 }
 
-func (f *fakeProviderSettingRepository) FindByChannel(ctx context.Context, channel string) (*notification.ProviderSetting, error) {
+func (f *fakeProviderSettingRepository) FindByChannel(ctx context.Context, channel string) (*model.ProviderSetting, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s, ok := f.settings[channel]
@@ -181,10 +181,10 @@ func (f *fakeProviderSettingRepository) FindByChannel(ctx context.Context, chann
 	return &s, nil
 }
 
-func (f *fakeProviderSettingRepository) List(ctx context.Context) ([]notification.ProviderSetting, error) {
+func (f *fakeProviderSettingRepository) List(ctx context.Context) ([]model.ProviderSetting, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []notification.ProviderSetting
+	var out []model.ProviderSetting
 	for _, s := range f.settings {
 		out = append(out, s)
 	}
@@ -192,7 +192,7 @@ func (f *fakeProviderSettingRepository) List(ctx context.Context) ([]notificatio
 	return out, nil
 }
 
-func (f *fakeProviderSettingRepository) Create(ctx context.Context, setting *notification.ProviderSetting) error {
+func (f *fakeProviderSettingRepository) Create(ctx context.Context, setting *model.ProviderSetting) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if setting.ID == uuid.Nil {
@@ -202,11 +202,11 @@ func (f *fakeProviderSettingRepository) Create(ctx context.Context, setting *not
 	return nil
 }
 
-func (f *fakeProviderSettingRepository) Update(ctx context.Context, setting *notification.ProviderSetting) error {
+func (f *fakeProviderSettingRepository) Update(ctx context.Context, setting *model.ProviderSetting) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.settings[setting.Channel] = *setting
 	return nil
 }
 
-var _ notification.ProviderSettingRepository = (*fakeProviderSettingRepository)(nil)
+var _ model.ProviderSettingRepository = (*fakeProviderSettingRepository)(nil)

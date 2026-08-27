@@ -1,6 +1,9 @@
 package notification
 
-import "controlplane/internal/notification/provider"
+import (
+	model "controlplane/internal/model/notification"
+	"controlplane/internal/notification/provider"
+)
 
 // ChannelRegistry maps a notification channel name to its delivery Channel.
 type ChannelRegistry map[string]provider.Channel
@@ -9,9 +12,9 @@ type ChannelRegistry map[string]provider.Channel
 // Email/SMS/WhatsApp channels plus InApp.
 func NewChannelRegistry() ChannelRegistry {
 	return ChannelRegistry{
-		ChannelEmail:    provider.EmailChannel{},
-		ChannelSMS:      provider.SMSChannel{},
-		ChannelWhatsApp: provider.WhatsAppChannel{},
-		ChannelInApp:    provider.InAppChannel{},
+		model.ChannelEmail:    provider.EmailChannel{},
+		model.ChannelSMS:      provider.SMSChannel{},
+		model.ChannelWhatsApp: provider.WhatsAppChannel{},
+		model.ChannelInApp:    provider.InAppChannel{},
 	}
 }

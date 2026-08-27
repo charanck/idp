@@ -134,7 +134,7 @@ func ConfirmDelete(flashes []session.Flash, user layout.NavUser, activeNav strin
 
 // PaginationNav renders page links for a Page[T], preserving any existing
 // filter query string (extraQuery, e.g. "resource=foo&type=bar") alongside
-// the "page" param, mirroring the Django template's pagination controls.
+// the "page" param.
 func PaginationNav(path string, extraQuery string, page int, numPages int, hasPrev bool, hasNext bool, prevNum int, nextNum int, window []int) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context

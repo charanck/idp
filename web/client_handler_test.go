@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/web"
 )
 
@@ -22,7 +22,7 @@ func newClientHandlerFixture() (*fakeClientStore, *fakeActivityRecorder, *web.Cl
 func TestClientListHandler_ReturnsOK(t *testing.T) {
 	store := newSessionStore(t)
 	clients, _, h := newClientHandlerFixture()
-	clients.put(auth.ServiceClient{Name: "svc-a", IsActive: true})
+	clients.put(authmodel.ServiceClient{Name: "svc-a", IsActive: true})
 
 	rec := callHandler(t, store, http.MethodGet, "/clients/", nil, nil, h.List)
 
@@ -34,7 +34,7 @@ func TestClientListHandler_ReturnsOK(t *testing.T) {
 func TestClientCreateHandler_DuplicateNameShowsError(t *testing.T) {
 	store := newSessionStore(t)
 	clients, activity, h := newClientHandlerFixture()
-	clients.put(auth.ServiceClient{Name: "dup"})
+	clients.put(authmodel.ServiceClient{Name: "dup"})
 
 	form := url.Values{"name": {"dup"}}
 	rec := callHandler(t, store, http.MethodPost, "/clients/create/", form, nil, h.Create)
@@ -90,7 +90,7 @@ func TestClientDetailHandler_MalformedIDReturns404(t *testing.T) {
 func TestClientToggleHandler_TogglesActiveState(t *testing.T) {
 	store := newSessionStore(t)
 	clients, activity, h := newClientHandlerFixture()
-	client := clients.put(auth.ServiceClient{Name: "svc-a", IsActive: true})
+	client := clients.put(authmodel.ServiceClient{Name: "svc-a", IsActive: true})
 	id := client.ID.String()
 
 	rec := callHandlerWithParams(t, store, http.MethodPost, "/clients/"+id+"/toggle/",
@@ -120,7 +120,7 @@ func TestClientRegenerateKeyHandler_UnknownIDReturns404(t *testing.T) {
 func TestClientDeleteHandler_GetShowsConfirmationWithoutDeleting(t *testing.T) {
 	store := newSessionStore(t)
 	clients, _, h := newClientHandlerFixture()
-	client := clients.put(auth.ServiceClient{Name: "svc-a"})
+	client := clients.put(authmodel.ServiceClient{Name: "svc-a"})
 	id := client.ID.String()
 
 	rec := callHandlerWithParams(t, store, http.MethodGet, "/clients/"+id+"/delete/",
@@ -137,7 +137,7 @@ func TestClientDeleteHandler_GetShowsConfirmationWithoutDeleting(t *testing.T) {
 func TestClientDeleteHandler_PostDeletesClient(t *testing.T) {
 	store := newSessionStore(t)
 	clients, activity, h := newClientHandlerFixture()
-	client := clients.put(auth.ServiceClient{Name: "svc-a"})
+	client := clients.put(authmodel.ServiceClient{Name: "svc-a"})
 	id := client.ID.String()
 
 	rec := callHandlerWithParams(t, store, http.MethodPost, "/clients/"+id+"/delete/",
@@ -170,7 +170,7 @@ func TestClientDeleteHandler_UnknownIDReturns404(t *testing.T) {
 func TestClientRegenerateKeyHandler_GetDoesNotChangeTheKey(t *testing.T) {
 	store := newSessionStore(t)
 	clients, _, h := newClientHandlerFixture()
-	client := clients.put(auth.ServiceClient{Name: "svc-a", EncryptionKey: "original-key"})
+	client := clients.put(authmodel.ServiceClient{Name: "svc-a", EncryptionKey: "original-key"})
 	id := client.ID.String()
 
 	rec := callHandlerWithParams(t, store, http.MethodGet, "/clients/"+id+"/regenerate-key/",
@@ -188,7 +188,7 @@ func TestClientRegenerateKeyHandler_GetDoesNotChangeTheKey(t *testing.T) {
 func TestClientRegenerateKeyHandler_PostIssuesANewKey(t *testing.T) {
 	store := newSessionStore(t)
 	clients, activity, h := newClientHandlerFixture()
-	client := clients.put(auth.ServiceClient{Name: "svc-a", EncryptionKey: "original-key"})
+	client := clients.put(authmodel.ServiceClient{Name: "svc-a", EncryptionKey: "original-key"})
 	id := client.ID.String()
 
 	rec := callHandlerWithParams(t, store, http.MethodPost, "/clients/"+id+"/regenerate-key/",

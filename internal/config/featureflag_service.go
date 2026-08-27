@@ -12,18 +12,19 @@ import (
 	"gorm.io/gorm"
 
 	"controlplane/internal/cache"
+	model "controlplane/internal/model/config"
 )
 
 // FeatureFlagService mirrors config_management/services.py's FeatureFlagService.
 type FeatureFlagService struct {
-	flags        FeatureFlagRepository
-	apps         ApplicationRepository
-	envs         EnvironmentRepository
+	flags        model.FeatureFlagRepository
+	apps         model.ApplicationRepository
+	envs         model.EnvironmentRepository
 	cache        cache.Cache
 	cacheTimeout time.Duration
 }
 
-func NewFeatureFlagService(flags FeatureFlagRepository, apps ApplicationRepository, envs EnvironmentRepository, c cache.Cache, cacheTimeout time.Duration) *FeatureFlagService {
+func NewFeatureFlagService(flags model.FeatureFlagRepository, apps model.ApplicationRepository, envs model.EnvironmentRepository, c cache.Cache, cacheTimeout time.Duration) *FeatureFlagService {
 	return &FeatureFlagService{flags: flags, apps: apps, envs: envs, cache: c, cacheTimeout: cacheTimeout}
 }
 
@@ -39,7 +40,7 @@ var (
 // gorm error (including gorm.ErrRecordNotFound) rather than swallowing it -
 // unlike ConfigService.getScope, every caller here needs to distinguish
 // "scope missing" from other errors itself.
-func (s *FeatureFlagService) getScope(ctx context.Context, service, environment string) (*Application, *Environment, error) {
+func (s *FeatureFlagService) getScope(ctx context.Context, service, environment string) (*model.Application, *model.Environment, error) {
 	app, err := s.apps.FindByName(ctx, service)
 	if err != nil {
 		return nil, nil, err
@@ -75,7 +76,7 @@ type CreateFlagOptions struct {
 
 // CreateFlag creates (or updates) a feature flag across one or all
 // environments of an application, mirroring FeatureFlagService.create_flag.
-func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name string, opts CreateFlagOptions) ([]FeatureFlag, error) {
+func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name string, opts CreateFlagOptions) ([]model.FeatureFlag, error) {
 	app, err := s.apps.FindByName(ctx, service)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -84,7 +85,7 @@ func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name strin
 		return nil, err
 	}
 
-	var environments []Environment
+	var environments []model.Environment
 	if opts.CreateAllEnvironments {
 		environments, err = s.envs.ListByApplicationID(ctx, app.ID)
 		if err != nil {
@@ -100,7 +101,7 @@ func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name strin
 				return nil, err
 			}
 		} else {
-			environments = []Environment{*env}
+			environments = []model.Environment{*env}
 		}
 	}
 	if len(environments) == 0 {
@@ -112,12 +113,12 @@ func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name strin
 		description = &opts.Description
 	}
 
-	flags := make([]FeatureFlag, 0, len(environments))
+	flags := make([]model.FeatureFlag, 0, len(environments))
 	for _, env := range environments {
 		flag, err := s.flags.FindByScopeAndName(ctx, app.ID, env.ID, name)
 		switch {
 		case errors.Is(err, gorm.ErrRecordNotFound):
-			flag = &FeatureFlag{
+			flag = &model.FeatureFlag{
 				ApplicationID: app.ID,
 				EnvironmentID: env.ID,
 				Name:          name,
@@ -152,7 +153,7 @@ func (s *FeatureFlagService) CreateFlag(ctx context.Context, service, name strin
 
 // GetFlag returns a feature flag by name, or nil if not found (including if
 // the service/environment scope itself doesn't exist).
-func (s *FeatureFlagService) GetFlag(ctx context.Context, service, environment, name string) (*FeatureFlag, error) {
+func (s *FeatureFlagService) GetFlag(ctx context.Context, service, environment, name string) (*model.FeatureFlag, error) {
 	app, env, err := s.getScope(ctx, service, environment)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -174,10 +175,10 @@ func (s *FeatureFlagService) GetFlag(ctx context.Context, service, environment, 
 }
 
 // ListFlags lists all active (non-deleted) feature flags for a service/environment.
-func (s *FeatureFlagService) ListFlags(ctx context.Context, service, environment string) ([]FeatureFlag, error) {
+func (s *FeatureFlagService) ListFlags(ctx context.Context, service, environment string) ([]model.FeatureFlag, error) {
 	app, env, err := s.getScope(ctx, service, environment)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return []FeatureFlag{}, nil
+		return []model.FeatureFlag{}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -192,7 +193,7 @@ func (s *FeatureFlagService) ListFlags(ctx context.Context, service, environment
 	if cached, found, err := s.cache.Get(ctx, cacheKey); err != nil {
 		return nil, err
 	} else if found {
-		var flags []FeatureFlag
+		var flags []model.FeatureFlag
 		if err := json.Unmarshal([]byte(cached), &flags); err == nil {
 			return flags, nil
 		}
@@ -208,12 +209,11 @@ func (s *FeatureFlagService) ListFlags(ctx context.Context, service, environment
 			return nil, err
 		}
 	}
-
 	return flags, nil
 }
 
 // ToggleFlag flips a feature flag's enabled state, returning nil if not found.
-func (s *FeatureFlagService) ToggleFlag(ctx context.Context, service, environment, name string) (*FeatureFlag, error) {
+func (s *FeatureFlagService) ToggleFlag(ctx context.Context, service, environment, name string) (*model.FeatureFlag, error) {
 	app, env, err := s.getScope(ctx, service, environment)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Warn("feature flag toggle failed: scope not found", "service", service, "environment", environment, "name", name)
@@ -245,22 +245,15 @@ func (s *FeatureFlagService) ToggleFlag(ctx context.Context, service, environmen
 	return flag, nil
 }
 
-// ListFlagsFilter filters ListAllFlags.
-type ListFlagsFilter struct {
-	ApplicationID *uuid.UUID
-	EnvironmentID *uuid.UUID
-	IsEnabled     *bool
-}
-
 // ListAllFlags lists non-deleted feature flags (with Application/Environment
 // preloaded) across every service/environment, for the admin flags list page.
-func (s *FeatureFlagService) ListAllFlags(ctx context.Context, filter ListFlagsFilter) ([]FeatureFlag, error) {
+func (s *FeatureFlagService) ListAllFlags(ctx context.Context, filter model.ListFlagsFilter) ([]model.FeatureFlag, error) {
 	return s.flags.List(ctx, filter)
 }
 
 // GetFlagByID returns a feature flag by ID (with Application/Environment
 // preloaded), or nil if not found.
-func (s *FeatureFlagService) GetFlagByID(ctx context.Context, id uuid.UUID) (*FeatureFlag, error) {
+func (s *FeatureFlagService) GetFlagByID(ctx context.Context, id uuid.UUID) (*model.FeatureFlag, error) {
 	flag, err := s.flags.FindByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
@@ -272,7 +265,7 @@ func (s *FeatureFlagService) GetFlagByID(ctx context.Context, id uuid.UUID) (*Fe
 }
 
 // ToggleFlagByID flips a feature flag's enabled state by ID, returning nil if not found.
-func (s *FeatureFlagService) ToggleFlagByID(ctx context.Context, id uuid.UUID) (*FeatureFlag, error) {
+func (s *FeatureFlagService) ToggleFlagByID(ctx context.Context, id uuid.UUID) (*model.FeatureFlag, error) {
 	flag, err := s.GetFlagByID(ctx, id)
 	if err != nil || flag == nil {
 		return flag, err
@@ -290,7 +283,7 @@ func (s *FeatureFlagService) ToggleFlagByID(ctx context.Context, id uuid.UUID) (
 
 // SoftDeleteFlagByID soft-deletes (sets deleted_at) a feature flag by ID,
 // returning nil if not found.
-func (s *FeatureFlagService) SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*FeatureFlag, error) {
+func (s *FeatureFlagService) SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*model.FeatureFlag, error) {
 	flag, err := s.GetFlagByID(ctx, id)
 	if err != nil || flag == nil {
 		return flag, err

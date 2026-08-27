@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"controlplane/internal/config"
 	"controlplane/internal/dashboard"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web"
 )
 
@@ -16,7 +16,7 @@ func TestDashboardShowHandler_RendersCountsAndRecentConfigs(t *testing.T) {
 			ApplicationCount: 2, EnvironmentCount: 4, ConfigCount: 10,
 			SecretCount: 3, FlagCount: 5, ClientCount: 1,
 		},
-		recentConfigs: []config.ConfigEntry{{Key: "a"}, {Key: "b"}, {Key: "c"}},
+		recentConfigs: []configmodel.ConfigEntry{{Key: "a"}, {Key: "b"}, {Key: "c"}},
 	}
 	h := web.NewDashboardHandler(reader)
 
@@ -29,9 +29,9 @@ func TestDashboardShowHandler_RendersCountsAndRecentConfigs(t *testing.T) {
 
 func TestDashboardShowHandler_RecentConfigsRespectsLimitOfFive(t *testing.T) {
 	store := newSessionStore(t)
-	var many []config.ConfigEntry
+	var many []configmodel.ConfigEntry
 	for range 10 {
-		many = append(many, config.ConfigEntry{Key: "k"})
+		many = append(many, configmodel.ConfigEntry{Key: "k"})
 	}
 	reader := &fakeDashboardReader{recentConfigs: many}
 	h := web.NewDashboardHandler(reader)

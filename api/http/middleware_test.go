@@ -8,7 +8,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	apihttp "controlplane/api/http"
-	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 )
 
 func newMiddlewareRequest(apiKey string) (echo.Context, *httptest.ResponseRecorder) {
@@ -81,10 +81,10 @@ func TestAPIKeyAuthMiddleware_InvalidKeyReturns401(t *testing.T) {
 }
 
 func TestAPIKeyAuthMiddleware_ValidKeySetsClientAndCallsNext(t *testing.T) {
-	client := &auth.ServiceClient{Name: "billing-service"}
+	client := &authmodel.ServiceClient{Name: "billing-service"}
 	mw := apihttp.NewAPIKeyAuthMiddleware(&fakeAPIKeyAuthenticator{client: client}, &fakeRateLimiter{}, 60, 100)
 
-	var gotClient *auth.ServiceClient
+	var gotClient *authmodel.ServiceClient
 	handler := mw.Middleware()(func(c echo.Context) error {
 		gotClient = apihttp.ServiceClientFromContext(c)
 		return nil

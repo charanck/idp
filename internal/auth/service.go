@@ -7,29 +7,31 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"controlplane/internal/crypto"
+	model "controlplane/internal/model/auth"
 	"controlplane/internal/security"
 )
 
 var ErrAlreadyExists = errors.New("already exists")
 
-// AuthService mirrors authentication/services.py's AuthService.
+// AuthService is the user/service-client authentication and management service.
 type AuthService struct {
-	users   UserRepository
-	clients ServiceClientRepository
+	users   model.UserRepository
+	clients model.ServiceClientRepository
 }
 
-func NewAuthService(users UserRepository, clients ServiceClientRepository) *AuthService {
+func NewAuthService(users model.UserRepository, clients model.ServiceClientRepository) *AuthService {
 	return &AuthService{users: users, clients: clients}
 }
 
 // RegisterUser registers a new user, inactive until an admin activates the account.
-func (s *AuthService) RegisterUser(ctx context.Context, email, password, username string) (*User, error) {
+func (s *AuthService) RegisterUser(ctx context.Context, email, password, username string) (*model.User, error) {
 	_, err := s.users.FindByEmail(ctx, email)
 	if err == nil {
 		return nil, fmt.Errorf("user already exists: %w", ErrAlreadyExists)
@@ -52,7 +54,7 @@ func (s *AuthService) RegisterUser(ctx context.Context, email, password, usernam
 		return nil, err
 	}
 
-	user := &User{
+	user := &model.User{
 		ID:       uuid.New(),
 		Email:    email,
 		Username: username,
@@ -66,13 +68,20 @@ func (s *AuthService) RegisterUser(ctx context.Context, email, password, usernam
 }
 
 // AuthenticateUser authenticates a user by email and password.
-func (s *AuthService) AuthenticateUser(ctx context.Context, email, password string) (*User, error) {
+func (s *AuthService) AuthenticateUser(ctx context.Context, email, password string) (*model.User, error) {
 	user, err := s.users.FindActiveByEmail(ctx, email)
 	if err != nil {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error, matching the Python service.
 	}
 	if !security.VerifyPassword(password, user.Password) {
 		return nil, nil
+	}
+	if security.IsLegacyHash(user.Password) {
+		if newHash, err := security.HashPassword(password); err != nil {
+			slog.Warn("rehash legacy password failed", "user_id", user.ID, "err", err)
+		} else if err := s.users.UpdatePassword(ctx, user.ID, newHash); err != nil {
+			slog.Warn("persist rehashed password failed", "user_id", user.ID, "err", err)
+		}
 	}
 	return user, nil
 }
@@ -84,7 +93,7 @@ func (s *AuthService) SetPassword(ctx context.Context, userID uuid.UUID, hashedP
 }
 
 // GetUserByID returns an active user by ID.
-func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
+func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	user, err := s.users.FindActiveByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -96,7 +105,7 @@ func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*User, err
 }
 
 type ServiceClientCredentials struct {
-	Client *ServiceClient
+	Client *model.ServiceClient
 	APIKey string
 }
 
@@ -132,7 +141,7 @@ func (s *AuthService) CreateServiceClient(ctx context.Context, name string) (*Se
 		return nil, err
 	}
 
-	client := &ServiceClient{
+	client := &model.ServiceClient{
 		ID:            uuid.New(),
 		Name:          name,
 		APIKeyID:      &apiKeyID,
@@ -149,7 +158,7 @@ func (s *AuthService) CreateServiceClient(ctx context.Context, name string) (*Se
 
 // AuthenticateServiceAPIKey authenticates a service client using the
 // "<key_id>.<secret>" format.
-func (s *AuthService) AuthenticateServiceAPIKey(ctx context.Context, apiKey string) (*ServiceClient, error) {
+func (s *AuthService) AuthenticateServiceAPIKey(ctx context.Context, apiKey string) (*model.ServiceClient, error) {
 	keyID, secret, ok := strings.Cut(apiKey, ".")
 	if !ok || keyID == "" || secret == "" {
 		return nil, nil
@@ -166,17 +175,27 @@ func (s *AuthService) AuthenticateServiceAPIKey(ctx context.Context, apiKey stri
 	if client.APIKeyHash == "" || !security.VerifyPassword(secret, client.APIKeyHash) {
 		return nil, nil
 	}
+	if security.IsLegacyHash(client.APIKeyHash) {
+		if newHash, err := security.HashPassword(secret); err != nil {
+			slog.Warn("rehash legacy api key secret failed", "client_id", client.ID, "err", err)
+		} else {
+			client.APIKeyHash = newHash
+			if err := s.clients.Update(ctx, client); err != nil {
+				slog.Warn("persist rehashed api key secret failed", "client_id", client.ID, "err", err)
+			}
+		}
+	}
 	return client, nil
 }
 
 // ListUsers lists users, optionally filtered by a case-insensitive email
 // substring and staff status, ordered newest-first.
-func (s *AuthService) ListUsers(ctx context.Context, q string, isStaff *bool) ([]User, error) {
+func (s *AuthService) ListUsers(ctx context.Context, q string, isStaff *bool) ([]model.User, error) {
 	return s.users.List(ctx, q, isStaff)
 }
 
 // GetUserByIDAny returns a user by ID regardless of active status, or nil if not found.
-func (s *AuthService) GetUserByIDAny(ctx context.Context, id uuid.UUID) (*User, error) {
+func (s *AuthService) GetUserByIDAny(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	user, err := s.users.FindByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
@@ -198,7 +217,7 @@ type CreateUserAdminInput struct {
 // CreateUserAdmin creates a new user directly (as opposed to RegisterUser's
 // always-inactive self-registration flow), returning ErrAlreadyExists if the
 // email is taken.
-func (s *AuthService) CreateUserAdmin(ctx context.Context, in CreateUserAdminInput) (*User, error) {
+func (s *AuthService) CreateUserAdmin(ctx context.Context, in CreateUserAdminInput) (*model.User, error) {
 	_, err := s.users.FindByEmail(ctx, in.Email)
 	if err == nil {
 		return nil, fmt.Errorf("user already exists: %w", ErrAlreadyExists)
@@ -212,7 +231,7 @@ func (s *AuthService) CreateUserAdmin(ctx context.Context, in CreateUserAdminInp
 		return nil, err
 	}
 
-	user := &User{
+	user := &model.User{
 		Email:    in.Email,
 		Username: in.Username,
 		Password: hashed,
@@ -233,7 +252,7 @@ type UpdateUserAdminInput struct {
 }
 
 // UpdateUserAdmin updates a user's profile/role fields by ID, returning nil if not found.
-func (s *AuthService) UpdateUserAdmin(ctx context.Context, id uuid.UUID, in UpdateUserAdminInput) (*User, error) {
+func (s *AuthService) UpdateUserAdmin(ctx context.Context, id uuid.UUID, in UpdateUserAdminInput) (*model.User, error) {
 	user, err := s.GetUserByIDAny(ctx, id)
 	if err != nil || user == nil {
 		return user, err
@@ -249,7 +268,7 @@ func (s *AuthService) UpdateUserAdmin(ctx context.Context, id uuid.UUID, in Upda
 }
 
 // DeleteUser deletes a user by ID, returning nil if not found.
-func (s *AuthService) DeleteUser(ctx context.Context, id uuid.UUID) (*User, error) {
+func (s *AuthService) DeleteUser(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	user, err := s.GetUserByIDAny(ctx, id)
 	if err != nil || user == nil {
 		return user, err
@@ -262,13 +281,13 @@ func (s *AuthService) DeleteUser(ctx context.Context, id uuid.UUID) (*User, erro
 
 // ListServiceClients lists service clients, optionally filtered by a
 // case-insensitive name substring and active status, ordered newest-first.
-func (s *AuthService) ListServiceClients(ctx context.Context, q string, isActive *bool) ([]ServiceClient, error) {
+func (s *AuthService) ListServiceClients(ctx context.Context, q string, isActive *bool) ([]model.ServiceClient, error) {
 	return s.clients.List(ctx, q, isActive)
 }
 
 // GetServiceClientByIDAny returns a service client by ID regardless of
 // active status, or nil if not found.
-func (s *AuthService) GetServiceClientByIDAny(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
+func (s *AuthService) GetServiceClientByIDAny(ctx context.Context, id uuid.UUID) (*model.ServiceClient, error) {
 	client, err := s.clients.FindByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
@@ -280,7 +299,7 @@ func (s *AuthService) GetServiceClientByIDAny(ctx context.Context, id uuid.UUID)
 }
 
 // ToggleServiceClient flips a service client's active state by ID, returning nil if not found.
-func (s *AuthService) ToggleServiceClient(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
+func (s *AuthService) ToggleServiceClient(ctx context.Context, id uuid.UUID) (*model.ServiceClient, error) {
 	client, err := s.GetServiceClientByIDAny(ctx, id)
 	if err != nil || client == nil {
 		return client, err
@@ -293,7 +312,7 @@ func (s *AuthService) ToggleServiceClient(ctx context.Context, id uuid.UUID) (*S
 }
 
 // DeleteServiceClient deletes a service client by ID, returning nil if not found.
-func (s *AuthService) DeleteServiceClient(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
+func (s *AuthService) DeleteServiceClient(ctx context.Context, id uuid.UUID) (*model.ServiceClient, error) {
 	client, err := s.GetServiceClientByIDAny(ctx, id)
 	if err != nil || client == nil {
 		return client, err
@@ -306,7 +325,7 @@ func (s *AuthService) DeleteServiceClient(ctx context.Context, id uuid.UUID) (*S
 
 // RegenerateServiceClientKey rotates a service client's encryption key by
 // ID, returning nil if not found.
-func (s *AuthService) RegenerateServiceClientKey(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
+func (s *AuthService) RegenerateServiceClientKey(ctx context.Context, id uuid.UUID) (*model.ServiceClient, error) {
 	client, err := s.GetServiceClientByIDAny(ctx, id)
 	if err != nil || client == nil {
 		return client, err
@@ -323,7 +342,7 @@ func (s *AuthService) RegenerateServiceClientKey(ctx context.Context, id uuid.UU
 }
 
 // GetServiceClientByID returns an active service client by ID.
-func (s *AuthService) GetServiceClientByID(ctx context.Context, id uuid.UUID) (*ServiceClient, error) {
+func (s *AuthService) GetServiceClientByID(ctx context.Context, id uuid.UUID) (*model.ServiceClient, error) {
 	client, err := s.clients.FindActiveByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil

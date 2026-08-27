@@ -14,6 +14,10 @@ import (
 	"controlplane/internal/crypto"
 	"controlplane/internal/dashboard"
 	"controlplane/internal/ratelimit"
+	activityrepo "controlplane/internal/repository/activity"
+	authrepo "controlplane/internal/repository/auth"
+	configrepo "controlplane/internal/repository/config"
+	dashboardrepo "controlplane/internal/repository/dashboard"
 	"controlplane/internal/session"
 )
 
@@ -41,12 +45,12 @@ func newCoreServices(gdb *gorm.DB, rdb *redis.Client, cfg *appconfig.Config) *co
 
 	return &coreServices{
 		Encryption:  encryption,
-		Auth:        auth.NewAuthService(auth.NewUserRepository(gdb), auth.NewServiceClientRepository(gdb)),
-		OAuth:       auth.NewOAuthService(auth.NewOAuthProviderRepository(gdb), auth.NewOAuthUserTokenRepository(gdb), auth.NewUserRepository(gdb)),
-		Config:      config.NewConfigService(config.NewConfigRepository(gdb), config.NewApplicationRepository(gdb), config.NewEnvironmentRepository(gdb), encryption, appCache, cacheTimeout),
-		Flags:       config.NewFeatureFlagService(config.NewFeatureFlagRepository(gdb), config.NewApplicationRepository(gdb), config.NewEnvironmentRepository(gdb), appCache, cacheTimeout),
-		Activity:    activity.NewLogger(activity.NewRepository(gdb)),
-		Dashboard:   dashboard.NewService(dashboard.NewRepository(gdb)),
+		Auth:        auth.NewAuthService(authrepo.NewUserRepository(gdb), authrepo.NewServiceClientRepository(gdb)),
+		OAuth:       auth.NewOAuthService(authrepo.NewOAuthProviderRepository(gdb), authrepo.NewOAuthUserTokenRepository(gdb), authrepo.NewUserRepository(gdb)),
+		Config:      config.NewConfigService(configrepo.NewConfigRepository(gdb), configrepo.NewApplicationRepository(gdb), configrepo.NewEnvironmentRepository(gdb), encryption, appCache, cacheTimeout),
+		Flags:       config.NewFeatureFlagService(configrepo.NewFeatureFlagRepository(gdb), configrepo.NewApplicationRepository(gdb), configrepo.NewEnvironmentRepository(gdb), appCache, cacheTimeout),
+		Activity:    activity.NewLogger(activityrepo.NewRepository(gdb)),
+		Dashboard:   dashboard.NewService(dashboardrepo.NewRepository(gdb)),
 		Cache:       appCache,
 		RateLimiter: ratelimit.NewLimiter(rdb),
 		Sessions:    session.NewStore(rdb, cfg.SessionSecret, 0),

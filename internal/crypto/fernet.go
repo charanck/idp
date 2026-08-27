@@ -1,7 +1,7 @@
 // Package crypto provides Fernet-based encryption compatible with the
 // Python `cryptography` library's Fernet implementation, so values encrypted
-// by the original Django service keep decrypting after the Go cutover, and
-// vice versa (e.g. the example client SDKs in examples/).
+// here keep decrypting in other Fernet-compatible implementations and vice
+// versa (e.g. the example client SDKs in examples/).
 package crypto
 
 import (

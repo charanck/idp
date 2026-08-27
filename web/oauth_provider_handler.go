@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/web/template/pages"
 )
 
@@ -17,12 +18,12 @@ const oauthProvidersPageSize = 10
 
 // OAuthProviderStore is what OAuth-provider CRUD handlers need. Satisfied by *auth.OAuthService.
 type OAuthProviderStore interface {
-	ListProviders(ctx context.Context, q string, isActive *bool) ([]auth.OAuthProvider, error)
-	GetProviderByID(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error)
-	CreateProvider(ctx context.Context, p auth.OAuthProvider) (*auth.OAuthProvider, error)
-	UpdateProvider(ctx context.Context, p auth.OAuthProvider) (*auth.OAuthProvider, error)
-	DeleteProvider(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error)
-	ToggleProvider(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error)
+	ListProviders(ctx context.Context, q string, isActive *bool) ([]authmodel.OAuthProvider, error)
+	GetProviderByID(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error)
+	CreateProvider(ctx context.Context, p authmodel.OAuthProvider) (*authmodel.OAuthProvider, error)
+	UpdateProvider(ctx context.Context, p authmodel.OAuthProvider) (*authmodel.OAuthProvider, error)
+	DeleteProvider(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error)
+	ToggleProvider(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error)
 }
 
 type OAuthProviderHandler struct {
@@ -71,8 +72,8 @@ func (h *OAuthProviderHandler) List(c echo.Context) error {
 	}).Render(c.Request().Context(), c.Response())
 }
 
-func oauthProviderFormFromRequest(c echo.Context, existing *auth.OAuthProvider) auth.OAuthProvider {
-	p := auth.OAuthProvider{}
+func oauthProviderFormFromRequest(c echo.Context, existing *authmodel.OAuthProvider) authmodel.OAuthProvider {
+	p := authmodel.OAuthProvider{}
 	if existing != nil {
 		p = *existing
 	}
@@ -126,7 +127,7 @@ func (h *OAuthProviderHandler) Create(c echo.Context) error {
 	return c.Redirect(http.StatusFound, "/oauth/providers/")
 }
 
-func (h *OAuthProviderHandler) loadOAuthProvider(c echo.Context) (*auth.OAuthProvider, error) {
+func (h *OAuthProviderHandler) loadOAuthProvider(c echo.Context) (*authmodel.OAuthProvider, error) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusNotFound)

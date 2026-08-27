@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/web/template/pages"
 )
 
@@ -18,12 +19,12 @@ const clientsPageSize = 20
 
 // ClientStore is what service-client CRUD handlers need. Satisfied by *auth.AuthService.
 type ClientStore interface {
-	ListServiceClients(ctx context.Context, q string, isActive *bool) ([]auth.ServiceClient, error)
+	ListServiceClients(ctx context.Context, q string, isActive *bool) ([]authmodel.ServiceClient, error)
 	CreateServiceClient(ctx context.Context, name string) (*auth.ServiceClientCredentials, error)
-	GetServiceClientByIDAny(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error)
-	ToggleServiceClient(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error)
-	DeleteServiceClient(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error)
-	RegenerateServiceClientKey(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error)
+	GetServiceClientByIDAny(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error)
+	ToggleServiceClient(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error)
+	DeleteServiceClient(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error)
+	RegenerateServiceClientKey(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error)
 }
 
 type ClientHandler struct {
@@ -108,7 +109,7 @@ func (h *ClientHandler) Create(c echo.Context) error {
 	}).Render(c.Request().Context(), c.Response())
 }
 
-func (h *ClientHandler) loadClient(c echo.Context) (*auth.ServiceClient, error) {
+func (h *ClientHandler) loadClient(c echo.Context) (*authmodel.ServiceClient, error) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusNotFound)

@@ -1,7 +1,7 @@
 package pages
 
 import "encoding/json"
-import "controlplane/internal/config"
+import configmodel "controlplane/internal/model/config"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
@@ -25,7 +25,7 @@ type ConfigGroupEntry struct {
 
 type ConfigsListData struct {
 	Groups                []ConfigGroup
-	Applications          []config.Application
+	Applications          []configmodel.Application
 	EnvironmentsByAppJSON string
 	CurrentAppID          string
 	CurrentEnvID          string
@@ -148,7 +148,7 @@ templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsList
 
 type ConfigFormData struct {
 	CSRFToken             string
-	Applications          []config.Application
+	Applications          []configmodel.Application
 	EnvironmentsByAppJSON string
 	ApplicationID         string
 	EnvironmentID         string
@@ -199,11 +199,11 @@ templ ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDa
 				<label for="type">
 					Type
 					<select id="type" name="type">
-						@typeOption(data.Type, config.TypeString, "String")
-						@typeOption(data.Type, config.TypeBoolean, "Boolean")
-						@typeOption(data.Type, config.TypeNumber, "Number")
-						@typeOption(data.Type, config.TypeObject, "Object")
-						@typeOption(data.Type, config.TypeArray, "Array")
+						@typeOption(data.Type, configmodel.TypeString, "String")
+						@typeOption(data.Type, configmodel.TypeBoolean, "Boolean")
+						@typeOption(data.Type, configmodel.TypeNumber, "Number")
+						@typeOption(data.Type, configmodel.TypeObject, "Object")
+						@typeOption(data.Type, configmodel.TypeArray, "Array")
 					</select>
 				</label>
 				<label for="is_secret">

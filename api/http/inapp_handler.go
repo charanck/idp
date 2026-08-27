@@ -6,13 +6,14 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	notificationmodel "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 )
 
 // UnreadConsumer is the narrow slice of *notification.NotificationService
 // that InAppHandler needs.
 type UnreadConsumer interface {
-	ConsumeUnreadInAppForUser(ctx context.Context, userID string) ([]notification.Notification, error)
+	ConsumeUnreadInAppForUser(ctx context.Context, userID string) ([]notificationmodel.Notification, error)
 }
 
 // InAppHandler lists the bearer token's authorized user's unread InApp

@@ -15,25 +15,26 @@ import (
 
 	"controlplane/internal/cache"
 	"controlplane/internal/crypto"
+	model "controlplane/internal/model/config"
 )
 
 // ConfigService mirrors config_management/services.py's ConfigService.
 type ConfigService struct {
-	configs      ConfigRepository
-	apps         ApplicationRepository
-	envs         EnvironmentRepository
+	configs      model.ConfigRepository
+	apps         model.ApplicationRepository
+	envs         model.EnvironmentRepository
 	encryption   *crypto.EncryptionService
 	cache        cache.Cache
 	cacheTimeout time.Duration
 }
 
-func NewConfigService(configs ConfigRepository, apps ApplicationRepository, envs EnvironmentRepository, encryption *crypto.EncryptionService, c cache.Cache, cacheTimeout time.Duration) *ConfigService {
+func NewConfigService(configs model.ConfigRepository, apps model.ApplicationRepository, envs model.EnvironmentRepository, encryption *crypto.EncryptionService, c cache.Cache, cacheTimeout time.Duration) *ConfigService {
 	return &ConfigService{configs: configs, apps: apps, envs: envs, encryption: encryption, cache: c, cacheTimeout: cacheTimeout}
 }
 
 // getScope looks up an existing Application/Environment without creating
 // them; either return value is nil if not found.
-func (s *ConfigService) getScope(ctx context.Context, service, environment string) (*Application, *Environment, error) {
+func (s *ConfigService) getScope(ctx context.Context, service, environment string) (*model.Application, *model.Environment, error) {
 	app, err := s.apps.FindByName(ctx, service)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil, nil
@@ -68,7 +69,7 @@ func (s *ConfigService) InvalidateScopeCache(ctx context.Context, service, envir
 
 // RecordConfigVersion snapshots a ConfigEntry's current (encrypted) value
 // into history. Not called on delete - history cascades away with the entry.
-func (s *ConfigService) RecordConfigVersion(ctx context.Context, config *ConfigEntry, action string, changedBy string) (*ConfigEntryVersion, error) {
+func (s *ConfigService) RecordConfigVersion(ctx context.Context, config *model.ConfigEntry, action string, changedBy string) (*model.ConfigEntryVersion, error) {
 	return s.configs.RecordVersion(ctx, config, action, changedBy)
 }
 
@@ -82,7 +83,7 @@ type UpsertOptions struct {
 
 // UpsertConfig creates or updates a configuration/secret entry, mirroring
 // ConfigService.upsert_config.
-func (s *ConfigService) UpsertConfig(ctx context.Context, service, environment, key, value string, opts UpsertOptions) (*ConfigEntry, error) {
+func (s *ConfigService) UpsertConfig(ctx context.Context, service, environment, key, value string, opts UpsertOptions) (*model.ConfigEntry, error) {
 	encryptedValue, err := s.encryption.EncryptForStorage(value)
 	if err != nil {
 		return nil, err
@@ -90,10 +91,10 @@ func (s *ConfigService) UpsertConfig(ctx context.Context, service, environment, 
 
 	configType := opts.ConfigType
 	if configType == "" {
-		configType = TypeString
+		configType = model.TypeString
 	}
 
-	entry, historyAction, err := s.configs.UpsertEntryAndRecordVersion(ctx, UpsertEntryParams{
+	entry, historyAction, err := s.configs.UpsertEntryAndRecordVersion(ctx, model.UpsertEntryParams{
 		Service:        service,
 		Environment:    environment,
 		Key:            key,
@@ -116,7 +117,7 @@ func (s *ConfigService) UpsertConfig(ctx context.Context, service, environment, 
 }
 
 // GetConfig returns a specific configuration or secret, or nil if not found.
-func (s *ConfigService) GetConfig(ctx context.Context, service, environment, key string) (*ConfigEntry, error) {
+func (s *ConfigService) GetConfig(ctx context.Context, service, environment, key string) (*model.ConfigEntry, error) {
 	app, env, err := s.getScope(ctx, service, environment)
 	if err != nil {
 		return nil, err
@@ -136,7 +137,7 @@ func (s *ConfigService) GetConfig(ctx context.Context, service, environment, key
 }
 
 // GetConfigWithScope returns a specific config entry with its Application/Environment preloaded.
-func (s *ConfigService) GetConfigWithScope(ctx context.Context, service, environment, key string) (*ConfigEntry, error) {
+func (s *ConfigService) GetConfigWithScope(ctx context.Context, service, environment, key string) (*model.ConfigEntry, error) {
 	app, env, err := s.getScope(ctx, service, environment)
 	if err != nil {
 		return nil, err
@@ -156,26 +157,26 @@ func (s *ConfigService) GetConfigWithScope(ctx context.Context, service, environ
 }
 
 // ListConfigs lists all configurations for a service/environment.
-func (s *ConfigService) ListConfigs(ctx context.Context, service, environment string) ([]ConfigEntry, error) {
+func (s *ConfigService) ListConfigs(ctx context.Context, service, environment string) ([]model.ConfigEntry, error) {
 	app, env, err := s.getScope(ctx, service, environment)
 	if err != nil {
 		return nil, err
 	}
 	if app == nil || env == nil {
-		return []ConfigEntry{}, nil
+		return []model.ConfigEntry{}, nil
 	}
 
 	return s.configs.ListByScope(ctx, app.ID, env.ID)
 }
 
 // DecryptConfigValue decrypts a config value for internal use.
-func (s *ConfigService) DecryptConfigValue(entry *ConfigEntry) (string, error) {
+func (s *ConfigService) DecryptConfigValue(entry *model.ConfigEntry) (string, error) {
 	return s.encryption.DecryptFromStorage(entry.Value)
 }
 
 // DecryptConfigValueOrOriginal decrypts a value when possible, falling back
 // to the stored (legacy plaintext) value on an invalid token.
-func (s *ConfigService) DecryptConfigValueOrOriginal(entry *ConfigEntry) string {
+func (s *ConfigService) DecryptConfigValueOrOriginal(entry *model.ConfigEntry) string {
 	value, err := s.DecryptConfigValue(entry)
 	if errors.Is(err, crypto.ErrInvalidToken) {
 		return entry.Value
@@ -215,15 +216,15 @@ func (s *ConfigService) DeleteConfig(ctx context.Context, configID string) (bool
 }
 
 // GetConfigHistory lists version history for a config entry, newest first.
-func (s *ConfigService) GetConfigHistory(ctx context.Context, configID string) ([]ConfigEntryVersion, error) {
+func (s *ConfigService) GetConfigHistory(ctx context.Context, configID string) ([]model.ConfigEntryVersion, error) {
 	id, err := uuid.Parse(configID)
 	if err != nil {
-		return []ConfigEntryVersion{}, nil
+		return []model.ConfigEntryVersion{}, nil
 	}
 
 	if _, err := s.configs.FindByID(ctx, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return []ConfigEntryVersion{}, nil
+			return []model.ConfigEntryVersion{}, nil
 		}
 		return nil, err
 	}
@@ -232,13 +233,13 @@ func (s *ConfigService) GetConfigHistory(ctx context.Context, configID string) (
 }
 
 // DecryptVersionValue decrypts a historical version's value for internal use.
-func (s *ConfigService) DecryptVersionValue(version *ConfigEntryVersion) (string, error) {
+func (s *ConfigService) DecryptVersionValue(version *model.ConfigEntryVersion) (string, error) {
 	return s.encryption.DecryptFromStorage(version.Value)
 }
 
 // RollbackConfig restores a prior version by writing it again via
 // UpsertConfig, so the rollback itself becomes a new, auditable version.
-func (s *ConfigService) RollbackConfig(ctx context.Context, configID string, version int, changedBy string) (*ConfigEntry, error) {
+func (s *ConfigService) RollbackConfig(ctx context.Context, configID string, version int, changedBy string) (*model.ConfigEntry, error) {
 	id, err := uuid.Parse(configID)
 	if err != nil {
 		return nil, nil //nolint:nilnil // malformed/not-found id is a valid "not found" outcome, matching the Python service.
@@ -269,7 +270,7 @@ func (s *ConfigService) RollbackConfig(ctx context.Context, configID string, ver
 		IsSecret:      target.IsSecret,
 		ConfigType:    target.Type,
 		ChangedBy:     changedBy,
-		HistoryAction: ActionRollback,
+		HistoryAction: model.ActionRollback,
 	})
 	if err != nil || updated == nil {
 		return updated, err
@@ -386,7 +387,7 @@ func (s *ConfigService) ListConfigsForClient(ctx context.Context, service, envir
 
 // GetConfigByID returns a config entry by ID with its Application/Environment
 // preloaded, or nil if not found.
-func (s *ConfigService) GetConfigByID(ctx context.Context, id uuid.UUID) (*ConfigEntry, error) {
+func (s *ConfigService) GetConfigByID(ctx context.Context, id uuid.UUID) (*model.ConfigEntry, error) {
 	entry, err := s.configs.FindByIDWithScope(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
@@ -397,17 +398,9 @@ func (s *ConfigService) GetConfigByID(ctx context.Context, id uuid.UUID) (*Confi
 	return entry, nil
 }
 
-// ListConfigEntriesFilter filters ListAllConfigEntries.
-type ListConfigEntriesFilter struct {
-	ApplicationID *uuid.UUID
-	EnvironmentID *uuid.UUID
-	IsSecret      *bool
-	Query         string
-}
-
 // ListAllConfigEntries lists config entries (with Application/Environment
 // preloaded) across every service/environment, for the admin config list page.
-func (s *ConfigService) ListAllConfigEntries(ctx context.Context, filter ListConfigEntriesFilter) ([]ConfigEntry, error) {
+func (s *ConfigService) ListAllConfigEntries(ctx context.Context, filter model.ListConfigEntriesFilter) ([]model.ConfigEntry, error) {
 	return s.configs.List(ctx, filter)
 }
 
@@ -425,7 +418,7 @@ type UpdateConfigEntryInput struct {
 // UpdateConfigEntry mutates a ConfigEntry's fields directly by ID (rather
 // than upserting by service/environment/key scope, like UpsertConfig does),
 // mirroring config_edit's direct-field-update behavior. Returns nil if not found.
-func (s *ConfigService) UpdateConfigEntry(ctx context.Context, id uuid.UUID, in UpdateConfigEntryInput) (*ConfigEntry, error) {
+func (s *ConfigService) UpdateConfigEntry(ctx context.Context, id uuid.UUID, in UpdateConfigEntryInput) (*model.ConfigEntry, error) {
 	entry, err := s.configs.FindByID(ctx, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
@@ -449,7 +442,7 @@ func (s *ConfigService) UpdateConfigEntry(ctx context.Context, id uuid.UUID, in 
 		return nil, err
 	}
 
-	if _, err := s.RecordConfigVersion(ctx, entry, ActionUpdate, in.ChangedBy); err != nil {
+	if _, err := s.RecordConfigVersion(ctx, entry, model.ActionUpdate, in.ChangedBy); err != nil {
 		return nil, err
 	}
 

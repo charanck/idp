@@ -11,6 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web/template/pages"
 )
 
@@ -18,11 +19,11 @@ const applicationsPageSize = 20
 
 // ApplicationStore is what application CRUD handlers need. Satisfied by *config.ConfigService.
 type ApplicationStore interface {
-	ListAllApplications(ctx context.Context, q string) ([]config.Application, error)
-	GetApplicationByID(ctx context.Context, id uuid.UUID) (*config.Application, error)
-	CreateApplication(ctx context.Context, name string) (*config.Application, error)
-	UpdateApplication(ctx context.Context, id uuid.UUID, name string) (*config.Application, error)
-	DeleteApplication(ctx context.Context, id uuid.UUID) (*config.Application, error)
+	ListAllApplications(ctx context.Context, q string) ([]configmodel.Application, error)
+	GetApplicationByID(ctx context.Context, id uuid.UUID) (*configmodel.Application, error)
+	CreateApplication(ctx context.Context, name string) (*configmodel.Application, error)
+	UpdateApplication(ctx context.Context, id uuid.UUID, name string) (*configmodel.Application, error)
+	DeleteApplication(ctx context.Context, id uuid.UUID) (*configmodel.Application, error)
 }
 
 type ApplicationHandler struct {
@@ -157,7 +158,7 @@ func (h *ApplicationHandler) Delete(c echo.Context) error {
 
 // listApplications is a small shared helper for handlers that just need the
 // full application list for a <select> (environment/config/flag forms).
-func listApplications(ctx context.Context, apps ApplicationStore) ([]config.Application, error) {
+func listApplications(ctx context.Context, apps ApplicationStore) ([]configmodel.Application, error) {
 	return apps.ListAllApplications(ctx, "")
 }
 

@@ -6,7 +6,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// Page is a slice of items for one page, mirroring Django's Paginator/Page.
+// Page is a slice of items for one page, plus the pagination metadata needed
+// to render prev/next controls.
 type Page[T any] struct {
 	Items          []T
 	Number         int

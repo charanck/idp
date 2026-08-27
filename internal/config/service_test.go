@@ -9,6 +9,7 @@ import (
 
 	"controlplane/internal/config"
 	"controlplane/internal/crypto"
+	configmodel "controlplane/internal/model/config"
 )
 
 func newTestConfigService(t *testing.T) (*config.ConfigService, *fakeApplicationRepository, *fakeEnvironmentRepository, *fakeConfigRepository) {
@@ -40,7 +41,7 @@ func TestUpsertConfig_CreatesFirstVersionOnFirstWrite(t *testing.T) {
 	if len(versions) != 1 {
 		t.Fatalf("expected 1 version, got %d", len(versions))
 	}
-	if versions[0].Version != 1 || versions[0].Action != config.ActionCreate {
+	if versions[0].Version != 1 || versions[0].Action != configmodel.ActionCreate {
 		t.Fatalf("unexpected first version: %+v", versions[0])
 	}
 }
@@ -64,7 +65,7 @@ func TestUpsertConfig_UpdateBumpsVersionNumber(t *testing.T) {
 	if len(versions) != 2 {
 		t.Fatalf("expected 2 versions, got %d", len(versions))
 	}
-	if versions[0].Version != 2 || versions[0].Action != config.ActionUpdate {
+	if versions[0].Version != 2 || versions[0].Action != configmodel.ActionUpdate {
 		t.Fatalf("unexpected latest version: %+v", versions[0])
 	}
 	if versions[1].Version != 1 {
@@ -208,7 +209,7 @@ func TestListConfigs_ReturnsEmptyForUnknownScope(t *testing.T) {
 func TestDecryptConfigValueOrOriginal_ReturnsPlaintextForLegacyRow(t *testing.T) {
 	svc, _, _, _ := newTestConfigService(t)
 
-	legacyEntry := &config.ConfigEntry{ID: uuid.New(), Key: "LEGACY", Value: "plaintext-value"}
+	legacyEntry := &configmodel.ConfigEntry{ID: uuid.New(), Key: "LEGACY", Value: "plaintext-value"}
 	if got := svc.DecryptConfigValueOrOriginal(legacyEntry); got != "plaintext-value" {
 		t.Fatalf("got %q", got)
 	}
@@ -290,7 +291,7 @@ func TestConfigHistory_UpsertRecordsCreateThenUpdateVersions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetConfigHistory: %v", err)
 	}
-	if len(history) != 2 || history[0].Action != config.ActionUpdate || history[1].Action != config.ActionCreate {
+	if len(history) != 2 || history[0].Action != configmodel.ActionUpdate || history[1].Action != configmodel.ActionCreate {
 		t.Fatalf("unexpected history: %+v", history)
 	}
 	if history[0].Version != 2 || history[1].Version != 1 {
@@ -357,7 +358,7 @@ func TestConfigHistory_RecreatingDeletedKeyStartsFreshHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetConfigHistory: %v", err)
 	}
-	if len(history) != 1 || history[0].Action != config.ActionCreate || history[0].Version != 1 {
+	if len(history) != 1 || history[0].Action != configmodel.ActionCreate || history[0].Version != 1 {
 		t.Fatalf("unexpected history: %+v", history)
 	}
 }
@@ -397,7 +398,7 @@ func TestRollbackConfig_RestoresPriorValueAsNewVersion(t *testing.T) {
 	if len(versions) != 3 {
 		t.Fatalf("expected 3 versions after rollback, got %d", len(versions))
 	}
-	if versions[0].Version != 3 || versions[0].Action != config.ActionRollback {
+	if versions[0].Version != 3 || versions[0].Action != configmodel.ActionRollback {
 		t.Fatalf("unexpected latest version: %+v", versions[0])
 	}
 	if versions[0].ChangedBy == nil || *versions[0].ChangedBy != "admin@example.com" {
@@ -508,15 +509,15 @@ func TestListConfigsForClient_EncryptsEachEntryForTheClient(t *testing.T) {
 func TestListConfigsForClient_SkipsEntriesNotDecryptableUnderMasterKey(t *testing.T) {
 	svc, apps, envs, configs := newTestConfigService(t)
 	ctx := context.Background()
-	app := &config.Application{Name: "payments"}
+	app := &configmodel.Application{Name: "payments"}
 	if err := apps.Create(ctx, app); err != nil {
 		t.Fatalf("create app: %v", err)
 	}
-	env := &config.Environment{ApplicationID: app.ID, Name: "prod"}
+	env := &configmodel.Environment{ApplicationID: app.ID, Name: "prod"}
 	if err := envs.Create(ctx, env); err != nil {
 		t.Fatalf("create env: %v", err)
 	}
-	if err := configs.Update(ctx, &config.ConfigEntry{ID: uuid.New(), ApplicationID: app.ID, EnvironmentID: env.ID, Key: "GOOD", Value: "not-valid-fernet-data"}); err != nil {
+	if err := configs.Update(ctx, &configmodel.ConfigEntry{ID: uuid.New(), ApplicationID: app.ID, EnvironmentID: env.ID, Key: "GOOD", Value: "not-valid-fernet-data"}); err != nil {
 		t.Fatalf("seed undecryptable entry: %v", err)
 	}
 	clientKey, _ := crypto.GenerateKey()

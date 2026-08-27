@@ -8,23 +8,23 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 )
 
-// fakeUserRepository is an in-memory auth.UserRepository, mirroring the
+// fakeUserRepository is an in-memory authmodel.UserRepository, mirroring the
 // real gormUserRepository's not-found semantics (raw gorm.ErrRecordNotFound,
 // not a swallowed nil) so AuthService/OAuthService's error-translation logic
 // is exercised the same way it is against real Postgres.
 type fakeUserRepository struct {
 	mu    sync.Mutex
-	users map[uuid.UUID]auth.User
+	users map[uuid.UUID]authmodel.User
 }
 
 func newFakeUserRepository() *fakeUserRepository {
-	return &fakeUserRepository{users: make(map[uuid.UUID]auth.User)}
+	return &fakeUserRepository{users: make(map[uuid.UUID]authmodel.User)}
 }
 
-func (f *fakeUserRepository) FindByEmail(ctx context.Context, email string) (*auth.User, error) {
+func (f *fakeUserRepository) FindByEmail(ctx context.Context, email string) (*authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, u := range f.users {
@@ -36,7 +36,7 @@ func (f *fakeUserRepository) FindByEmail(ctx context.Context, email string) (*au
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeUserRepository) FindActiveByEmail(ctx context.Context, email string) (*auth.User, error) {
+func (f *fakeUserRepository) FindActiveByEmail(ctx context.Context, email string) (*authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, u := range f.users {
@@ -48,7 +48,7 @@ func (f *fakeUserRepository) FindActiveByEmail(ctx context.Context, email string
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*auth.User, error) {
+func (f *fakeUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if u, ok := f.users[id]; ok {
@@ -58,7 +58,7 @@ func (f *fakeUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*auth.
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeUserRepository) FindActiveByID(ctx context.Context, id uuid.UUID) (*auth.User, error) {
+func (f *fakeUserRepository) FindActiveByID(ctx context.Context, id uuid.UUID) (*authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if u, ok := f.users[id]; ok && u.IsActive {
@@ -68,7 +68,7 @@ func (f *fakeUserRepository) FindActiveByID(ctx context.Context, id uuid.UUID) (
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeUserRepository) Create(ctx context.Context, user *auth.User) error {
+func (f *fakeUserRepository) Create(ctx context.Context, user *authmodel.User) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if user.ID == uuid.Nil {
@@ -78,7 +78,7 @@ func (f *fakeUserRepository) Create(ctx context.Context, user *auth.User) error 
 	return nil
 }
 
-func (f *fakeUserRepository) Update(ctx context.Context, user *auth.User) error {
+func (f *fakeUserRepository) Update(ctx context.Context, user *authmodel.User) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.users[user.ID] = *user
@@ -98,17 +98,17 @@ func (f *fakeUserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, h
 	return nil
 }
 
-func (f *fakeUserRepository) Delete(ctx context.Context, user *auth.User) error {
+func (f *fakeUserRepository) Delete(ctx context.Context, user *authmodel.User) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.users, user.ID)
 	return nil
 }
 
-func (f *fakeUserRepository) List(ctx context.Context, q string, isStaff *bool) ([]auth.User, error) {
+func (f *fakeUserRepository) List(ctx context.Context, q string, isStaff *bool) ([]authmodel.User, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []auth.User
+	var out []authmodel.User
 	for _, u := range f.users {
 		if q != "" && !strings.Contains(strings.ToLower(u.Email), strings.ToLower(q)) {
 			continue
@@ -133,17 +133,17 @@ func (f *fakeUserRepository) CountByUsername(ctx context.Context, username strin
 	return count, nil
 }
 
-// fakeServiceClientRepository is an in-memory auth.ServiceClientRepository.
+// fakeServiceClientRepository is an in-memory authmodel.ServiceClientRepository.
 type fakeServiceClientRepository struct {
 	mu      sync.Mutex
-	clients map[uuid.UUID]auth.ServiceClient
+	clients map[uuid.UUID]authmodel.ServiceClient
 }
 
 func newFakeServiceClientRepository() *fakeServiceClientRepository {
-	return &fakeServiceClientRepository{clients: make(map[uuid.UUID]auth.ServiceClient)}
+	return &fakeServiceClientRepository{clients: make(map[uuid.UUID]authmodel.ServiceClient)}
 }
 
-func (f *fakeServiceClientRepository) FindByName(ctx context.Context, name string) (*auth.ServiceClient, error) {
+func (f *fakeServiceClientRepository) FindByName(ctx context.Context, name string) (*authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, c := range f.clients {
@@ -155,7 +155,7 @@ func (f *fakeServiceClientRepository) FindByName(ctx context.Context, name strin
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeServiceClientRepository) FindByAPIKeyIDActive(ctx context.Context, apiKeyID string) (*auth.ServiceClient, error) {
+func (f *fakeServiceClientRepository) FindByAPIKeyIDActive(ctx context.Context, apiKeyID string) (*authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, c := range f.clients {
@@ -167,7 +167,7 @@ func (f *fakeServiceClientRepository) FindByAPIKeyIDActive(ctx context.Context, 
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeServiceClientRepository) FindByID(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error) {
+func (f *fakeServiceClientRepository) FindByID(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if c, ok := f.clients[id]; ok {
@@ -177,7 +177,7 @@ func (f *fakeServiceClientRepository) FindByID(ctx context.Context, id uuid.UUID
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeServiceClientRepository) FindActiveByID(ctx context.Context, id uuid.UUID) (*auth.ServiceClient, error) {
+func (f *fakeServiceClientRepository) FindActiveByID(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if c, ok := f.clients[id]; ok && c.IsActive {
@@ -187,7 +187,7 @@ func (f *fakeServiceClientRepository) FindActiveByID(ctx context.Context, id uui
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeServiceClientRepository) Create(ctx context.Context, client *auth.ServiceClient) error {
+func (f *fakeServiceClientRepository) Create(ctx context.Context, client *authmodel.ServiceClient) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if client.ID == uuid.Nil {
@@ -197,24 +197,24 @@ func (f *fakeServiceClientRepository) Create(ctx context.Context, client *auth.S
 	return nil
 }
 
-func (f *fakeServiceClientRepository) Update(ctx context.Context, client *auth.ServiceClient) error {
+func (f *fakeServiceClientRepository) Update(ctx context.Context, client *authmodel.ServiceClient) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.clients[client.ID] = *client
 	return nil
 }
 
-func (f *fakeServiceClientRepository) Delete(ctx context.Context, client *auth.ServiceClient) error {
+func (f *fakeServiceClientRepository) Delete(ctx context.Context, client *authmodel.ServiceClient) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.clients, client.ID)
 	return nil
 }
 
-func (f *fakeServiceClientRepository) List(ctx context.Context, q string, isActive *bool) ([]auth.ServiceClient, error) {
+func (f *fakeServiceClientRepository) List(ctx context.Context, q string, isActive *bool) ([]authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []auth.ServiceClient
+	var out []authmodel.ServiceClient
 	for _, c := range f.clients {
 		if q != "" && !strings.Contains(strings.ToLower(c.Name), strings.ToLower(q)) {
 			continue
@@ -227,20 +227,20 @@ func (f *fakeServiceClientRepository) List(ctx context.Context, q string, isActi
 	return out, nil
 }
 
-// fakeOAuthProviderRepository is an in-memory auth.OAuthProviderRepository.
+// fakeOAuthProviderRepository is an in-memory authmodel.OAuthProviderRepository.
 type fakeOAuthProviderRepository struct {
 	mu        sync.Mutex
-	providers map[uuid.UUID]auth.OAuthProvider
+	providers map[uuid.UUID]authmodel.OAuthProvider
 }
 
 func newFakeOAuthProviderRepository() *fakeOAuthProviderRepository {
-	return &fakeOAuthProviderRepository{providers: make(map[uuid.UUID]auth.OAuthProvider)}
+	return &fakeOAuthProviderRepository{providers: make(map[uuid.UUID]authmodel.OAuthProvider)}
 }
 
-func (f *fakeOAuthProviderRepository) List(ctx context.Context, q string, isActive *bool) ([]auth.OAuthProvider, error) {
+func (f *fakeOAuthProviderRepository) List(ctx context.Context, q string, isActive *bool) ([]authmodel.OAuthProvider, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	var out []auth.OAuthProvider
+	var out []authmodel.OAuthProvider
 	for _, p := range f.providers {
 		if q != "" && !strings.Contains(strings.ToLower(p.Name), strings.ToLower(q)) {
 			continue
@@ -253,7 +253,7 @@ func (f *fakeOAuthProviderRepository) List(ctx context.Context, q string, isActi
 	return out, nil
 }
 
-func (f *fakeOAuthProviderRepository) FindByID(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error) {
+func (f *fakeOAuthProviderRepository) FindByID(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if p, ok := f.providers[id]; ok {
@@ -263,7 +263,7 @@ func (f *fakeOAuthProviderRepository) FindByID(ctx context.Context, id uuid.UUID
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeOAuthProviderRepository) FindActiveByID(ctx context.Context, id uuid.UUID) (*auth.OAuthProvider, error) {
+func (f *fakeOAuthProviderRepository) FindActiveByID(ctx context.Context, id uuid.UUID) (*authmodel.OAuthProvider, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if p, ok := f.providers[id]; ok && p.IsActive {
@@ -273,7 +273,7 @@ func (f *fakeOAuthProviderRepository) FindActiveByID(ctx context.Context, id uui
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeOAuthProviderRepository) Create(ctx context.Context, p *auth.OAuthProvider) error {
+func (f *fakeOAuthProviderRepository) Create(ctx context.Context, p *authmodel.OAuthProvider) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if p.ID == uuid.Nil {
@@ -283,31 +283,31 @@ func (f *fakeOAuthProviderRepository) Create(ctx context.Context, p *auth.OAuthP
 	return nil
 }
 
-func (f *fakeOAuthProviderRepository) Update(ctx context.Context, p *auth.OAuthProvider) error {
+func (f *fakeOAuthProviderRepository) Update(ctx context.Context, p *authmodel.OAuthProvider) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.providers[p.ID] = *p
 	return nil
 }
 
-func (f *fakeOAuthProviderRepository) Delete(ctx context.Context, p *auth.OAuthProvider) error {
+func (f *fakeOAuthProviderRepository) Delete(ctx context.Context, p *authmodel.OAuthProvider) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	delete(f.providers, p.ID)
 	return nil
 }
 
-// fakeOAuthUserTokenRepository is an in-memory auth.OAuthUserTokenRepository.
+// fakeOAuthUserTokenRepository is an in-memory authmodel.OAuthUserTokenRepository.
 type fakeOAuthUserTokenRepository struct {
 	mu     sync.Mutex
-	tokens map[uuid.UUID]auth.OAuthUserToken
+	tokens map[uuid.UUID]authmodel.OAuthUserToken
 }
 
 func newFakeOAuthUserTokenRepository() *fakeOAuthUserTokenRepository {
-	return &fakeOAuthUserTokenRepository{tokens: make(map[uuid.UUID]auth.OAuthUserToken)}
+	return &fakeOAuthUserTokenRepository{tokens: make(map[uuid.UUID]authmodel.OAuthUserToken)}
 }
 
-func (f *fakeOAuthUserTokenRepository) FindByProviderAndProviderUserID(ctx context.Context, providerID uuid.UUID, providerUserID string) (*auth.OAuthUserToken, error) {
+func (f *fakeOAuthUserTokenRepository) FindByProviderAndProviderUserID(ctx context.Context, providerID uuid.UUID, providerUserID string) (*authmodel.OAuthUserToken, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, t := range f.tokens {
@@ -319,7 +319,7 @@ func (f *fakeOAuthUserTokenRepository) FindByProviderAndProviderUserID(ctx conte
 	return nil, gorm.ErrRecordNotFound
 }
 
-func (f *fakeOAuthUserTokenRepository) Create(ctx context.Context, t *auth.OAuthUserToken) error {
+func (f *fakeOAuthUserTokenRepository) Create(ctx context.Context, t *authmodel.OAuthUserToken) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if t.ID == uuid.Nil {
@@ -329,7 +329,7 @@ func (f *fakeOAuthUserTokenRepository) Create(ctx context.Context, t *auth.OAuth
 	return nil
 }
 
-func (f *fakeOAuthUserTokenRepository) Update(ctx context.Context, t *auth.OAuthUserToken) error {
+func (f *fakeOAuthUserTokenRepository) Update(ctx context.Context, t *authmodel.OAuthUserToken) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.tokens[t.ID] = *t

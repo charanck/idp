@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
+
+	model "controlplane/internal/model/notification"
 )
 
 // Hub is a thin wrapper around Redis pub/sub for delivering real-time
@@ -48,7 +50,7 @@ func recipientUserID(recipient []byte) string {
 
 // PublishSent publishes a delivery notice for n on its recipient's SSE
 // channel. No-op if the recipient doesn't carry a "user_id" field.
-func (h *Hub) PublishSent(ctx context.Context, n *Notification) error {
+func (h *Hub) PublishSent(ctx context.Context, n *model.Notification) error {
 	userID := recipientUserID(n.Recipient)
 	if userID == "" {
 		return nil

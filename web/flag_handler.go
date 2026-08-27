@@ -12,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web/template/pages"
 )
 
@@ -19,11 +20,11 @@ const flagsPageSize = 20
 
 // FlagStore is what feature-flag CRUD handlers need. Satisfied by *config.FeatureFlagService.
 type FlagStore interface {
-	ListAllFlags(ctx context.Context, filter config.ListFlagsFilter) ([]config.FeatureFlag, error)
-	CreateFlag(ctx context.Context, service, name string, opts config.CreateFlagOptions) ([]config.FeatureFlag, error)
-	ToggleFlagByID(ctx context.Context, id uuid.UUID) (*config.FeatureFlag, error)
-	GetFlagByID(ctx context.Context, id uuid.UUID) (*config.FeatureFlag, error)
-	SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*config.FeatureFlag, error)
+	ListAllFlags(ctx context.Context, filter configmodel.ListFlagsFilter) ([]configmodel.FeatureFlag, error)
+	CreateFlag(ctx context.Context, service, name string, opts config.CreateFlagOptions) ([]configmodel.FeatureFlag, error)
+	ToggleFlagByID(ctx context.Context, id uuid.UUID) (*configmodel.FeatureFlag, error)
+	GetFlagByID(ctx context.Context, id uuid.UUID) (*configmodel.FeatureFlag, error)
+	SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*configmodel.FeatureFlag, error)
 }
 
 type FlagHandler struct {
@@ -37,12 +38,12 @@ func NewFlagHandler(flags FlagStore, apps ApplicationStore, envs EnvironmentStor
 	return &FlagHandler{flags: flags, apps: apps, envs: envs, activity: activity}
 }
 
-func (h *FlagHandler) loadFlagFormApps(ctx context.Context) ([]config.Application, string, error) {
+func (h *FlagHandler) loadFlagFormApps(ctx context.Context) ([]configmodel.Application, string, error) {
 	apps, err := listApplications(ctx, h.apps)
 	if err != nil {
 		return nil, "", err
 	}
-	envs, err := h.envs.ListAllEnvironments(ctx, config.ListEnvironmentsFilter{})
+	envs, err := h.envs.ListAllEnvironments(ctx, configmodel.ListEnvironmentsFilter{})
 	if err != nil {
 		return nil, "", err
 	}
@@ -63,7 +64,7 @@ func (h *FlagHandler) List(c echo.Context) error {
 	envIDFilter := c.QueryParam("environment_id")
 	statusFilter := c.QueryParam("status")
 
-	filter := config.ListFlagsFilter{}
+	filter := configmodel.ListFlagsFilter{}
 	if appIDFilter != "" {
 		if id, err := uuid.Parse(appIDFilter); err == nil {
 			filter.ApplicationID = &id

@@ -8,14 +8,14 @@ package http
 import (
 	"github.com/labstack/echo/v4"
 
-	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 )
 
 const contextKeyServiceClient = "service_client"
 
 // ServiceClientFromContext returns the authenticated service client attached
 // by APIKeyAuth, if any.
-func ServiceClientFromContext(c echo.Context) *auth.ServiceClient {
-	sc, _ := c.Get(contextKeyServiceClient).(*auth.ServiceClient)
+func ServiceClientFromContext(c echo.Context) *authmodel.ServiceClient {
+	sc, _ := c.Get(contextKeyServiceClient).(*authmodel.ServiceClient)
 	return sc
 }

@@ -1,6 +1,4 @@
-// Package appconfig loads runtime configuration from environment variables,
-// using the same variable names as the Django settings (control_plane_project/settings.py)
-// so existing deployment configs (.env, docker-compose) don't need to change.
+// Package appconfig loads runtime configuration from environment variables.
 package appconfig
 
 import (
@@ -129,7 +127,7 @@ func Load() (*Config, error) {
 		AdminEmail:    os.Getenv("ADMIN_EMAIL"),
 		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
 
-		SessionSecret: getenv("SESSION_SECRET", getenv("DJANGO_SECRET_KEY", "dev-insecure-session-secret")),
+		SessionSecret: getenv("SESSION_SECRET", "dev-insecure-session-secret"),
 
 		Port: getenv("PORT", "8000"),
 	}

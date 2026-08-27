@@ -1,11 +1,11 @@
 package pages
 
-import "controlplane/internal/auth"
+import authmodel "controlplane/internal/model/auth"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
 type UsersListData struct {
-	Users         []auth.User
+	Users         []authmodel.User
 	CurrentQ      string
 	CurrentStaff  string
 	Page          int

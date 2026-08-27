@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/config"
+	configmodel "controlplane/internal/model/config"
 	"controlplane/web/template/pages"
 )
 
@@ -25,14 +26,14 @@ type environmentOption struct {
 
 // ConfigStore is what config/secret CRUD handlers need. Satisfied by *config.ConfigService.
 type ConfigStore interface {
-	ListAllConfigEntries(ctx context.Context, filter config.ListConfigEntriesFilter) ([]config.ConfigEntry, error)
-	GetConfigByID(ctx context.Context, id uuid.UUID) (*config.ConfigEntry, error)
-	UpsertConfig(ctx context.Context, service, environment, key, value string, opts config.UpsertOptions) (*config.ConfigEntry, error)
-	UpdateConfigEntry(ctx context.Context, id uuid.UUID, in config.UpdateConfigEntryInput) (*config.ConfigEntry, error)
+	ListAllConfigEntries(ctx context.Context, filter configmodel.ListConfigEntriesFilter) ([]configmodel.ConfigEntry, error)
+	GetConfigByID(ctx context.Context, id uuid.UUID) (*configmodel.ConfigEntry, error)
+	UpsertConfig(ctx context.Context, service, environment, key, value string, opts config.UpsertOptions) (*configmodel.ConfigEntry, error)
+	UpdateConfigEntry(ctx context.Context, id uuid.UUID, in config.UpdateConfigEntryInput) (*configmodel.ConfigEntry, error)
 	DeleteConfig(ctx context.Context, configID string) (bool, error)
-	GetConfigHistory(ctx context.Context, configID string) ([]config.ConfigEntryVersion, error)
-	RollbackConfig(ctx context.Context, configID string, version int, changedBy string) (*config.ConfigEntry, error)
-	DecryptConfigValueOrOriginal(entry *config.ConfigEntry) string
+	GetConfigHistory(ctx context.Context, configID string) ([]configmodel.ConfigEntryVersion, error)
+	RollbackConfig(ctx context.Context, configID string, version int, changedBy string) (*configmodel.ConfigEntry, error)
+	DecryptConfigValueOrOriginal(entry *configmodel.ConfigEntry) string
 }
 
 type ConfigHandler struct {
@@ -50,7 +51,7 @@ func NewConfigHandler(configs ConfigStore, envs EnvironmentStore, apps Applicati
 // cascading application->environment <select> reads client-side, mirroring
 // web_ui/views.py's _environments_by_application().
 func (h *ConfigHandler) environmentsByApplicationJSON(ctx context.Context) (string, error) {
-	envs, err := h.envs.ListAllEnvironments(ctx, config.ListEnvironmentsFilter{})
+	envs, err := h.envs.ListAllEnvironments(ctx, configmodel.ListEnvironmentsFilter{})
 	if err != nil {
 		return "", err
 	}
@@ -72,7 +73,7 @@ func (h *ConfigHandler) List(c echo.Context) error {
 	secretFilter := c.QueryParam("secret")
 	q := strings.TrimSpace(c.QueryParam("q"))
 
-	filter := config.ListConfigEntriesFilter{Query: q}
+	filter := configmodel.ListConfigEntriesFilter{Query: q}
 	if appIDFilter != "" {
 		if id, err := uuid.Parse(appIDFilter); err == nil {
 			filter.ApplicationID = &id
@@ -162,7 +163,7 @@ func (h *ConfigHandler) List(c echo.Context) error {
 	}).Render(c.Request().Context(), c.Response())
 }
 
-func (h *ConfigHandler) loadConfigFormApps(ctx context.Context) ([]config.Application, string, error) {
+func (h *ConfigHandler) loadConfigFormApps(ctx context.Context) ([]configmodel.Application, string, error) {
 	apps, err := listApplications(ctx, h.apps)
 	if err != nil {
 		return nil, "", err
@@ -245,11 +246,11 @@ func (h *ConfigHandler) Create(c echo.Context) error {
 	if c.Request().Method == http.MethodGet {
 		return pages.ConfigForm(flashes(c), navUser(c), pages.ConfigFormData{
 			CSRFToken: csrfToken(c), Applications: apps, EnvironmentsByAppJSON: envJSON,
-			Action: "/configs/create/", Title: "New Config", ShowSubmitAction: true, Type: config.TypeString,
+			Action: "/configs/create/", Title: "New Config", ShowSubmitAction: true, Type: configmodel.TypeString,
 		}).Render(c.Request().Context(), c.Response())
 	}
 
-	if err := h.upsertConfigFromForm(c, config.ActionCreate); err != nil {
+	if err := h.upsertConfigFromForm(c, configmodel.ActionCreate); err != nil {
 		return pages.ConfigForm(flashes(c), navUser(c), rePopulateConfigForm(c, apps, envJSON, "/configs/create/", "New Config", true, err.Error())).
 			Render(c.Request().Context(), c.Response())
 	}
@@ -258,7 +259,7 @@ func (h *ConfigHandler) Create(c echo.Context) error {
 	return c.Redirect(http.StatusFound, "/configs/")
 }
 
-func rePopulateConfigForm(c echo.Context, apps []config.Application, envJSON, action, title string, showSubmitAction bool, errMsg string) pages.ConfigFormData {
+func rePopulateConfigForm(c echo.Context, apps []configmodel.Application, envJSON, action, title string, showSubmitAction bool, errMsg string) pages.ConfigFormData {
 	return pages.ConfigFormData{
 		CSRFToken: csrfToken(c), Applications: apps, EnvironmentsByAppJSON: envJSON,
 		ApplicationID: c.FormValue("application_id"), EnvironmentID: c.FormValue("environment_id"),
@@ -298,7 +299,7 @@ func (h *ConfigHandler) Clone(c echo.Context) error {
 		}).Render(c.Request().Context(), c.Response())
 	}
 
-	if err := h.upsertConfigFromForm(c, config.ActionCreate); err != nil {
+	if err := h.upsertConfigFromForm(c, configmodel.ActionCreate); err != nil {
 		return pages.ConfigForm(flashes(c), navUser(c), rePopulateConfigForm(c, apps, envJSON, action, "Clone Config", true, err.Error())).
 			Render(c.Request().Context(), c.Response())
 	}
@@ -386,7 +387,7 @@ func (h *ConfigHandler) Edit(c echo.Context) error {
 	return c.Redirect(http.StatusFound, "/configs/")
 }
 
-func (h *ConfigHandler) rePopulateConfigEditForm(c echo.Context, apps []config.Application, envJSON, action, errMsg string) error {
+func (h *ConfigHandler) rePopulateConfigEditForm(c echo.Context, apps []configmodel.Application, envJSON, action, errMsg string) error {
 	data := rePopulateConfigForm(c, apps, envJSON, action, "Edit Config", false, errMsg)
 	data.IsEdit = true
 	return pages.ConfigForm(flashes(c), navUser(c), data).Render(c.Request().Context(), c.Response())

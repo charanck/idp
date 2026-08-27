@@ -1,6 +1,6 @@
 package pages
 
-import "controlplane/internal/config"
+import configmodel "controlplane/internal/model/config"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
@@ -11,7 +11,7 @@ type DashboardData struct {
 	SecretCount      int64
 	FlagCount        int64
 	ClientCount      int64
-	RecentConfigs    []config.ConfigEntry
+	RecentConfigs    []configmodel.ConfigEntry
 }
 
 templ Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData) {

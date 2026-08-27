@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/web"
 )
 
@@ -21,7 +21,7 @@ func newOAuthProviderHandlerFixture() (*fakeOAuthProviderStore, *fakeActivityRec
 func TestOAuthProviderListHandler_ReturnsOK(t *testing.T) {
 	store := newSessionStore(t)
 	providers, _, h := newOAuthProviderHandlerFixture()
-	providers.put(auth.OAuthProvider{Name: "Google", IsActive: true})
+	providers.put(authmodel.OAuthProvider{Name: "Google", IsActive: true})
 
 	rec := callHandler(t, store, http.MethodGet, "/oauth/providers/", nil, nil, h.List)
 
@@ -80,7 +80,7 @@ func TestOAuthProviderEditHandler_UnknownIDReturns404(t *testing.T) {
 func TestOAuthProviderToggleHandler_TogglesActiveState(t *testing.T) {
 	store := newSessionStore(t)
 	providers, activity, h := newOAuthProviderHandlerFixture()
-	p := providers.put(auth.OAuthProvider{Name: "Google", IsActive: false})
+	p := providers.put(authmodel.OAuthProvider{Name: "Google", IsActive: false})
 	id := p.ID.String()
 
 	rec := callHandlerWithParams(t, store, http.MethodPost, "/oauth/providers/"+id+"/toggle/",

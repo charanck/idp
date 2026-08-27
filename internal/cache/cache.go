@@ -1,11 +1,10 @@
 // Package cache provides the small key/value + scope-version-counter
 // interface config.ConfigService and config.FeatureFlagService cache
-// through. Unlike the Django app (where caching is optional via
-// CACHE_ENABLED), the Go server treats Redis as a hard dependency - it's
-// already required at startup for sessions and rate limiting, and future
-// work (an asynq job queue + asynqmon admin page) will need it too - so
-// RedisCache is always used in production. NoopCache remains only as a
-// lightweight stand-in for tests that don't care about caching behavior.
+// through. The Go server treats Redis as a hard dependency - it's already
+// required at startup for sessions and rate limiting, and future work (an
+// asynq job queue + asynqmon admin page) will need it too - so RedisCache is
+// always used in production. NoopCache remains only as a lightweight
+// stand-in for tests that don't care about caching behavior.
 package cache
 
 import (
@@ -88,8 +87,8 @@ func (c *RedisCache) BumpVersion(ctx context.Context, key string) error {
 	return c.rdb.Incr(ctx, c.prefixed(key)).Err()
 }
 
-// NoopCache is the CACHE_ENABLED=false backend: every read misses, every
-// write is discarded, matching Django's DummyCache.
+// NoopCache is a disabled-caching backend: every read misses, every write
+// is discarded.
 type NoopCache struct{}
 
 func NewNoopCache() *NoopCache { return &NoopCache{} }

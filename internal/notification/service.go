@@ -6,12 +6,14 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
+
+	model "controlplane/internal/model/notification"
 )
 
 // NotificationService creates and reads notifications, and enqueues them for
 // asynchronous delivery.
 type NotificationService struct {
-	repo     NotificationRepository
+	repo     model.NotificationRepository
 	enqueuer Enqueuer
 }
 
@@ -20,7 +22,7 @@ type Enqueuer interface {
 	EnqueueSend(ctx context.Context, notificationID uuid.UUID) error
 }
 
-func NewNotificationService(repo NotificationRepository, enqueuer Enqueuer) *NotificationService {
+func NewNotificationService(repo model.NotificationRepository, enqueuer Enqueuer) *NotificationService {
 	return &NotificationService{repo: repo, enqueuer: enqueuer}
 }
 
@@ -37,14 +39,14 @@ type CreateNotificationInput struct {
 // match is best-effort re-enqueued and returned unchanged; a match past
 // "queued" is returned as-is (no-op). A unique-violation race on insert is
 // treated the same as "found" by re-reading the existing row.
-func (s *NotificationService) CreateNotification(ctx context.Context, in CreateNotificationInput) (*Notification, error) {
+func (s *NotificationService) CreateNotification(ctx context.Context, in CreateNotificationInput) (*model.Notification, error) {
 	if in.IdempotencyKey != "" {
 		existing, err := s.repo.FindByIdempotencyKey(ctx, in.IdempotencyKey)
 		if err != nil {
 			return nil, err
 		}
 		if existing != nil {
-			if existing.Status == StatusQueued {
+			if existing.Status == model.StatusQueued {
 				if err := s.enqueuer.EnqueueSend(ctx, existing.ID); err != nil {
 					slog.Error("re-enqueue idempotent notification failed", "id", existing.ID, "err", err)
 				}
@@ -53,11 +55,11 @@ func (s *NotificationService) CreateNotification(ctx context.Context, in CreateN
 		}
 	}
 
-	n := &Notification{
+	n := &model.Notification{
 		Channel:   in.Channel,
 		Recipient: in.Recipient,
 		Content:   in.Content,
-		Status:    StatusQueued,
+		Status:    model.StatusQueued,
 	}
 	if in.IdempotencyKey != "" {
 		key := in.IdempotencyKey
@@ -77,18 +79,12 @@ func (s *NotificationService) CreateNotification(ctx context.Context, in CreateN
 }
 
 // GetNotification returns a notification by ID, or nil if not found.
-func (s *NotificationService) GetNotification(ctx context.Context, id uuid.UUID) (*Notification, error) {
+func (s *NotificationService) GetNotification(ctx context.Context, id uuid.UUID) (*model.Notification, error) {
 	return s.repo.FindByID(ctx, id)
 }
 
-// ListNotificationsFilter filters ListNotifications.
-type ListNotificationsFilter struct {
-	Channel string
-	Status  string
-}
-
 // ListNotifications lists notifications, newest first.
-func (s *NotificationService) ListNotifications(ctx context.Context, filter ListNotificationsFilter) ([]Notification, error) {
+func (s *NotificationService) ListNotifications(ctx context.Context, filter model.ListNotificationsFilter) ([]model.Notification, error) {
 	return s.repo.List(ctx, filter)
 }
 
@@ -100,7 +96,7 @@ func (s *NotificationService) ListNotifications(ctx context.Context, filter List
 // persisted at all). The user is matched by the "user_id" field in the
 // jsonb Recipient blob, the same external identifier the notification
 // session token uses.
-func (s *NotificationService) ConsumeUnreadInAppForUser(ctx context.Context, userID string) ([]Notification, error) {
+func (s *NotificationService) ConsumeUnreadInAppForUser(ctx context.Context, userID string) ([]model.Notification, error) {
 	return s.repo.ConsumeUnreadInApp(ctx, userID)
 }
 

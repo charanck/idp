@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"controlplane/internal/auth"
+	authmodel "controlplane/internal/model/auth"
 	"controlplane/web"
 )
 
@@ -22,7 +22,7 @@ func newAuthHandlerFixture(authStore *fakeAuthStore, limiter fakeRateLimiter) (*
 func TestLoginHandler_RateLimitedShowsError(t *testing.T) {
 	store := newSessionStore(t)
 	authStore := newFakeAuthStore()
-	authStore.put(auth.User{Email: "user@example.com", Password: "irrelevant"})
+	authStore.put(authmodel.User{Email: "user@example.com", Password: "irrelevant"})
 	_, h := newAuthHandlerFixture(authStore, fakeRateLimiter{limited: true})
 
 	form := url.Values{"username": {"user@example.com"}, "password": {"whatever"}}
@@ -55,7 +55,7 @@ func TestLoginHandler_InvalidCredentialsShowsError(t *testing.T) {
 func TestLoginHandler_AlreadyLoggedInRedirectsToDashboard(t *testing.T) {
 	store := newSessionStore(t)
 	authStore := newFakeAuthStore()
-	user := auth.User{Email: "user@example.com"}
+	user := authmodel.User{Email: "user@example.com"}
 	_, h := newAuthHandlerFixture(authStore, fakeRateLimiter{limited: false})
 
 	rec := callHandler(t, store, http.MethodGet, "/login/", nil, &user, h.Login)

@@ -11,7 +11,7 @@ import templruntime "github.com/a-h/templ/runtime"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 import "encoding/json"
-import "controlplane/internal/config"
+import configmodel "controlplane/internal/model/config"
 
 type FlagGroup struct {
 	ApplicationID   string
@@ -30,7 +30,7 @@ type FlagGroupEntry struct {
 type FlagsListData struct {
 	Groups                []FlagGroup
 	CSRFToken             string
-	Applications          []config.Application
+	Applications          []configmodel.Application
 	EnvironmentsByAppJSON string
 	CurrentAppID          string
 	CurrentEnvID          string
@@ -367,7 +367,7 @@ func FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData)
 // FeatureFlagForm's docstring / flag_create's create_all_environments=True).
 type FlagFormData struct {
 	CSRFToken     string
-	Applications  []config.Application
+	Applications  []configmodel.Application
 	ApplicationID string
 	Name          string
 	Description   string

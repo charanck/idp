@@ -1,11 +1,11 @@
 package pages
 
-import "controlplane/internal/auth"
+import authmodel "controlplane/internal/model/auth"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
 type OAuthProvidersListData struct {
-	Providers     []auth.OAuthProvider
+	Providers     []authmodel.OAuthProvider
 	CurrentQ      string
 	CurrentStatus string
 	Page          int

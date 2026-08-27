@@ -12,8 +12,8 @@ a master key, then re-encrypted per-client on read. Built on [Echo](https://echo
 owns the schema via `internal/db/migrations/`), and [templ](https://templ.guide/) for
 server-rendered HTML. See the Architecture section below for package-by-package detail.
 
-There is no JWT-based user/service auth API and no Django-admin-style generic admin — both were
-deliberately not carried over from an earlier Django implementation of this app. Service clients,
+There is no JWT-based user/service auth API and no generic admin framework — both were
+deliberately not carried over from an earlier implementation of this app. Service clients,
 users, configs, secrets, and feature flags are all managed through the session-authenticated web
 UI; the only programmatic API is S2S API-key auth for reading configs/flags.
 
