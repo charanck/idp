@@ -14,11 +14,10 @@ import (
 	"syscall"
 	"time"
 
-	"controlplane/internal/api"
+	apihttp "controlplane/api/http"
 	"controlplane/internal/appconfig"
 	"controlplane/internal/auth"
-	"controlplane/internal/notification"
-	"controlplane/internal/webui"
+	"controlplane/web"
 )
 
 // version is the service.version resource attribute reported to OTEL,
@@ -64,44 +63,44 @@ func main() {
 
 	e := newEchoServer(svc.Sessions)
 
-	webuiAuthMW := webui.NewAuthMiddleware(svc.Auth)
-	// svc.Config satisfies webui.ApplicationStore, webui.EnvironmentStore, and webui.ConfigStore
+	webAuthMW := web.NewAuthMiddleware(svc.Auth)
+	// svc.Config satisfies web.ApplicationStore, web.EnvironmentStore, and web.ConfigStore
 	// all at once, so several constructors below take it more than once, positionally, for
 	// different parameters - the compiler can't catch a swapped argument order here since every
 	// position accepts the same concrete type. Double-check argument order against each
 	// constructor's signature when editing this block.
-	webuiHandlers := &webui.Handlers{
-		Dashboard:            webui.NewDashboardHandler(svc.Dashboard),
-		Activity:             webui.NewActivityHandler(svc.Activity),
-		Application:          webui.NewApplicationHandler(svc.Config, svc.Activity),
-		Environment:          webui.NewEnvironmentHandler(svc.Config, svc.Config, svc.Activity),
-		Config:               webui.NewConfigHandler(svc.Config, svc.Config, svc.Config, svc.Activity),
-		Flag:                 webui.NewFlagHandler(svc.Flags, svc.Config, svc.Config, svc.Activity),
-		Client:               webui.NewClientHandler(svc.Auth, svc.Activity),
-		User:                 webui.NewUserHandler(svc.Auth, svc.Activity),
-		Auth:                 webui.NewAuthHandler(svc.Auth, svc.OAuth, svc.RateLimiter, svc.Activity, cfg.AuthRateLimit, cfg.AuthRateLimitWindowSeconds),
-		OAuthLogin:           webui.NewOAuthLoginHandler(svc.OAuth, svc.Activity),
-		OAuthProvider:        webui.NewOAuthProviderHandler(svc.OAuth, svc.Activity),
-		NotificationSettings: webui.NewNotificationSettingsHandler(notif.Settings, svc.Activity),
+	webHandlers := &web.Handlers{
+		Dashboard:            web.NewDashboardHandler(svc.Dashboard),
+		Activity:             web.NewActivityHandler(svc.Activity),
+		Application:          web.NewApplicationHandler(svc.Config, svc.Activity),
+		Environment:          web.NewEnvironmentHandler(svc.Config, svc.Config, svc.Activity),
+		Config:               web.NewConfigHandler(svc.Config, svc.Config, svc.Config, svc.Activity),
+		Flag:                 web.NewFlagHandler(svc.Flags, svc.Config, svc.Config, svc.Activity),
+		Client:               web.NewClientHandler(svc.Auth, svc.Activity),
+		User:                 web.NewUserHandler(svc.Auth, svc.Activity),
+		Auth:                 web.NewAuthHandler(svc.Auth, svc.OAuth, svc.RateLimiter, svc.Activity, cfg.AuthRateLimit, cfg.AuthRateLimitWindowSeconds),
+		OAuthLogin:           web.NewOAuthLoginHandler(svc.OAuth, svc.Activity),
+		OAuthProvider:        web.NewOAuthProviderHandler(svc.OAuth, svc.Activity),
+		NotificationSettings: web.NewNotificationSettingsHandler(notif.Settings, svc.Activity),
 	}
-	webui.RegisterRoutes(e, webuiHandlers, webuiAuthMW)
+	web.RegisterRoutes(e, webHandlers, webAuthMW)
 
-	apiKeyAuthMW := api.NewAPIKeyAuthMiddleware(svc.Auth, svc.RateLimiter, cfg.AuthRateLimitWindowSeconds, cfg.S2SAuthRateLimit)
+	apiKeyAuthMW := apihttp.NewAPIKeyAuthMiddleware(svc.Auth, svc.RateLimiter, cfg.AuthRateLimitWindowSeconds, cfg.S2SAuthRateLimit)
 	apiGroup := e.Group("/api/v1")
-	api.RegisterConfigRoutes(apiGroup.Group("/config"), api.NewConfigHandler(svc.Config), api.NewFeatureFlagHandler(svc.Flags), apiKeyAuthMW)
+	apihttp.RegisterConfigRoutes(apiGroup.Group("/config"), apihttp.NewConfigHandler(svc.Config), apihttp.NewFeatureFlagHandler(svc.Flags), apiKeyAuthMW)
 
-	notifAuthMW := notification.NewAPIKeyAuthMiddleware(
+	notifAuthMW := apihttp.NewNotificationAPIKeyAuthMiddleware(
 		auth.ServiceClientAuthenticator{Service: svc.Auth},
 		svc.RateLimiter,
 		cfg.AuthRateLimitWindowSeconds,
 		cfg.S2SAuthRateLimit,
 	)
-	notification.RegisterRoutes(
+	apihttp.RegisterNotificationRoutes(
 		apiGroup.Group("/notifications"),
-		notification.NewNotificationHandler(notif.Service, notif.Service, notif.Service, notif.Channels),
-		notification.NewSessionHandler(notif.TokenIssuer),
-		notification.NewSSEHandler(notif.TokenIssuer, notif.Hub),
-		notification.NewInAppHandler(notif.TokenIssuer, notif.Service),
+		apihttp.NewNotificationHandler(notif.Service, notif.Service, notif.Service, notif.Channels),
+		apihttp.NewSessionHandler(notif.TokenIssuer),
+		apihttp.NewSSEHandler(notif.TokenIssuer, notif.Hub),
+		apihttp.NewInAppHandler(notif.TokenIssuer, notif.Service),
 		notifAuthMW,
 	)
 

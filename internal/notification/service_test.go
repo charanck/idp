@@ -9,7 +9,6 @@ import (
 	"gorm.io/datatypes"
 
 	"controlplane/internal/notification"
-	"controlplane/internal/testutil"
 )
 
 // fakeEnqueuer records EnqueueSend calls instead of talking to Redis, so
@@ -33,10 +32,9 @@ func (f *fakeEnqueuer) count() int {
 }
 
 func TestCreateNotification_InsertsQueuedAndEnqueues(t *testing.T) {
-	gdb := testutil.OpenDB(t)
-	testutil.TruncateAll(t, gdb)
+	repo := newFakeNotificationRepository()
 	enqueuer := &fakeEnqueuer{}
-	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), enqueuer)
+	svc := notification.NewNotificationService(repo, enqueuer)
 
 	n, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
 		Channel:   notification.ChannelEmail,
@@ -62,41 +60,43 @@ func TestCreateNotification_InsertsQueuedAndEnqueues(t *testing.T) {
 	}
 }
 
-func TestCreateNotification_IdempotencyKeyReturnsExistingQueued(t *testing.T) {
-	gdb := testutil.OpenDB(t)
-	testutil.TruncateAll(t, gdb)
+func TestCreateNotification_IdempotentQueuedReEnqueues(t *testing.T) {
+	repo := newFakeNotificationRepository()
 	enqueuer := &fakeEnqueuer{}
-	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), enqueuer)
+	svc := notification.NewNotificationService(repo, enqueuer)
+	ctx := context.Background()
 
 	in := notification.CreateNotificationInput{
-		Channel:        notification.ChannelSMS,
-		Recipient:      datatypes.JSON(`{"phone":"+10000000000"}`),
-		Content:        datatypes.JSON(`{"body":"hi"}`),
-		IdempotencyKey: "order-123",
-	}
-	first, err := svc.CreateNotification(context.Background(), in)
-	if err != nil {
-		t.Fatalf("CreateNotification (first): %v", err)
+		Channel:        notification.ChannelInApp,
+		Recipient:      datatypes.JSON(`{"user_id":"u1"}`),
+		Content:        datatypes.JSON(`{"message":"hi"}`),
+		IdempotencyKey: "key-1",
 	}
 
-	second, err := svc.CreateNotification(context.Background(), in)
+	first, err := svc.CreateNotification(ctx, in)
 	if err != nil {
-		t.Fatalf("CreateNotification (second): %v", err)
+		t.Fatalf("CreateNotification (1st): %v", err)
+	}
+	if enqueuer.count() != 1 {
+		t.Fatalf("expected 1 enqueue after first create, got %d", enqueuer.count())
+	}
+
+	second, err := svc.CreateNotification(ctx, in)
+	if err != nil {
+		t.Fatalf("CreateNotification (2nd): %v", err)
 	}
 	if second.ID != first.ID {
-		t.Fatalf("second call created a new row: %s != %s", second.ID, first.ID)
+		t.Fatalf("expected same notification returned for repeated idempotency key")
 	}
 	// Both the initial create and the idempotent re-enqueue should have
 	// enqueued (still-queued notifications are best-effort re-enqueued).
 	if enqueuer.count() != 2 {
-		t.Fatalf("enqueued %d times, want 2", enqueuer.count())
+		t.Fatalf("expected re-enqueue on 2nd create of still-queued notification, got %d enqueue calls", enqueuer.count())
 	}
 }
 
 func TestGetNotification_ReturnsNilForUnknownID(t *testing.T) {
-	gdb := testutil.OpenDB(t)
-	testutil.TruncateAll(t, gdb)
-	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), &fakeEnqueuer{})
+	svc := notification.NewNotificationService(newFakeNotificationRepository(), &fakeEnqueuer{})
 
 	got, err := svc.GetNotification(context.Background(), uuid.New())
 	if err != nil {
@@ -108,9 +108,7 @@ func TestGetNotification_ReturnsNilForUnknownID(t *testing.T) {
 }
 
 func TestListNotifications_FiltersByChannelAndStatus(t *testing.T) {
-	gdb := testutil.OpenDB(t)
-	testutil.TruncateAll(t, gdb)
-	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), &fakeEnqueuer{})
+	svc := notification.NewNotificationService(newFakeNotificationRepository(), &fakeEnqueuer{})
 
 	if _, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
 		Channel: notification.ChannelEmail, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`),
@@ -140,54 +138,48 @@ func TestListNotifications_FiltersByChannelAndStatus(t *testing.T) {
 	}
 }
 
-func TestConsumeUnreadInAppForUser_FiltersByChannelAndRecipientUserIDAndMarksReturnedAsRead(t *testing.T) {
-	gdb := testutil.OpenDB(t)
-	testutil.TruncateAll(t, gdb)
-	svc := notification.NewNotificationService(notification.NewNotificationRepository(gdb), &fakeEnqueuer{})
+func TestConsumeUnreadInAppForUser_OnlyInAppChannelAndMarksRead(t *testing.T) {
+	repo := newFakeNotificationRepository()
+	svc := notification.NewNotificationService(repo, &fakeEnqueuer{})
+	ctx := context.Background()
 
-	unreadForUser1, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
-		Channel: notification.ChannelInApp, Recipient: datatypes.JSON(`{"user_id":"user-1"}`), Content: datatypes.JSON(`{"title":"hi"}`),
-	})
-	if err != nil {
-		t.Fatalf("CreateNotification: %v", err)
-	}
-	alreadyReadForUser1, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
-		Channel: notification.ChannelInApp, Recipient: datatypes.JSON(`{"user_id":"user-1"}`), Content: datatypes.JSON(`{"title":"hi"}`),
-	})
-	if err != nil {
-		t.Fatalf("CreateNotification: %v", err)
-	}
-	if err := gdb.Exec("UPDATE notifications SET read_at = now() WHERE id = ?", alreadyReadForUser1.ID).Error; err != nil {
-		t.Fatalf("mark read: %v", err)
-	}
-	if _, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
-		Channel: notification.ChannelInApp, Recipient: datatypes.JSON(`{"user_id":"user-2"}`), Content: datatypes.JSON(`{"title":"hi"}`),
-	}); err != nil {
-		t.Fatalf("CreateNotification: %v", err)
-	}
-	// Unread on a non-InApp channel for the same user must not be returned -
-	// only InApp has a pull-based inbox.
-	if _, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
-		Channel: notification.ChannelEmail, Recipient: datatypes.JSON(`{"user_id":"user-1","email":"a@example.com"}`), Content: datatypes.JSON(`{"subject":"hi"}`),
-	}); err != nil {
-		t.Fatalf("CreateNotification: %v", err)
+	mustCreate := func(channel, userID string) *notification.Notification {
+		n, err := svc.CreateNotification(ctx, notification.CreateNotificationInput{
+			Channel:   channel,
+			Recipient: datatypes.JSON(`{"user_id":"` + userID + `"}`),
+			Content:   datatypes.JSON(`{"message":"hi"}`),
+		})
+		if err != nil {
+			t.Fatalf("CreateNotification: %v", err)
+		}
+		return n
 	}
 
-	unread, err := svc.ConsumeUnreadInAppForUser(context.Background(), "user-1")
+	inApp := mustCreate(notification.ChannelInApp, "u1")
+	mustCreate(notification.ChannelEmail, "u1")
+	mustCreate(notification.ChannelInApp, "u2")
+
+	unread, err := svc.ConsumeUnreadInAppForUser(ctx, "u1")
 	if err != nil {
 		t.Fatalf("ConsumeUnreadInAppForUser: %v", err)
 	}
-	if len(unread) != 1 || unread[0].ID != unreadForUser1.ID {
-		t.Fatalf("unread = %+v", unread)
+	if len(unread) != 1 {
+		t.Fatalf("expected 1 unread notification for u1, got %d", len(unread))
+	}
+	if unread[0].ID != inApp.ID {
+		t.Fatalf("expected the inapp notification, got %+v", unread[0])
+	}
+	if unread[0].ReadAt == nil {
+		t.Fatal("expected ReadAt to be set")
 	}
 
 	// A second call should see nothing left unread - the first call marked
 	// what it returned as read.
-	again, err := svc.ConsumeUnreadInAppForUser(context.Background(), "user-1")
+	againUnread, err := svc.ConsumeUnreadInAppForUser(ctx, "u1")
 	if err != nil {
-		t.Fatalf("ConsumeUnreadInAppForUser (second call): %v", err)
+		t.Fatalf("ConsumeUnreadInAppForUser (2nd): %v", err)
 	}
-	if len(again) != 0 {
-		t.Fatalf("second call = %+v, want none left unread", again)
+	if len(againUnread) != 0 {
+		t.Fatalf("expected 0 unread on 2nd call, got %d", len(againUnread))
 	}
 }

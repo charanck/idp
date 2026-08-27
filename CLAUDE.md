@@ -66,12 +66,13 @@ Package layout under `internal/`, each with a narrow role:
 | `ratelimit` | Redis fixed-window limiter. |
 | `activity` | Append-only audit log writer. |
 | `cache` | Redis-backed, version-counter invalidation for `ConfigService`/`FeatureFlagService` list reads. |
-| `api` | The S2S config/flag JSON API (`/api/v1/config/...`) — `APIKeyAuth` reads the `X-API-Key` header. |
-| `webui` | Session-authenticated CRUD handlers for everything: applications, environments, configs/secrets (incl. history/rollback), feature flags, users, service clients, OAuth providers, OAuth login/callback, activity log. Routes registered in `internal/webui/router.go`. |
+| `api/http` | The S2S config/flag JSON API (`/api/v1/config/...`) — `APIKeyAuth` reads the `X-API-Key` header. |
+| `web` | Session-authenticated CRUD handlers for everything: applications, environments, configs/secrets (incl. history/rollback), feature flags, users, service clients, OAuth providers, OAuth login/callback, activity log. Routes registered in `web/router.go`. |
 | `observability` | Opt-in OTLP traces/metrics/logs, enabled only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. |
 
-`views/` holds the `.templ` sources and their generated `_templ.go` output (generated files are
-committed, so a plain `go build` never needs the templ CLI). `static/` is served at `/static`.
+`web/template/` holds the `.templ` sources and their generated `_templ.go` output (generated files
+are committed, so a plain `go build` never needs the templ CLI). `web/static/` is served at
+`/static`.
 
 ### Two auth systems
 
@@ -82,7 +83,7 @@ committed, so a plain `go build` never needs the templ CLI). `static/` is served
    check and an admin-only (`IsStaff`) check for privileged pages.
 
 Both operate on the same `auth`/`config` models and services — when changing a service method,
-check both `internal/api` and `internal/webui` for callers.
+check both `api/http` and `web` for callers.
 
 ### Encryption flow
 

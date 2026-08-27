@@ -10,7 +10,7 @@ import (
 
 	"controlplane/internal/observability"
 	"controlplane/internal/session"
-	"controlplane/internal/webui"
+	"controlplane/web"
 )
 
 // newEchoServer builds the shared *echo.Echo that serves both the stateless
@@ -32,14 +32,14 @@ func newEchoServer(sessions *session.Store) *echo.Echo {
 		},
 	}))
 
-	e.Static("/static", "static")
+	e.Static("/static", "web/static")
 
 	// The API is stateless (JWT/API-key auth); the web UI needs session
 	// loading + CSRF protection. Both are mounted on the same *echo.Echo, so
 	// skip session/CSRF entirely for API paths rather than have CSRF's
 	// form-field check reject JSON API requests.
 	e.Use(skipForAPI(sessions.Middleware()))
-	e.Use(skipForAPI(webui.CSRFProtect()))
+	e.Use(skipForAPI(web.CSRFProtect()))
 
 	return e
 }

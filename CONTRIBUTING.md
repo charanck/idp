@@ -34,7 +34,7 @@ opening a PR.
 ## Making changes
 
 - Keep changes scoped to what the PR is about — avoid drive-by refactors in unrelated code.
-- The `api` package (`internal/api`) and the web UI (`internal/webui`) both call into the same
+- The `api/http` package and the web UI (`web`) both call into the same
   `auth`/`config` services (`internal/auth`, `internal/config`) — if you change a service method's
   behavior, check both call sites.
 - Schema changes go through a new [goose](https://github.com/pressly/goose) migration in

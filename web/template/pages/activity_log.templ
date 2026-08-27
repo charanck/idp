@@ -1,0 +1,90 @@
+package pages
+
+import "controlplane/internal/session"
+import "controlplane/web/template/layout"
+
+type ActivityRow struct {
+	Type         string
+	Resource     string
+	ResourceName string
+	UserEmail    string
+	IPAddress    string
+	Timestamp    string
+}
+
+type ActivityLogData struct {
+	Activities      []ActivityRow
+	ResourceTypes   []string
+	ActionTypes     []string
+	CurrentResource string
+	CurrentType     string
+	CurrentUser     string
+	Page            int
+	NumPages        int
+	HasPrev         bool
+	HasNext         bool
+	PrevNum         int
+	NextNum         int
+	Window          []int
+	ExtraQuery      string
+}
+
+templ ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogData) {
+	@layout.Base("Activity Log", "activity", user, flashes) {
+		<h2>Activity Log</h2>
+		<form method="get" class="filter-bar">
+			<div>
+				<label for="resource">Resource</label>
+				<select id="resource" name="resource">
+					<option value="">All resources</option>
+					for _, r := range data.ResourceTypes {
+						if r == data.CurrentResource {
+							<option value={ r } selected>{ r }</option>
+						} else {
+							<option value={ r }>{ r }</option>
+						}
+					}
+				</select>
+			</div>
+			<div>
+				<label for="type">Action</label>
+				<select id="type" name="type">
+					<option value="">All actions</option>
+					for _, t := range data.ActionTypes {
+						if t == data.CurrentType {
+							<option value={ t } selected>{ t }</option>
+						} else {
+							<option value={ t }>{ t }</option>
+						}
+					}
+				</select>
+			</div>
+			<div>
+				<label for="user">User</label>
+				<input type="text" id="user" name="user" placeholder="User email" value={ data.CurrentUser }/>
+			</div>
+			<button class="btn-sm secondary" type="submit" style="width: auto;">Filter</button>
+		</form>
+		<article class="card">
+			<table>
+				<thead><tr><th>When</th><th>Type</th><th>Resource</th><th>Name</th><th>User</th><th>IP</th></tr></thead>
+				<tbody>
+					if len(data.Activities) == 0 {
+						<tr><td colspan="6">No activity recorded.</td></tr>
+					}
+					for _, a := range data.Activities {
+						<tr>
+							<td>{ a.Timestamp }</td>
+							<td>{ a.Type }</td>
+							<td>{ a.Resource }</td>
+							<td>{ a.ResourceName }</td>
+							<td>{ a.UserEmail }</td>
+							<td>{ a.IPAddress }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</article>
+		@PaginationNav("/activity/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+	}
+}

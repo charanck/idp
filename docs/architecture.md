@@ -16,8 +16,8 @@ Package layout under `internal/`, each with a narrow role:
 | `ratelimit` | Redis fixed-window limiter. |
 | `activity` | Append-only audit log writer. |
 | `cache` | Redis-backed, version-counter invalidation for config/flag list reads. |
-| `api` | The S2S config/flag JSON API (`/api/v1/config/...`) — see [API reference](./api.md). |
-| `webui` | Session-authenticated CRUD handlers for everything: applications, environments, configs/secrets (incl. history/rollback), feature flags, users, service clients, OAuth providers, OAuth login/callback, activity log. |
+| `api/http` | The S2S config/flag JSON API (`/api/v1/config/...`) — see [API reference](./api.md). |
+| `web` | Session-authenticated CRUD handlers for everything: applications, environments, configs/secrets (incl. history/rollback), feature flags, users, service clients, OAuth providers, OAuth login/callback, activity log. |
 
 `config`'s `ConfigService` / `FeatureFlagService` **get-or-create** the `Application`/`Environment`
 scope from `(service, environment)` string pairs rather than taking foreign keys directly — this
@@ -32,7 +32,7 @@ is the shape both the API and the web UI call into.
    admin-only check for privileged pages (users, service clients, OAuth providers).
 
 Both paths operate on the same `auth` / `config` models and services — a change to a service
-method typically needs checking both `internal/api` and `internal/webui` for callers.
+method typically needs checking both `api/http` and `web` for callers.
 
 ## Encryption flow
 

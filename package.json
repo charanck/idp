@@ -3,7 +3,7 @@
   "private": true,
   "description": "CSS build tooling for the server-rendered web UI (no runtime Node dependency — app.css is compiled and committed, like the generated templ files).",
   "scripts": {
-    "build:css": "tailwindcss -i ./static/src/input.css -o ./static/app.css --minify"
+    "build:css": "tailwindcss -i ./web/static/src/input.css -o ./web/static/app.css --minify"
   },
   "devDependencies": {
     "tailwindcss": "^4",

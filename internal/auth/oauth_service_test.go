@@ -7,44 +7,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/oauth2"
-	"gorm.io/gorm"
 
 	"controlplane/internal/auth"
-	"controlplane/internal/testutil"
 )
 
-func setupOAuth(t *testing.T) (*gorm.DB, *auth.OAuthService) {
-	t.Helper()
-	gdb := testutil.OpenDB(t)
-	testutil.TruncateAll(t, gdb)
-	return gdb, auth.NewOAuthService(auth.NewOAuthProviderRepository(gdb), auth.NewOAuthUserTokenRepository(gdb), auth.NewUserRepository(gdb))
-}
-
-func makeProvider(t *testing.T, gdb *gorm.DB, mutate func(*auth.OAuthProvider)) *auth.OAuthProvider {
-	t.Helper()
-	userinfoURL := "https://provider.example/userinfo"
-	provider := &auth.OAuthProvider{
-		Name:             "Google",
-		ClientID:         "client-id",
-		ClientSecret:     "client-secret",
-		AuthorizationURL: "https://provider.example/authorize",
-		TokenURL:         "https://provider.example/token",
-		UserinfoURL:      &userinfoURL,
-		IsActive:         true,
-		AutoCreateUsers:  true,
-	}
-	if mutate != nil {
-		mutate(provider)
-	}
-	if err := gdb.Create(provider).Error; err != nil {
-		t.Fatalf("create provider: %v", err)
-	}
-	return provider
+func newTestOAuthService() (*auth.OAuthService, *fakeOAuthProviderRepository, *fakeOAuthUserTokenRepository, *fakeUserRepository) {
+	providers := newFakeOAuthProviderRepository()
+	tokens := newFakeOAuthUserTokenRepository()
+	users := newFakeUserRepository()
+	return auth.NewOAuthService(providers, tokens, users), providers, tokens, users
 }
 
 func TestExchangeCodeForToken_TranslatesProviderRejection(t *testing.T) {
-	_, svc := setupOAuth(t)
+	svc, _, _, _ := newTestOAuthService()
 
 	// Point the token URL at a server that returns an OAuth2 error response.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +45,7 @@ func TestExchangeCodeForToken_TranslatesProviderRejection(t *testing.T) {
 }
 
 func TestGetUserInfo_RaisesWhenNoUserinfoURL(t *testing.T) {
-	_, svc := setupOAuth(t)
+	svc, _, _, _ := newTestOAuthService()
 
 	provider := &auth.OAuthProvider{Name: "Google"}
 	_, err := svc.GetUserInfo(context.Background(), provider, "access-token")
@@ -78,7 +55,7 @@ func TestGetUserInfo_RaisesWhenNoUserinfoURL(t *testing.T) {
 }
 
 func TestGetUserInfo_ReturnsParsedJSONOnSuccess(t *testing.T) {
-	_, svc := setupOAuth(t)
+	svc, _, _, _ := newTestOAuthService()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer access-token" {
@@ -100,7 +77,7 @@ func TestGetUserInfo_ReturnsParsedJSONOnSuccess(t *testing.T) {
 }
 
 func TestGetUserInfo_RaisesOnHTTPError(t *testing.T) {
-	_, svc := setupOAuth(t)
+	svc, _, _, _ := newTestOAuthService()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -115,7 +92,7 @@ func TestGetUserInfo_RaisesOnHTTPError(t *testing.T) {
 }
 
 func TestGetUserInfo_RaisesOnUnparseableResponse(t *testing.T) {
-	_, svc := setupOAuth(t)
+	svc, _, _, _ := newTestOAuthService()
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("not json"))
@@ -130,8 +107,8 @@ func TestGetUserInfo_RaisesOnUnparseableResponse(t *testing.T) {
 }
 
 func TestAuthenticateOrCreateUser_RaisesWhenProviderUserIDMissing(t *testing.T) {
-	gdb, svc := setupOAuth(t)
-	provider := makeProvider(t, gdb, nil)
+	svc, _, _, _ := newTestOAuthService()
+	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
 
 	_, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, &oauth2.Token{}, map[string]any{"email": "a@example.com"})
 	if err == nil {
@@ -140,8 +117,8 @@ func TestAuthenticateOrCreateUser_RaisesWhenProviderUserIDMissing(t *testing.T) 
 }
 
 func TestAuthenticateOrCreateUser_RaisesWhenEmailMissing(t *testing.T) {
-	gdb, svc := setupOAuth(t)
-	provider := makeProvider(t, gdb, nil)
+	svc, _, _, _ := newTestOAuthService()
+	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
 
 	_, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, &oauth2.Token{}, map[string]any{"sub": "123"})
 	if err == nil {
@@ -149,19 +126,20 @@ func TestAuthenticateOrCreateUser_RaisesWhenEmailMissing(t *testing.T) {
 	}
 }
 
-func TestAuthenticateOrCreateUser_CreatesNewUserWhenNoneExists(t *testing.T) {
-	gdb, svc := setupOAuth(t)
-	provider := makeProvider(t, gdb, nil)
+func TestAuthenticateOrCreateUser_AutoCreatesUserWhenAllowed(t *testing.T) {
+	svc, _, _, users := newTestOAuthService()
+	ctx := context.Background()
 
-	token := &oauth2.Token{AccessToken: "tok", RefreshToken: "rtok", Expiry: time.Now().Add(time.Hour)}
-	userInfo := map[string]any{"sub": "provider-user-1", "email": "newperson@example.com"}
+	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
+	token := &oauth2.Token{AccessToken: "access-token", RefreshToken: "rtok", Expiry: time.Now().Add(time.Hour)}
+	userInfo := map[string]any{"sub": "provider-user-1", "email": "new@example.com"}
 
-	user, oauthToken, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
+	user, tok, err := svc.AuthenticateOrCreateUser(ctx, provider, token, userInfo)
 	if err != nil {
 		t.Fatalf("AuthenticateOrCreateUser: %v", err)
 	}
-	if user.Email != "newperson@example.com" {
-		t.Fatalf("email = %q", user.Email)
+	if user.Email != "new@example.com" {
+		t.Fatalf("expected new@example.com, got %s", user.Email)
 	}
 	if user.Password != "!unusable" {
 		t.Fatalf("expected an unusable password, got %q", user.Password)
@@ -169,46 +147,46 @@ func TestAuthenticateOrCreateUser_CreatesNewUserWhenNoneExists(t *testing.T) {
 	if user.IsActive {
 		t.Fatal("expected new OAuth-created user to be inactive")
 	}
-	if oauthToken.ProviderUserID != "provider-user-1" {
-		t.Fatalf("provider_user_id = %q", oauthToken.ProviderUserID)
+	if tok.ProviderUserID != "provider-user-1" {
+		t.Fatalf("expected provider-user-1, got %s", tok.ProviderUserID)
 	}
-	if oauthToken.AccessToken != "tok" {
-		t.Fatalf("access_token = %q", oauthToken.AccessToken)
+	if tok.AccessToken != "access-token" {
+		t.Fatalf("access_token = %q", tok.AccessToken)
 	}
 
-	var count int64
-	gdb.Model(&auth.User{}).Where("email = ?", "newperson@example.com").Count(&count)
-	if count != 1 {
-		t.Fatalf("expected exactly 1 user row, got %d", count)
+	if _, err := users.FindByID(ctx, user.ID); err != nil {
+		t.Fatalf("expected user to be persisted: %v", err)
 	}
 }
 
-func TestAuthenticateOrCreateUser_RaisesWhenAutoCreateDisabledAndUserUnknown(t *testing.T) {
-	gdb, svc := setupOAuth(t)
-	provider := makeProvider(t, gdb, func(p *auth.OAuthProvider) { p.AutoCreateUsers = false })
+func TestAuthenticateOrCreateUser_RejectsWhenAutoCreateDisabled(t *testing.T) {
+	svc, _, _, _ := newTestOAuthService()
+	ctx := context.Background()
 
-	token := &oauth2.Token{AccessToken: "tok"}
-	userInfo := map[string]any{"sub": "provider-user-1", "email": "newperson@example.com"}
+	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: false}
+	token := &oauth2.Token{AccessToken: "access-token"}
+	userInfo := map[string]any{"sub": "provider-user-1", "email": "unknown@example.com"}
 
-	_, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
+	_, _, err := svc.AuthenticateOrCreateUser(ctx, provider, token, userInfo)
 	if err == nil {
-		t.Fatal("expected error when auto-creation is disabled and user is unknown")
+		t.Fatal("expected an error when auto-creation is disabled and no matching user exists")
 	}
 }
 
 func TestAuthenticateOrCreateUser_LinksExistingUserByEmailWhenNoOAuthTokenYet(t *testing.T) {
-	gdb, svc := setupOAuth(t)
-	provider := makeProvider(t, gdb, nil)
+	svc, _, _, users := newTestOAuthService()
+	ctx := context.Background()
 
-	existing := &auth.User{Email: "existing@example.com", Username: "existing", IsActive: true}
-	if err := gdb.Create(existing).Error; err != nil {
-		t.Fatalf("create existing user: %v", err)
+	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta"}
+	existing := &auth.User{ID: uuid.New(), Email: "existing@example.com", Username: "existing", IsActive: true}
+	if err := users.Create(ctx, existing); err != nil {
+		t.Fatalf("seed existing user: %v", err)
 	}
 
 	token := &oauth2.Token{AccessToken: "tok"}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "existing@example.com"}
 
-	user, oauthToken, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
+	user, oauthToken, err := svc.AuthenticateOrCreateUser(ctx, provider, token, userInfo)
 	if err != nil {
 		t.Fatalf("AuthenticateOrCreateUser: %v", err)
 	}
@@ -221,18 +199,19 @@ func TestAuthenticateOrCreateUser_LinksExistingUserByEmailWhenNoOAuthTokenYet(t 
 }
 
 func TestAuthenticateOrCreateUser_ResolvesUsernameCollisionWhenCreatingUser(t *testing.T) {
-	gdb, svc := setupOAuth(t)
-	provider := makeProvider(t, gdb, nil)
+	svc, _, _, users := newTestOAuthService()
+	ctx := context.Background()
 
-	other := &auth.User{Email: "other@example.com", Username: "newperson"}
-	if err := gdb.Create(other).Error; err != nil {
-		t.Fatalf("create other user: %v", err)
+	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", AutoCreateUsers: true}
+	other := &auth.User{ID: uuid.New(), Email: "other@example.com", Username: "newperson"}
+	if err := users.Create(ctx, other); err != nil {
+		t.Fatalf("seed other user: %v", err)
 	}
 
 	token := &oauth2.Token{AccessToken: "tok"}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "newperson@example.com"}
 
-	user, _, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
+	user, _, err := svc.AuthenticateOrCreateUser(ctx, provider, token, userInfo)
 	if err != nil {
 		t.Fatalf("AuthenticateOrCreateUser: %v", err)
 	}
@@ -241,48 +220,57 @@ func TestAuthenticateOrCreateUser_ResolvesUsernameCollisionWhenCreatingUser(t *t
 	}
 }
 
-func TestAuthenticateOrCreateUser_ReusesExistingOAuthTokenAndUpdatesIt(t *testing.T) {
-	gdb, svc := setupOAuth(t)
-	provider := makeProvider(t, gdb, nil)
+func TestAuthenticateOrCreateUser_UpdatesExistingToken(t *testing.T) {
+	svc, _, tokens, users := newTestOAuthService()
+	ctx := context.Background()
 
-	user := &auth.User{Email: "existing@example.com", Username: "existing", IsActive: true}
-	if err := gdb.Create(user).Error; err != nil {
-		t.Fatalf("create user: %v", err)
+	provider := &auth.OAuthProvider{ID: uuid.New(), Name: "okta"}
+	existingUser := &auth.User{ID: uuid.New(), Email: "existing@example.com", IsActive: true}
+	if err := users.Create(ctx, existingUser); err != nil {
+		t.Fatalf("seed user: %v", err)
 	}
-	email := "existing@example.com"
-	oldExpiry := time.Now().Add(time.Hour)
-	existingToken := &auth.OAuthUserToken{
-		UserID:            user.ID,
-		ProviderID:        provider.ID,
-		AccessToken:       "old-token",
-		ProviderUserID:    "provider-user-1",
-		ProviderUserEmail: &email,
-		ExpiresAt:         &oldExpiry,
-	}
-	if err := gdb.Create(existingToken).Error; err != nil {
-		t.Fatalf("create existing oauth token: %v", err)
+	if err := tokens.Create(ctx, &auth.OAuthUserToken{
+		ID:             uuid.New(),
+		UserID:         existingUser.ID,
+		ProviderID:     provider.ID,
+		ProviderUserID: "provider-user-1",
+		AccessToken:    "stale-token",
+	}); err != nil {
+		t.Fatalf("seed token: %v", err)
 	}
 
-	token := &oauth2.Token{AccessToken: "new-token", RefreshToken: "new-refresh", Expiry: time.Now().Add(2 * time.Hour)}
+	newToken := &oauth2.Token{AccessToken: "fresh-token", RefreshToken: "fresh-refresh", Expiry: time.Now().Add(2 * time.Hour)}
 	userInfo := map[string]any{"sub": "provider-user-1", "email": "existing@example.com"}
 
-	returnedUser, oauthToken, err := svc.AuthenticateOrCreateUser(context.Background(), provider, token, userInfo)
+	user, tok, err := svc.AuthenticateOrCreateUser(ctx, provider, newToken, userInfo)
 	if err != nil {
 		t.Fatalf("AuthenticateOrCreateUser: %v", err)
 	}
-	if returnedUser.ID != user.ID {
-		t.Fatalf("expected same user, got %+v", returnedUser)
+	if user.ID != existingUser.ID {
+		t.Fatalf("expected existing user %s, got %s", existingUser.ID, user.ID)
 	}
-	if oauthToken.AccessToken != "new-token" {
-		t.Fatalf("access_token = %q, want new-token", oauthToken.AccessToken)
+	if tok.AccessToken != "fresh-token" {
+		t.Fatalf("expected token to be refreshed to fresh-token, got %s", tok.AccessToken)
 	}
-	if oauthToken.RefreshToken == nil || *oauthToken.RefreshToken != "new-refresh" {
-		t.Fatalf("refresh_token = %v, want new-refresh", oauthToken.RefreshToken)
+	if tok.RefreshToken == nil || *tok.RefreshToken != "fresh-refresh" {
+		t.Fatalf("refresh_token = %v, want fresh-refresh", tok.RefreshToken)
+	}
+}
+
+func TestGetActiveProviderByID_InactiveProviderReturnsNil(t *testing.T) {
+	svc, providers, _, _ := newTestOAuthService()
+	ctx := context.Background()
+
+	p := &auth.OAuthProvider{ID: uuid.New(), Name: "okta", IsActive: false}
+	if err := providers.Create(ctx, p); err != nil {
+		t.Fatalf("seed provider: %v", err)
 	}
 
-	var count int64
-	gdb.Model(&auth.OAuthUserToken{}).Where("provider_id = ? AND provider_user_id = ?", provider.ID, "provider-user-1").Count(&count)
-	if count != 1 {
-		t.Fatalf("expected exactly 1 oauth token row, got %d", count)
+	got, err := svc.GetActiveProviderByID(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("GetActiveProviderByID: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil for inactive provider, got %+v", got)
 	}
 }

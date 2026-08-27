@@ -8,71 +8,66 @@ import (
 
 	"controlplane/internal/crypto"
 	"controlplane/internal/notification"
-	"controlplane/internal/testutil"
 )
 
-func newTestProviderSettingService(t *testing.T) *notification.ProviderSettingService {
+func newUnitProviderSettingService(t *testing.T) (*notification.ProviderSettingService, *fakeProviderSettingRepository) {
 	t.Helper()
-	gdb := testutil.OpenDB(t)
-	testutil.TruncateAll(t, gdb)
-
 	masterKey, err := crypto.GenerateKey()
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	return notification.NewProviderSettingService(notification.NewProviderSettingRepository(gdb), crypto.NewEncryptionService(masterKey))
+	repo := newFakeProviderSettingRepository()
+	svc := notification.NewProviderSettingService(repo, crypto.NewEncryptionService(masterKey))
+	return svc, repo
 }
 
-func TestProviderSettingUpsert_CreatesThenUpdates(t *testing.T) {
-	svc := newTestProviderSettingService(t)
+func TestUpsert_PreservesExistingCredentialsWhenBlank(t *testing.T) {
+	svc, _ := newUnitProviderSettingService(t)
+	ctx := context.Background()
 
-	created, err := svc.Upsert(context.Background(), notification.UpsertInput{
+	created, err := svc.Upsert(ctx, notification.UpsertInput{
 		Channel:     notification.ChannelEmail,
 		Config:      datatypes.JSON(`{"from":"noreply@example.com"}`),
-		Credentials: "super-secret-api-key",
+		Credentials: "super-secret",
 		IsActive:    true,
 	})
 	if err != nil {
 		t.Fatalf("Upsert (create): %v", err)
 	}
-	if created.Credentials == "" || created.Credentials == "super-secret-api-key" {
-		t.Fatalf("credentials not encrypted: %q", created.Credentials)
+	if created.Credentials == "" || created.Credentials == "super-secret" {
+		t.Fatalf("expected credentials to be encrypted, got %q", created.Credentials)
 	}
 
-	decrypted, err := svc.DecryptCredentials(created)
-	if err != nil {
-		t.Fatalf("DecryptCredentials: %v", err)
-	}
-	if decrypted != "super-secret-api-key" {
-		t.Fatalf("decrypted = %q", decrypted)
-	}
-
-	updated, err := svc.Upsert(context.Background(), notification.UpsertInput{
+	updated, err := svc.Upsert(ctx, notification.UpsertInput{
 		Channel:  notification.ChannelEmail,
 		Config:   datatypes.JSON(`{"from":"updated@example.com"}`),
 		IsActive: false,
 		// Credentials left blank - should leave the existing value unchanged.
 	})
 	if err != nil {
-		t.Fatalf("Upsert (update): %v", err)
+		t.Fatalf("Upsert (update, blank credentials): %v", err)
 	}
 	if updated.ID != created.ID {
 		t.Fatalf("update created a new row: %s != %s", updated.ID, created.ID)
 	}
+	if updated.Credentials != created.Credentials {
+		t.Fatalf("expected credentials to be preserved on blank update, got %q want %q", updated.Credentials, created.Credentials)
+	}
 	if updated.IsActive {
-		t.Fatalf("IsActive not updated")
+		t.Fatal("expected IsActive to be updated to false")
 	}
-	stillDecrypted, err := svc.DecryptCredentials(updated)
+
+	decrypted, err := svc.DecryptCredentials(updated)
 	if err != nil {
-		t.Fatalf("DecryptCredentials after blank-credentials update: %v", err)
+		t.Fatalf("DecryptCredentials: %v", err)
 	}
-	if stillDecrypted != "super-secret-api-key" {
-		t.Fatalf("credentials changed on blank update: %q", stillDecrypted)
+	if decrypted != "super-secret" {
+		t.Fatalf("decrypted credentials = %q, want super-secret", decrypted)
 	}
 }
 
 func TestProviderSettingGet_ReturnsNilWhenNotConfigured(t *testing.T) {
-	svc := newTestProviderSettingService(t)
+	svc, _ := newUnitProviderSettingService(t)
 
 	got, err := svc.Get(context.Background(), notification.ChannelWhatsApp)
 	if err != nil {
@@ -84,7 +79,7 @@ func TestProviderSettingGet_ReturnsNilWhenNotConfigured(t *testing.T) {
 }
 
 func TestProviderSettingList_ReturnsOnlyConfiguredChannels(t *testing.T) {
-	svc := newTestProviderSettingService(t)
+	svc, _ := newUnitProviderSettingService(t)
 
 	if _, err := svc.Upsert(context.Background(), notification.UpsertInput{Channel: notification.ChannelSMS, Config: datatypes.JSON(`{}`), Credentials: "k", IsActive: true}); err != nil {
 		t.Fatalf("Upsert: %v", err)

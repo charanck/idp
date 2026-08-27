@@ -19,4 +19,4 @@ assets
 docs
 examples
 node_modules
-static/app.css
+web/static/app.css

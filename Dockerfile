@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY static/src ./static/src
+COPY web/static/src ./web/static/src
 RUN npm run build:css
 
 
@@ -23,7 +23,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-COPY --from=css-builder /app/static/app.css ./static/app.css
+COPY --from=css-builder /app/web/static/app.css ./web/static/app.css
 
 RUN go run github.com/a-h/templ/cmd/templ generate
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
@@ -39,7 +39,7 @@ RUN apk add --no-cache ca-certificates curl \
 WORKDIR /app
 
 COPY --from=builder --chown=app:app /out/control-plane ./control-plane
-COPY --from=builder --chown=app:app /app/static ./static
+COPY --from=builder --chown=app:app /app/web/static ./web/static
 
 USER app
 

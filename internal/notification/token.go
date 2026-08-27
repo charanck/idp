@@ -9,9 +9,9 @@ import (
 	"controlplane/internal/crypto"
 )
 
-// sessionTokenTTL is deliberately short, forcing the client to re-mint a
+// SessionTokenTTL is deliberately short, forcing the client to re-mint a
 // session periodically so the credential stays genuinely short-lived.
-const sessionTokenTTL = 5 * time.Minute
+const SessionTokenTTL = 5 * time.Minute
 
 const (
 	tokenScope = "notifications:read"
@@ -45,7 +45,7 @@ func (t *TokenIssuer) Issue(userID string) (string, error) {
 		UserID: userID,
 		Scope:  tokenScope,
 		Aud:    tokenAud,
-		Exp:    time.Now().Add(sessionTokenTTL).Unix(),
+		Exp:    time.Now().Add(SessionTokenTTL).Unix(),
 	}
 	payload, err := json.Marshal(claims)
 	if err != nil {
