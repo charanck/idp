@@ -79,7 +79,7 @@ templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsList
 				<label for="q">Key</label>
 				<input type="text" id="q" name="q" placeholder="Key" value={ data.CurrentQ }/>
 			</div>
-			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+			<button type="submit" class="btn-sm secondary">Filter</button>
 		</form>
 		if len(data.Groups) == 0 {
 			<div class="alert alert-secondary">No configs found.</div>
@@ -99,15 +99,15 @@ templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsList
 					<tbody>
 						for _, entry := range group.Entries {
 							<tr>
-								<td style="width: 160px;">{ entry.EnvironmentName }</td>
-								<td class="text-truncate" style="max-width: 320px;">
+								<td class="col-env">{ entry.EnvironmentName }</td>
+								<td class="truncate max-w-xs">
 									if group.IsSecret {
 										<code>••••••••</code>
 									} else {
 										<code>{ entry.DisplayValue }</code>
 									}
 								</td>
-								<td class="actions" style="width: 300px;">
+								<td class="actions w-[18.75rem]">
 									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/history/") }>History</a>
 									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/clone/") }>Clone</a>
 									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/edit/") }>Edit</a>
@@ -166,7 +166,7 @@ type ConfigFormData struct {
 templ ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormData) {
 	@layout.Base(data.Title, "configs", user, flashes) {
 		<h2>{ data.Title }</h2>
-		<article style="max-width: 640px;">
+		<article class="form-card-lg">
 			if data.Error != "" {
 				<div class="alert alert-danger">{ data.Error }</div>
 			}
@@ -226,8 +226,10 @@ templ ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDa
 						</label>
 					</fieldset>
 				}
-				<button type="submit" style="width: auto;">Save</button>
-				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/configs/">Cancel</a>
+				<div class="form-actions">
+					<button type="submit">Save</button>
+					<a role="button" class="secondary outline" href="/configs/">Cancel</a>
+				</div>
 			</form>
 			@templ.JSONScript("environments-by-application", json.RawMessage(data.EnvironmentsByAppJSON))
 			<script>
@@ -300,7 +302,7 @@ templ ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHis
 							<td class="actions">
 								<form method="post" action={ templ.URL("/configs/" + data.ConfigID + "/rollback/" + v.Version + "/") }>
 									<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-									<button type="submit" class="btn-sm outline" style="width: auto;" onclick="return confirm('Roll back to this version?')">Rollback</button>
+									<button type="submit" class="btn-sm outline" onclick="return confirm('Roll back to this version?')">Rollback</button>
 								</form>
 							</td>
 						</tr>
@@ -308,6 +310,6 @@ templ ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHis
 				</tbody>
 			</table>
 		</article>
-		<a role="button" class="secondary outline" style="width: auto;" href="/configs/">Back to Configs</a>
+		<a role="button" class="secondary outline" href="/configs/">Back to Configs</a>
 	}
 }

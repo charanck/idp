@@ -2,6 +2,8 @@ package web
 
 import (
 	"github.com/labstack/echo/v4"
+
+	"controlplane/internal/notification"
 )
 
 // RegisterRoutes mounts every web UI page under "/", mirroring web_ui/urls.py.
@@ -85,9 +87,11 @@ func RegisterRoutes(e *echo.Echo, h *Handlers, authMW *AuthMiddleware) {
 	admin.POST("/oauth/providers/:id/delete/", h.OAuthProvider.Delete)
 	admin.POST("/oauth/providers/:id/toggle/", h.OAuthProvider.Toggle)
 
-	admin.GET("/notification-settings/", h.NotificationSettings.List)
-	admin.GET("/notification-settings/:channel/edit/", h.NotificationSettings.Edit)
-	admin.POST("/notification-settings/:channel/edit/", h.NotificationSettings.Edit)
+	if notification.Enabled {
+		admin.GET("/notification-settings/", h.NotificationSettings.List)
+		admin.GET("/notification-settings/:channel/edit/", h.NotificationSettings.Edit)
+		admin.POST("/notification-settings/:channel/edit/", h.NotificationSettings.Edit)
+	}
 
 	admin.GET("/activity/", h.Activity.List)
 

@@ -190,7 +190,7 @@ func FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData)
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, ">Disabled</option></select></div><button type=\"submit\" class=\"btn-sm secondary\" style=\"width: auto;\">Filter</button></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, ">Disabled</option></select></div><button type=\"submit\" class=\"btn-sm secondary\">Filter</button></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -255,14 +255,14 @@ func FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData)
 					return templ_7745c5c3_Err
 				}
 				for _, entry := range group.Entries {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<tr><td style=\"width: 160px;\">")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<tr><td class=\"col-env\">")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var11 string
 					templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(entry.EnvironmentName)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/flags.templ`, Line: 91, Col: 57}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/flags.templ`, Line: 91, Col: 51}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 					if templ_7745c5c3_Err != nil {
@@ -309,7 +309,7 @@ func FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\"> <button class=\"btn-sm outline secondary\" type=\"submit\" style=\"width: auto;\">Toggle</button></form><a role=\"button\" class=\"btn-sm btn-danger outline\" href=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "\"> <button class=\"btn-sm outline secondary\" type=\"submit\">Toggle</button></form><a role=\"button\" class=\"btn-sm btn-danger outline\" href=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -408,7 +408,7 @@ func FlagForm(flashes []session.Flash, user layout.NavUser, data FlagFormData) t
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<h2>New Feature Flag</h2><article style=\"max-width: 560px;\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<h2>New Feature Flag</h2><article class=\"form-card-md\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -554,7 +554,7 @@ func FlagForm(flashes []session.Flash, user layout.NavUser, data FlagFormData) t
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "Enabled</label><p class=\"stat-label\">This flag will be created for every environment of the selected application.</p><button type=\"submit\" style=\"width: auto;\">Save</button> <a role=\"button\" class=\"secondary outline\" style=\"width: auto; margin-left: 0.5rem;\" href=\"/flags/\">Cancel</a></form></article>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "Enabled</label><p class=\"stat-label\">This flag will be created for every environment of the selected application.</p><div class=\"form-actions\"><button type=\"submit\">Save</button> <a role=\"button\" class=\"secondary outline\" href=\"/flags/\">Cancel</a></div></form></article>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

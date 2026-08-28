@@ -37,10 +37,10 @@ templ Login(flashes []session.Flash, data LoginData) {
 				<button type="submit">Log in</button>
 			</form>
 			if len(data.OAuthProviders) > 0 {
-				<div style="margin-top: 1.5rem;">
-					<div class="stat-label" style="margin-bottom: 0.5rem;">Or continue with an OAuth provider</div>
+				<div class="mt-6">
+					<div class="stat-label mb-2">Or continue with an OAuth provider</div>
 					for _, p := range data.OAuthProviders {
-						<a role="button" class="secondary outline" style="display: block; margin-bottom: 0.5rem;" href={ templ.URL("/oauth/login/" + p.ID + "/") }>
+						<a role="button" class="secondary outline block mb-2" href={ templ.URL("/oauth/login/" + p.ID + "/") }>
 							<i class="bi bi-box-arrow-in-right"></i> Continue with { p.Name }
 						</a>
 					}
@@ -59,7 +59,7 @@ type PasswordChangeData struct {
 templ PasswordChange(flashes []session.Flash, user layout.NavUser, data PasswordChangeData) {
 	@layout.Base("Change Password", "", user, flashes) {
 		<h2>Change Password</h2>
-		<article style="max-width: 480px;">
+		<article class="form-card-sm">
 			if data.ForceReset {
 				<div class="alert alert-warning">You must change your password before continuing.</div>
 			}

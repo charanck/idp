@@ -37,7 +37,7 @@ templ Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData
 							<td>
 								<strong>{ entry.Application.Name }</strong> / { entry.Environment.Name } / { entry.Key }
 							</td>
-							<td style="text-align: right;">
+							<td class="text-right">
 								if entry.IsSecret {
 									<span class="badge badge-warning">Secret</span>
 								} else {

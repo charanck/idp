@@ -65,7 +65,7 @@ type NotificationSettingFormData struct {
 templ NotificationSettingForm(flashes []session.Flash, user layout.NavUser, data NotificationSettingFormData) {
 	@layout.Base("Edit "+data.Label+" Settings", "notification_settings", user, flashes) {
 		<h2>Edit { data.Label } Settings</h2>
-		<article style="max-width: 640px;">
+		<article class="form-card-lg">
 			if data.Error != "" {
 				<div class="alert alert-danger">{ data.Error }</div>
 			}
@@ -91,8 +91,10 @@ templ NotificationSettingForm(flashes []session.Flash, user layout.NavUser, data
 					}
 					Active
 				</label>
-				<button type="submit" style="width: auto;">Save</button>
-				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/notification-settings/">Cancel</a>
+				<div class="form-actions">
+					<button type="submit">Save</button>
+					<a role="button" class="secondary outline" href="/notification-settings/">Cancel</a>
+				</div>
 			</form>
 		</article>
 	}

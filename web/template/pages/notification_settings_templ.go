@@ -192,7 +192,7 @@ func NotificationSettingForm(flashes []session.Flash, user layout.NavUser, data 
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, " Settings</h2><article style=\"max-width: 640px;\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, " Settings</h2><article class=\"form-card-lg\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -279,7 +279,7 @@ func NotificationSettingForm(flashes []session.Flash, user layout.NavUser, data 
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "Active</label> <button type=\"submit\" style=\"width: auto;\">Save</button> <a role=\"button\" class=\"secondary outline\" style=\"width: auto; margin-left: 0.5rem;\" href=\"/notification-settings/\">Cancel</a></form></article>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "Active</label><div class=\"form-actions\"><button type=\"submit\">Save</button> <a role=\"button\" class=\"secondary outline\" href=\"/notification-settings/\">Cancel</a></div></form></article>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

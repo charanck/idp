@@ -18,8 +18,10 @@ templ ConfirmDelete(flashes []session.Flash, user layout.NavUser, activeNav stri
 		<div class="alert alert-warning">{ data.Message }</div>
 		<form method="post" action={ templ.URL(data.Action) }>
 			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-			<button class="btn-danger" type="submit" style="width: auto;">Delete</button>
-			<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href={ templ.URL(data.CancelHref) }>Cancel</a>
+			<div class="form-actions">
+				<button class="btn-danger" type="submit">Delete</button>
+				<a role="button" class="secondary outline" href={ templ.URL(data.CancelHref) }>Cancel</a>
+			</div>
 		</form>
 	}
 }

@@ -221,7 +221,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\"></div><button class=\"btn-sm secondary\" type=\"submit\" style=\"width: auto;\">Filter</button></form><article class=\"card\"><table><thead><tr><th>When</th><th>Type</th><th>Resource</th><th>Name</th><th>User</th><th>IP</th></tr></thead> <tbody>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\"></div><button class=\"btn-sm secondary\" type=\"submit\">Filter</button></form><article class=\"card\"><table><thead><tr><th>When</th><th>Type</th><th>Resource</th><th>Name</th><th>User</th><th>IP</th></tr></thead> <tbody>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

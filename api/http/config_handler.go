@@ -62,4 +62,27 @@ func (h *ConfigHandler) List(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// ListV2 serves GET /v2/configs/list. It's additive alongside List (v1):
+// same scope/auth, but a flat key->value map instead of an array of
+// per-entry objects, cutting payload size for services that only need
+// values and would otherwise discard id/service/environment/type/is_secret
+// on every entry.
+func (h *ConfigHandler) ListV2(c echo.Context) error {
+	service := c.QueryParam("service")
+	environment := c.QueryParam("environment")
+	client := ServiceClientFromContext(c)
+
+	configs, err := h.configs.ListConfigsForClient(c.Request().Context(), service, environment, client.EncryptionKey)
+	if err != nil {
+		slog.Error("unexpected error listing configs for client", "client", client.Name, "service", service, "environment", environment, "err", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to list configurations")
+	}
+
+	out := make(map[string]string, len(configs))
+	for _, cfg := range configs {
+		out[cfg.Key] = cfg.Value
+	}
+	return c.JSON(http.StatusOK, out)
+}
+
 var _ ConfigLister = (*config.ConfigService)(nil)

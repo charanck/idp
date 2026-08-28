@@ -37,7 +37,7 @@ templ ClientsList(flashes []session.Flash, user layout.NavUser, data ClientsList
 					<option value="inactive" selected?={ data.CurrentStatus == "inactive" }>Inactive</option>
 				</select>
 			</div>
-			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+			<button type="submit" class="btn-sm secondary">Filter</button>
 		</form>
 		<article class="card">
 			<table>
@@ -84,7 +84,7 @@ type ClientFormData struct {
 templ ClientForm(flashes []session.Flash, user layout.NavUser, data ClientFormData) {
 	@layout.Base("New Service Client", "clients", user, flashes) {
 		<h2>New Service Client</h2>
-		<article style="max-width: 480px;">
+		<article class="form-card-sm">
 			if data.Error != "" {
 				<div class="alert alert-danger">{ data.Error }</div>
 			}
@@ -94,8 +94,10 @@ templ ClientForm(flashes []session.Flash, user layout.NavUser, data ClientFormDa
 					Client name
 					<input type="text" id="name" name="name" value={ data.Name } required/>
 				</label>
-				<button type="submit" style="width: auto;">Create</button>
-				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/clients/">Cancel</a>
+				<div class="form-actions">
+					<button type="submit">Create</button>
+					<a role="button" class="secondary outline" href="/clients/">Cancel</a>
+				</div>
 			</form>
 		</article>
 	}
@@ -110,7 +112,7 @@ type ClientCreatedData struct {
 
 templ ClientCreated(flashes []session.Flash, user layout.NavUser, data ClientCreatedData) {
 	@layout.Base("Service Client Created", "clients", user, flashes) {
-		<article style="max-width: 640px;">
+		<article class="form-card-lg">
 			<h3>Service Client Created</h3>
 			<p>Copy the API key now. It will not be shown again.</p>
 			<div class="alert alert-warning">
@@ -119,8 +121,8 @@ templ ClientCreated(flashes []session.Flash, user layout.NavUser, data ClientCre
 				<strong>API Key:</strong> <code>{ data.APIKey }</code>
 			</div>
 			<div class="toolbar">
-				<a role="button" class="secondary outline" style="width: auto;" href="/clients/">Back to Clients</a>
-				<a role="button" style="width: auto;" href={ templ.URL("/clients/" + data.ClientID + "/") }>View Details</a>
+				<a role="button" class="secondary outline" href="/clients/">Back to Clients</a>
+				<a role="button" href={ templ.URL("/clients/" + data.ClientID + "/") }>View Details</a>
 			</div>
 		</article>
 	}
@@ -139,11 +141,11 @@ type ClientDetailData struct {
 
 templ ClientDetail(flashes []session.Flash, user layout.NavUser, data ClientDetailData) {
 	@layout.Base("Service Client Details", "clients", user, flashes) {
-		<article style="max-width: 720px;">
+		<article class="form-card-xl">
 			<div class="toolbar">
 				<div>
-					<h3 style="margin-bottom: 0.2rem;">{ data.Name }</h3>
-					<p class="stat-label" style="margin: 0;">Service client details and status.</p>
+					<h3 class="mb-1">{ data.Name }</h3>
+					<p class="stat-label m-0">Service client details and status.</p>
 				</div>
 				if data.IsActive {
 					<span class="badge badge-success">Active</span>
@@ -160,9 +162,9 @@ templ ClientDetail(flashes []session.Flash, user layout.NavUser, data ClientDeta
 						<th>Encryption Key</th>
 						<td>
 							<code>{ data.EncryptionKey }</code>
-							<form method="post" action={ templ.URL("/clients/" + data.ID + "/regenerate-key/") } style="display: inline;" onsubmit="return confirm('Regenerate the encryption key? The current key stops working immediately.')">
+							<form method="post" action={ templ.URL("/clients/" + data.ID + "/regenerate-key/") } class="inline" onsubmit="return confirm('Regenerate the encryption key? The current key stops working immediately.')">
 								<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-								<button type="submit" class="btn-sm outline secondary" style="width: auto; margin-left: 0.5rem;"><i class="bi bi-arrow-repeat"></i> Regenerate</button>
+								<button type="submit" class="btn-sm outline secondary ml-2"><i class="bi bi-arrow-repeat"></i> Regenerate</button>
 							</form>
 						</td>
 					</tr>
@@ -171,13 +173,13 @@ templ ClientDetail(flashes []session.Flash, user layout.NavUser, data ClientDeta
 				</tbody>
 			</table>
 			<div class="toolbar">
-				<a role="button" class="secondary outline" style="width: auto;" href="/clients/">Back to Clients</a>
+				<a role="button" class="secondary outline" href="/clients/">Back to Clients</a>
 				<div class="actions">
 					<form method="post" action={ templ.URL("/clients/" + data.ID + "/toggle/") }>
 						<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-						<button type="submit" style="width: auto;">Toggle Status</button>
+						<button type="submit">Toggle Status</button>
 					</form>
-					<a role="button" class="btn-danger" style="width: auto;" href={ templ.URL("/clients/" + data.ID + "/delete/") }>Delete</a>
+					<a role="button" class="btn-danger" href={ templ.URL("/clients/" + data.ID + "/delete/") }>Delete</a>
 				</div>
 			</div>
 		</article>

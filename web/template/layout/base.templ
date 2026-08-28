@@ -2,7 +2,10 @@
 // messages) for every web UI page, mirroring web_ui/templates/web_ui/base.html.
 package layout
 
-import "controlplane/internal/session"
+import (
+	"controlplane/internal/notification"
+	"controlplane/internal/session"
+)
 
 // NavUser is the current-user view the layout needs to render the sidebar
 // and topbar, decoupled from the auth package to avoid an import cycle with
@@ -21,8 +24,21 @@ templ Base(title string, activeNav string, user NavUser, flashes []session.Flash
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ title } · Control Plane</title>
+			<script>
+				// Applied before first paint (blocking, no defer) so the page never
+				// flashes the wrong theme. Mirrors the persistence logic in
+				// /static/theme.js's toggle handler.
+				(function() {
+					try {
+						var stored = localStorage.getItem("cp-theme");
+						var dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+						if (dark) document.documentElement.classList.add("dark");
+					} catch (e) {}
+				})();
+			</script>
 			<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet"/>
 			<link href="/static/app.css" rel="stylesheet"/>
+			<script src="/static/theme.js" defer></script>
 		</head>
 		<body>
 			if user.LoggedIn {
@@ -66,7 +82,9 @@ templ sidebar(activeNav string, user NavUser) {
 						@navLink(activeNav, "clients", "/clients/", "bi-hdd-network", "Service Clients")
 						@navLink(activeNav, "users", "/users/", "bi-people", "Users")
 						@navLink(activeNav, "oauth_providers", "/oauth/providers/", "bi-shield-lock", "OAuth Providers")
-						@navLink(activeNav, "notification_settings", "/notification-settings/", "bi-bell", "Notification Settings")
+						if notification.Enabled {
+							@navLink(activeNav, "notification_settings", "/notification-settings/", "bi-bell", "Notification Settings")
+						}
 						@navLink(activeNav, "activity", "/activity/", "bi-clock-history", "Activity Log")
 					</ul>
 				</nav>
@@ -92,6 +110,10 @@ templ navLink(activeNav, key, href, icon, label string) {
 templ topbar(user NavUser) {
 	<div class="topbar">
 		<span class="user-email">{ user.Email }</span>
+		<button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+			<i class="bi bi-moon-stars"></i>
+			<i class="bi bi-sun"></i>
+		</button>
 		<a role="button" class="btn-sm outline secondary" href="/password/change/">Change Password</a>
 		<form method="post" action="/logout/" class="m-0">
 			<input type="hidden" name="csrf_token" value={ user.CSRFToken }/>

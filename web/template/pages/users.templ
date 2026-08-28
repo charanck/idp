@@ -37,7 +37,7 @@ templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData
 					<option value="no" selected?={ data.CurrentStaff == "no" }>Non-staff only</option>
 				</select>
 			</div>
-			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+			<button type="submit" class="btn-sm secondary">Filter</button>
 		</form>
 		<article class="card">
 			<table>
@@ -91,7 +91,7 @@ type UserFormData struct {
 templ UserForm(flashes []session.Flash, user layout.NavUser, data UserFormData) {
 	@layout.Base(data.Title, "users", user, flashes) {
 		<h2>{ data.Title }</h2>
-		<article style="max-width: 560px;">
+		<article class="form-card-md">
 			if data.Error != "" {
 				<div class="alert alert-danger">{ data.Error }</div>
 			}
@@ -143,8 +143,10 @@ templ UserForm(flashes []session.Flash, user layout.NavUser, data UserFormData) 
 						Staff (admin access)
 					</label>
 				}
-				<button type="submit" style="width: auto;">Save</button>
-				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/users/">Cancel</a>
+				<div class="form-actions">
+					<button type="submit">Save</button>
+					<a role="button" class="secondary outline" href="/users/">Cancel</a>
+				</div>
 			</form>
 		</article>
 	}

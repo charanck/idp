@@ -6,6 +6,11 @@
 @import "tailwindcss";
 @source "../../template";
 
+/* Dark mode is a manual, user-toggled `.dark` class on <html> (persisted
+   client-side in localStorage - see app.js), not the OS-preference media
+   query Tailwind defaults to, so `dark:` variants below key off that class. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
@@ -43,10 +48,11 @@
 
   body {
     @apply m-0 bg-slate-50 text-slate-800 text-[0.9rem] leading-normal;
+    @apply dark:bg-slate-900 dark:text-slate-200;
   }
 
   h1, h2, h3, h4 {
-    @apply font-semibold text-slate-900 tracking-tight;
+    @apply font-semibold text-slate-900 tracking-tight dark:text-white;
   }
 
   h2 {
@@ -54,7 +60,7 @@
   }
 
   a {
-    @apply text-brand-600 no-underline hover:underline;
+    @apply text-brand-600 no-underline hover:underline dark:text-brand-100;
   }
 
   table {
@@ -63,10 +69,12 @@
 
   thead th {
     @apply bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 px-4 py-2.5 border-b border-slate-200;
+    @apply dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700;
   }
 
   tbody td {
     @apply px-4 py-2.5 border-b border-slate-100 align-middle text-slate-700;
+    @apply dark:border-slate-800 dark:text-slate-300;
   }
 
   tbody tr:last-child td {
@@ -74,11 +82,11 @@
   }
 
   tbody tr:hover {
-    @apply bg-slate-50;
+    @apply bg-slate-50 dark:bg-slate-800/60;
   }
 
   label {
-    @apply block text-xs font-medium text-slate-600 mb-1;
+    @apply block text-xs font-medium text-slate-600 mb-1 dark:text-slate-400;
   }
 
   input:not([type="checkbox"]):not([type="radio"]),
@@ -86,10 +94,11 @@
   textarea {
     @apply w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 shadow-sm;
     @apply focus:outline-none focus:ring-2 focus:ring-brand-600/30 focus:border-brand-600;
+    @apply dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100;
   }
 
   input[type="checkbox"] {
-    @apply rounded border-slate-300 text-brand-600 focus:ring-brand-600/30;
+    @apply rounded border-slate-300 text-brand-600 focus:ring-brand-600/30 dark:border-slate-600;
   }
 
   form > label,
@@ -109,6 +118,8 @@
   a[role="button"].outline {
     @apply bg-white text-slate-700 border-slate-300;
     @apply hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900;
+    @apply dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700;
+    @apply dark:hover:bg-slate-700 dark:hover:border-slate-600 dark:hover:text-white;
   }
 
   fieldset {
@@ -117,14 +128,16 @@
 
   article {
     @apply bg-white border border-slate-200 rounded-lg p-5 shadow-sm;
+    @apply dark:bg-slate-800 dark:border-slate-700;
   }
 
   code {
     @apply bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 text-[0.85em];
+    @apply dark:bg-slate-900 dark:text-slate-300;
   }
 
   small {
-    @apply text-xs text-slate-500;
+    @apply text-xs text-slate-500 dark:text-slate-400;
   }
 }
 
@@ -137,10 +150,12 @@
 
   .sidebar {
     @apply flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white px-3 py-4;
+    @apply dark:bg-slate-900 dark:border-slate-800;
   }
 
   .sidebar .brand {
     @apply block px-2 mb-6 text-[0.95rem] font-semibold text-slate-900 no-underline hover:no-underline;
+    @apply dark:text-white;
   }
 
   .sidebar nav ul {
@@ -150,10 +165,12 @@
   .sidebar nav a {
     @apply flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[0.85rem] font-medium text-slate-600 no-underline border-l-2 border-transparent;
     @apply hover:bg-slate-50 hover:text-slate-900 hover:no-underline;
+    @apply dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white;
   }
 
   .sidebar nav a.active {
     @apply bg-brand-50 text-brand-700 border-l-2 border-brand-600;
+    @apply dark:bg-brand-900/40 dark:text-brand-100;
   }
 
   .sidebar-group {
@@ -162,6 +179,7 @@
 
   .sidebar-group summary {
     @apply list-none cursor-pointer select-none px-2.5 py-1.5 text-[0.68rem] font-semibold uppercase tracking-wider text-slate-400;
+    @apply dark:text-slate-500;
   }
 
   .sidebar-group summary::-webkit-details-marker {
@@ -174,11 +192,21 @@
 
   .topbar {
     @apply flex items-center justify-end gap-3 border-b border-slate-200 bg-white px-6 py-3;
+    @apply dark:bg-slate-900 dark:border-slate-800;
   }
 
   .topbar .user-email {
-    @apply mr-auto text-sm text-slate-500;
+    @apply mr-auto text-sm text-slate-500 dark:text-slate-400;
   }
+
+  .theme-toggle {
+    @apply inline-flex items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 w-8 h-8 p-0 cursor-pointer;
+    @apply hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900;
+    @apply dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white;
+  }
+
+  .theme-toggle .bi-sun { @apply hidden dark:inline; }
+  .theme-toggle .bi-moon-stars { @apply inline dark:hidden; }
 
   main.page {
     @apply flex-1 p-6;
@@ -202,6 +230,7 @@
 
   .filter-bar {
     @apply flex flex-wrap items-end gap-3 mb-5 rounded-lg border border-slate-200 bg-white p-3.5;
+    @apply dark:bg-slate-800 dark:border-slate-700;
   }
 
   .filter-bar > div {
@@ -223,6 +252,28 @@
     @apply flex flex-wrap justify-end gap-1.5;
   }
 
+  /* Save/Cancel (or Delete/Cancel) button pairs at the bottom of a form -
+     replaces the ad hoc `style="width: auto; margin-left: 0.5rem"` that used
+     to be copy-pasted onto the second button on every form page. */
+  .form-actions {
+    @apply flex items-center gap-2;
+  }
+
+  /* Max-width wrappers for single-column form cards. Values match what was
+     previously scattered across pages as one-off `style="max-width: ...px"`
+     - named by size instead of by page so the same card size is reused
+     consistently for forms of similar complexity. */
+  .form-card-sm { @apply max-w-[30rem]; }
+  .form-card-md { @apply max-w-[35rem]; }
+  .form-card-lg { @apply max-w-[40rem]; }
+  .form-card-xl { @apply max-w-[45rem]; }
+
+  /* Table column width helper for the "Environment" column shared by the
+     configs and feature-flags grouped-table pages. */
+  .col-env {
+    @apply w-40;
+  }
+
   .btn-sm {
     @apply px-2.5 py-1 text-[0.78rem];
   }
@@ -233,6 +284,7 @@
 
   .btn-danger.outline {
     @apply bg-white text-danger-text border-danger-border hover:bg-danger-bg hover:border-danger-text;
+    @apply dark:bg-slate-800;
   }
 
   /* Badges -------------------------------------------------------------------- */
@@ -241,11 +293,11 @@
     @apply inline-block rounded-full px-2.5 py-0.5 text-[0.72rem] font-semibold leading-normal bg-secondary-bg text-secondary-text;
   }
 
-  .badge-success { @apply bg-success-bg text-success-text; }
-  .badge-danger { @apply bg-danger-bg text-danger-text; }
-  .badge-warning { @apply bg-warning-bg text-warning-text; }
-  .badge-info { @apply bg-info-bg text-info-text; }
-  .badge-secondary { @apply bg-secondary-bg text-secondary-text; }
+  .badge-success { @apply bg-success-bg text-success-text dark:bg-success-text/15 dark:text-success-border; }
+  .badge-danger { @apply bg-danger-bg text-danger-text dark:bg-danger-text/15 dark:text-danger-border; }
+  .badge-warning { @apply bg-warning-bg text-warning-text dark:bg-warning-text/15 dark:text-warning-border; }
+  .badge-info { @apply bg-info-bg text-info-text dark:bg-info-text/15 dark:text-info-border; }
+  .badge-secondary { @apply bg-secondary-bg text-secondary-text dark:bg-slate-700 dark:text-slate-300; }
 
   /* Alerts ---------------------------------------------------------------------- */
 
@@ -253,11 +305,11 @@
     @apply relative rounded-md border-l-4 px-4 py-2.5 pr-9 mb-3 text-sm;
   }
 
-  .alert-success { @apply bg-success-bg border-success-text text-success-text; }
-  .alert-danger { @apply bg-danger-bg border-danger-text text-danger-text; }
-  .alert-warning { @apply bg-warning-bg border-warning-text text-warning-text; }
-  .alert-info { @apply bg-info-bg border-info-text text-info-text; }
-  .alert-secondary { @apply bg-secondary-bg border-secondary-border text-secondary-text; }
+  .alert-success { @apply bg-success-bg border-success-text text-success-text dark:bg-success-text/10 dark:text-success-border; }
+  .alert-danger { @apply bg-danger-bg border-danger-text text-danger-text dark:bg-danger-text/10 dark:text-danger-border; }
+  .alert-warning { @apply bg-warning-bg border-warning-text text-warning-text dark:bg-warning-text/10 dark:text-warning-border; }
+  .alert-info { @apply bg-info-bg border-info-text text-info-text dark:bg-info-text/10 dark:text-info-border; }
+  .alert-secondary { @apply bg-secondary-bg border-secondary-border text-secondary-text dark:bg-slate-800 dark:text-slate-300; }
 
   .alert .alert-close {
     @apply absolute right-2.5 top-2 border-0 bg-transparent text-base leading-none cursor-pointer opacity-50 hover:opacity-100 px-1;
@@ -271,6 +323,7 @@
 
   article.card > header {
     @apply border-b border-slate-200 px-4 py-3 font-semibold text-sm text-slate-700;
+    @apply dark:border-slate-700 dark:text-slate-300;
   }
 
   article.card table {
@@ -286,6 +339,7 @@
   .pagination a,
   .pagination span {
     @apply inline-block rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[0.8rem] text-slate-600 no-underline hover:bg-slate-50 hover:no-underline;
+    @apply dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700;
   }
 
   .pagination .active span {
@@ -293,7 +347,7 @@
   }
 
   .pagination .disabled span {
-    @apply opacity-40 hover:bg-white;
+    @apply opacity-40 hover:bg-white dark:hover:bg-slate-800;
   }
 
   /* Dashboard stat cards -------------------------------------------------------------- */
@@ -312,10 +366,10 @@
   }
 
   .stat-card .stat-count {
-    @apply text-2xl font-bold text-slate-900 mt-1;
+    @apply text-2xl font-bold text-slate-900 mt-1 dark:text-white;
   }
 
   .stat-card .stat-label {
-    @apply text-xs text-slate-500 mt-0.5;
+    @apply text-xs text-slate-500 mt-0.5 dark:text-slate-400;
   }
 }

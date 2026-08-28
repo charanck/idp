@@ -12,7 +12,10 @@ package layout
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "controlplane/internal/session"
+import (
+	"controlplane/internal/notification"
+	"controlplane/internal/session"
+)
 
 // NavUser is the current-user view the layout needs to render the sidebar
 // and topbar, decoupled from the auth package to avoid an import cycle with
@@ -52,13 +55,13 @@ func Base(title string, activeNav string, user NavUser, flashes []session.Flash)
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 23, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 26, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " · Control Plane</title><link href=\"https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css\" rel=\"stylesheet\"><link href=\"/static/app.css\" rel=\"stylesheet\"></head><body>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " · Control Plane</title><script>\n\t\t\t\t// Applied before first paint (blocking, no defer) so the page never\n\t\t\t\t// flashes the wrong theme. Mirrors the persistence logic in\n\t\t\t\t// /static/theme.js's toggle handler.\n\t\t\t\t(function() {\n\t\t\t\t\ttry {\n\t\t\t\t\t\tvar stored = localStorage.getItem(\"cp-theme\");\n\t\t\t\t\t\tvar dark = stored ? stored === \"dark\" : window.matchMedia(\"(prefers-color-scheme: dark)\").matches;\n\t\t\t\t\t\tif (dark) document.documentElement.classList.add(\"dark\");\n\t\t\t\t\t} catch (e) {}\n\t\t\t\t})();\n\t\t\t</script><link href=\"https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css\" rel=\"stylesheet\"><link href=\"/static/app.css\" rel=\"stylesheet\"><script src=\"/static/theme.js\" defer></script></head><body>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -187,9 +190,11 @@ func sidebar(activeNav string, user NavUser) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = navLink(activeNav, "notification_settings", "/notification-settings/", "bi-bell", "Notification Settings").Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
+			if notification.Enabled {
+				templ_7745c5c3_Err = navLink(activeNav, "notification_settings", "/notification-settings/", "bi-bell", "Notification Settings").Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
 			templ_7745c5c3_Err = navLink(activeNav, "activity", "/activity/", "bi-clock-history", "Activity Log").Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
@@ -241,7 +246,7 @@ func navLink(activeNav, key, href, icon, label string) templ.Component {
 			var templ_7745c5c3_Var5 templ.SafeURL
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(href))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 81, Col: 28}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 99, Col: 28}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -276,7 +281,7 @@ func navLink(activeNav, key, href, icon, label string) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 82, Col: 39}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 100, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -294,7 +299,7 @@ func navLink(activeNav, key, href, icon, label string) templ.Component {
 			var templ_7745c5c3_Var9 templ.SafeURL
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(href))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 85, Col: 28}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 103, Col: 28}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -329,7 +334,7 @@ func navLink(activeNav, key, href, icon, label string) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 86, Col: 39}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 104, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -376,20 +381,20 @@ func topbar(user NavUser) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(user.Email)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 94, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 112, Col: 39}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span> <a role=\"button\" class=\"btn-sm outline secondary\" href=\"/password/change/\">Change Password</a><form method=\"post\" action=\"/logout/\" class=\"m-0\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</span> <button type=\"button\" id=\"theme-toggle\" class=\"theme-toggle\" aria-label=\"Toggle dark mode\" title=\"Toggle dark mode\"><i class=\"bi bi-moon-stars\"></i> <i class=\"bi bi-sun\"></i></button> <a role=\"button\" class=\"btn-sm outline secondary\" href=\"/password/change/\">Change Password</a><form method=\"post\" action=\"/logout/\" class=\"m-0\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.ResolveAttributeValue(user.CSRFToken)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 97, Col: 64}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 119, Col: 64}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var15)
 		if templ_7745c5c3_Err != nil {
@@ -450,7 +455,7 @@ func Flashes(flashes []session.Flash) templ.Component {
 			var templ_7745c5c3_Var19 string
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(f.Text)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 106, Col: 11}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/layout/base.templ`, Line: 128, Col: 11}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 			if templ_7745c5c3_Err != nil {

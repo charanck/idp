@@ -48,6 +48,47 @@ func TestList_ReturnsConfigsAsJSON(t *testing.T) {
 	}
 }
 
+func TestListV2_ReturnsConfigsAsKeyValueMap(t *testing.T) {
+	lister := &fakeConfigLister{configs: []config.ClientConfig{
+		{ID: "1", Service: "payments", Environment: "prod", Key: "API_URL", Value: "https://api.example.com", Type: "string", IsSecret: false},
+	}}
+	h := apihttp.NewConfigHandler(lister)
+
+	c, rec := newConfigListRequest("payments", "prod")
+	if err := h.ListV2(c); err != nil {
+		t.Fatalf("ListV2: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(body) != 1 || body["API_URL"] != "https://api.example.com" {
+		t.Fatalf("unexpected body: %+v", body)
+	}
+}
+
+func TestListV2_ServiceErrorReturns500(t *testing.T) {
+	lister := &fakeConfigLister{err: errFakeService}
+	h := apihttp.NewConfigHandler(lister)
+
+	c, _ := newConfigListRequest("payments", "prod")
+	err := h.ListV2(c)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok {
+		t.Fatalf("expected *echo.HTTPError, got %T", err)
+	}
+	if httpErr.Code != http.StatusInternalServerError {
+		t.Fatalf("code = %d, want 500", httpErr.Code)
+	}
+}
+
 func TestList_ServiceErrorReturns500(t *testing.T) {
 	lister := &fakeConfigLister{err: errFakeService}
 	h := apihttp.NewConfigHandler(lister)

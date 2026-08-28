@@ -11,7 +11,8 @@ For worked examples in cURL, Python, Node.js/TypeScript, and Go, see the [Guides
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/api/v1/config/configs/list` | GET | `X-API-Key` | List configs/secrets for `?service=&environment=`, re-encrypted with the calling client's own key. |
+| `/api/v1/config/configs/list` | GET | `X-API-Key` | List configs/secrets for `?service=&environment=`, re-encrypted with the calling client's own key. Returns an array of per-entry objects (`id`/`service`/`environment`/`key`/`value`/`is_secret`/`type`). |
+| `/api/v1/config/v2/configs/list` | GET | `X-API-Key` | Same scope/auth as v1, but returns a flat `{"KEY": "value", ...}` map instead of an array of objects — smaller payload for clients that only need values. Additive: v1 is unchanged. |
 
 Details: [Config & Secrets guide](guides/config-and-secrets.md).
 

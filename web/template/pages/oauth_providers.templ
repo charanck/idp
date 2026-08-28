@@ -38,7 +38,7 @@ templ OAuthProvidersList(flashes []session.Flash, user layout.NavUser, data OAut
 					<option value="inactive" selected?={ data.CurrentStatus == "inactive" }>Inactive</option>
 				</select>
 			</div>
-			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+			<button type="submit" class="btn-sm secondary">Filter</button>
 		</form>
 		<article class="card">
 			<table>
@@ -61,7 +61,7 @@ templ OAuthProvidersList(flashes []session.Flash, user layout.NavUser, data OAut
 							<td class="actions">
 								<form method="post" action={ templ.URL("/oauth/providers/" + p.ID.String() + "/toggle/") }>
 									<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-									<button class="btn-sm outline secondary" type="submit" style="width: auto;">Toggle</button>
+									<button class="btn-sm outline secondary" type="submit">Toggle</button>
 								</form>
 								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/oauth/providers/" + p.ID.String() + "/edit/") }>Edit</a>
 								<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/oauth/providers/" + p.ID.String() + "/delete/") }>Delete</a>
@@ -95,7 +95,7 @@ type OAuthProviderFormData struct {
 templ OAuthProviderForm(flashes []session.Flash, user layout.NavUser, data OAuthProviderFormData) {
 	@layout.Base(data.Title, "oauth_providers", user, flashes) {
 		<h2>{ data.Title }</h2>
-		<article style="max-width: 640px;">
+		<article class="form-card-lg">
 			if data.Error != "" {
 				<div class="alert alert-danger">{ data.Error }</div>
 			}
@@ -148,8 +148,10 @@ templ OAuthProviderForm(flashes []session.Flash, user layout.NavUser, data OAuth
 					}
 					Active
 				</label>
-				<button type="submit" style="width: auto;">Save</button>
-				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/oauth/providers/">Cancel</a>
+				<div class="form-actions">
+					<button type="submit">Save</button>
+					<a role="button" class="secondary outline" href="/oauth/providers/">Cancel</a>
+				</div>
 			</form>
 		</article>
 	}

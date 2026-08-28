@@ -28,7 +28,7 @@ templ ApplicationsList(flashes []session.Flash, user layout.NavUser, data Applic
 				<label for="q">Search</label>
 				<input type="text" id="q" name="q" placeholder="Application name" value={ data.CurrentQ }/>
 			</div>
-			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+			<button type="submit" class="btn-sm secondary">Filter</button>
 		</form>
 		<article class="card">
 			<table>
@@ -72,7 +72,7 @@ templ ApplicationForm(flashes []session.Flash, user layout.NavUser, data Applica
 				New Application
 			}
 		</h2>
-		<article style="max-width: 480px;">
+		<article class="form-card-sm">
 			if data.Error != "" {
 				<div class="alert alert-danger">{ data.Error }</div>
 			}
@@ -82,8 +82,10 @@ templ ApplicationForm(flashes []session.Flash, user layout.NavUser, data Applica
 					Name
 					<input type="text" id="name" name="name" value={ data.Name } required autofocus/>
 				</label>
-				<button type="submit" style="width: auto;">Save</button>
-				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/applications/">Cancel</a>
+				<div class="form-actions">
+					<button type="submit">Save</button>
+					<a role="button" class="secondary outline" href="/applications/">Cancel</a>
+				</div>
 			</form>
 		</article>
 	}

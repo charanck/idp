@@ -71,7 +71,7 @@ templ FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData
 					<option value="disabled" selected?={ data.CurrentStatus == "disabled" }>Disabled</option>
 				</select>
 			</div>
-			<button type="submit" class="btn-sm secondary" style="width: auto;">Filter</button>
+			<button type="submit" class="btn-sm secondary">Filter</button>
 		</form>
 		if len(data.Groups) == 0 {
 			<div class="alert alert-secondary">No feature flags found.</div>
@@ -88,7 +88,7 @@ templ FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData
 					<tbody>
 						for _, entry := range group.Entries {
 							<tr>
-								<td style="width: 160px;">{ entry.EnvironmentName }</td>
+								<td class="col-env">{ entry.EnvironmentName }</td>
 								<td>
 									if entry.IsEnabled {
 										<span class="badge badge-success">Enabled</span>
@@ -99,7 +99,7 @@ templ FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData
 								<td class="actions">
 									<form method="post" action={ templ.URL("/flags/" + entry.ID + "/toggle/") }>
 										<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-										<button class="btn-sm outline secondary" type="submit" style="width: auto;">Toggle</button>
+										<button class="btn-sm outline secondary" type="submit">Toggle</button>
 									</form>
 									<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/flags/" + entry.ID + "/delete/") }>Delete</a>
 								</td>
@@ -152,7 +152,7 @@ type FlagFormData struct {
 templ FlagForm(flashes []session.Flash, user layout.NavUser, data FlagFormData) {
 	@layout.Base("New Feature Flag", "flags", user, flashes) {
 		<h2>New Feature Flag</h2>
-		<article style="max-width: 560px;">
+		<article class="form-card-md">
 			if data.Error != "" {
 				<div class="alert alert-danger">{ data.Error }</div>
 			}
@@ -188,8 +188,10 @@ templ FlagForm(flashes []session.Flash, user layout.NavUser, data FlagFormData) 
 					Enabled
 				</label>
 				<p class="stat-label">This flag will be created for every environment of the selected application.</p>
-				<button type="submit" style="width: auto;">Save</button>
-				<a role="button" class="secondary outline" style="width: auto; margin-left: 0.5rem;" href="/flags/">Cancel</a>
+				<div class="form-actions">
+					<button type="submit">Save</button>
+					<a role="button" class="secondary outline" href="/flags/">Cancel</a>
+				</div>
 			</form>
 		</article>
 	}

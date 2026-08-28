@@ -17,6 +17,7 @@ import (
 	apihttp "controlplane/api/http"
 	"controlplane/internal/appconfig"
 	"controlplane/internal/auth"
+	"controlplane/internal/notification"
 	"controlplane/web"
 )
 
@@ -89,26 +90,28 @@ func main() {
 	apiGroup := e.Group("/api/v1")
 	apihttp.RegisterConfigRoutes(apiGroup.Group("/config"), apihttp.NewConfigHandler(svc.Config), apihttp.NewFeatureFlagHandler(svc.Flags), apiKeyAuthMW)
 
-	notifAuthMW := apihttp.NewNotificationAPIKeyAuthMiddleware(
-		auth.ServiceClientAuthenticator{Service: svc.Auth},
-		svc.RateLimiter,
-		cfg.AuthRateLimitWindowSeconds,
-		cfg.S2SAuthRateLimit,
-	)
-	apihttp.RegisterNotificationRoutes(
-		apiGroup.Group("/notifications"),
-		apihttp.NewNotificationHandler(notif.Service, notif.Service, notif.Service, notif.Channels),
-		apihttp.NewSessionHandler(notif.TokenIssuer),
-		apihttp.NewSSEHandler(notif.TokenIssuer, notif.Hub),
-		apihttp.NewInAppHandler(notif.TokenIssuer, notif.Service),
-		notifAuthMW,
-	)
+	if notification.Enabled {
+		notifAuthMW := apihttp.NewNotificationAPIKeyAuthMiddleware(
+			auth.ServiceClientAuthenticator{Service: svc.Auth},
+			svc.RateLimiter,
+			cfg.AuthRateLimitWindowSeconds,
+			cfg.S2SAuthRateLimit,
+		)
+		apihttp.RegisterNotificationRoutes(
+			apiGroup.Group("/notifications"),
+			apihttp.NewNotificationHandler(notif.Service, notif.Service, notif.Service, notif.Channels),
+			apihttp.NewSessionHandler(notif.TokenIssuer),
+			apihttp.NewSSEHandler(notif.TokenIssuer, notif.Hub),
+			apihttp.NewInAppHandler(notif.TokenIssuer, notif.Service),
+			notifAuthMW,
+		)
 
-	go func() {
-		if err := notif.Run(); err != nil {
-			slog.Error("asynq server stopped", "err", err)
-		}
-	}()
+		go func() {
+			if err := notif.Run(); err != nil {
+				slog.Error("asynq server stopped", "err", err)
+			}
+		}()
+	}
 
 	go func() {
 		slog.Info("starting server", "port", cfg.Port)

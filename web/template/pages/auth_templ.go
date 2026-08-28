@@ -112,19 +112,19 @@ func Login(flashes []session.Flash, data LoginData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if len(data.OAuthProviders) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div style=\"margin-top: 1.5rem;\"><div class=\"stat-label\" style=\"margin-bottom: 0.5rem;\">Or continue with an OAuth provider</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<div class=\"mt-6\"><div class=\"stat-label mb-2\">Or continue with an OAuth provider</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				for _, p := range data.OAuthProviders {
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<a role=\"button\" class=\"secondary outline\" style=\"display: block; margin-bottom: 0.5rem;\" href=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<a role=\"button\" class=\"secondary outline block mb-2\" href=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var6 templ.SafeURL
 					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/oauth/login/" + p.ID + "/"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/auth.templ`, Line: 43, Col: 142}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/auth.templ`, Line: 43, Col: 106}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 					if templ_7745c5c3_Err != nil {
@@ -206,7 +206,7 @@ func PasswordChange(flashes []session.Flash, user layout.NavUser, data PasswordC
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<h2>Change Password</h2><article style=\"max-width: 480px;\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<h2>Change Password</h2><article class=\"form-card-sm\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
