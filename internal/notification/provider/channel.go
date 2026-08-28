@@ -1,13 +1,32 @@
 // Package provider defines the notification delivery channel interface and
-// skeleton (no real provider integration) Email/SMS/WhatsApp implementations.
+// the Email/SMS/WhatsApp implementations (email is a real SMTP sender; SMS
+// and WhatsApp remain skeletons pending a real integration).
 package provider
 
-import "context"
+import (
+	"context"
+
+	"gorm.io/datatypes"
+)
 
 // Notification is the minimal view of a notification a Channel needs to send it.
 type Notification struct {
 	Recipient []byte // raw jsonb bytes
 	Content   []byte // raw jsonb bytes
+}
+
+// Settings is a channel's provider configuration, as loaded by the worker
+// for this send: Config is the non-secret jsonb blob as stored in
+// ProviderSetting.Config, Credentials is already decrypted. Both are the
+// zero value if the channel was never configured - a Channel that needs
+// them should treat that as a permanent (non-retryable) error. Each channel
+// decodes its own typed shape out of Config/Credentials, keyed by a
+// "provider" discriminator field, so adding a second provider for a channel
+// (e.g. a future SendGrid alongside SMTP) never requires touching this
+// struct, the DB schema, or ProviderSetting.
+type Settings struct {
+	Config      datatypes.JSON
+	Credentials string
 }
 
 // Result describes a successful send.
@@ -35,5 +54,5 @@ func (e *SendError) Unwrap() error { return e.Err }
 // validation code.
 type Channel interface {
 	Validate(recipient, content []byte) error
-	Send(ctx context.Context, n Notification) (*Result, error)
+	Send(ctx context.Context, n Notification, settings Settings) (*Result, error)
 }

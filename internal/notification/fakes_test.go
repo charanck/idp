@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	model "controlplane/internal/model/notification"
+	"controlplane/internal/notification"
+	"controlplane/internal/notification/provider"
 )
 
 type fakeNotificationRepository struct {
@@ -210,3 +212,55 @@ func (f *fakeProviderSettingRepository) Update(ctx context.Context, setting *mod
 }
 
 var _ model.ProviderSettingRepository = (*fakeProviderSettingRepository)(nil)
+
+// fakeHub records PublishSent calls instead of talking to Redis, so
+// Worker's "only inapp publishes" policy can be tested without miniredis.
+type fakeHub struct {
+	mu        sync.Mutex
+	published []model.Notification
+}
+
+func (f *fakeHub) PublishSent(ctx context.Context, n *model.Notification) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.published = append(f.published, *n)
+	return nil
+}
+
+func (f *fakeHub) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.published)
+}
+
+var _ notification.Publisher = (*fakeHub)(nil)
+
+// fakeChannel is a scripted provider.Channel: it returns whatever
+// result/error it was constructed with, and records the Settings it was
+// called with so tests can assert the worker loaded/decrypted them
+// correctly.
+type fakeChannel struct {
+	result *provider.Result
+	err    error
+
+	mu              sync.Mutex
+	lastSettings    provider.Settings
+	sawSettings     bool
+	invocationCount int
+}
+
+func (f *fakeChannel) Validate(recipient, content []byte) error { return nil }
+
+func (f *fakeChannel) Send(ctx context.Context, n provider.Notification, settings provider.Settings) (*provider.Result, error) {
+	f.mu.Lock()
+	f.lastSettings = settings
+	f.sawSettings = true
+	f.invocationCount++
+	f.mu.Unlock()
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.result, nil
+}
+
+var _ provider.Channel = (*fakeChannel)(nil)

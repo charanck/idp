@@ -198,6 +198,154 @@ func apiRequest(t *testing.T, base, method, path, apiKey string, body []byte) *h
 	return resp
 }
 
+// TestNotificationSettingsEmailForm_SavesAndPrefillsStructuredFields drives
+// the structured SMTP settings form (web/notification_settings_handler.go's
+// editEmail) end to end over real HTTP/CSRF/session auth: save typed
+// host/port/from/tls_mode/credentials, then GET the edit page again and
+// confirm the non-secret fields round-trip while credentials are never
+// echoed back into the form.
+func TestNotificationSettingsEmailForm_SavesAndPrefillsStructuredFields(t *testing.T) {
+	skipIfNotificationDisabled(t)
+	s := newAdminSession(t)
+	host := fmt.Sprintf("smtp-e2e-%d.example.com", time.Now().UnixNano())
+
+	token := s.csrfToken(t, "/notification-settings/email/edit/")
+	resp, err := s.http.PostForm(s.base+"/notification-settings/email/edit/", url.Values{
+		"csrf_token": {token},
+		"host":       {host},
+		"port":       {"587"},
+		"from":       {"noreply@example.com"},
+		"from_name":  {"Example"},
+		"tls_mode":   {"starttls"},
+		"username":   {"smtp-user"},
+		"password":   {"smtp-pass"},
+		"is_active":  {"on"},
+	})
+	if err != nil {
+		t.Fatalf("post email settings: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("post email settings status = %d, want 200 (after redirect follow)", resp.StatusCode)
+	}
+
+	editResp, err := s.http.Get(s.base + "/notification-settings/email/edit/")
+	if err != nil {
+		t.Fatalf("get email edit page: %v", err)
+	}
+	defer editResp.Body.Close()
+	body, err := io.ReadAll(editResp.Body)
+	if err != nil {
+		t.Fatalf("read email edit page: %v", err)
+	}
+	page := string(body)
+	for _, want := range []string{host, "587", "noreply@example.com", "Example"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("email edit page missing prefilled %q\n%s", want, page)
+		}
+	}
+	if strings.Contains(page, "smtp-pass") {
+		t.Fatalf("email edit page must never echo back stored credentials")
+	}
+}
+
+// TestNotificationSettingsEmailForm_RejectsInvalidPort exercises the
+// structured form's server-side validation (not just client-side): an
+// invalid port re-renders the form with 200 rather than persisting anything.
+func TestNotificationSettingsEmailForm_RejectsInvalidPort(t *testing.T) {
+	skipIfNotificationDisabled(t)
+	s := newAdminSession(t)
+
+	token := s.csrfToken(t, "/notification-settings/email/edit/")
+	resp, err := s.http.PostForm(s.base+"/notification-settings/email/edit/", url.Values{
+		"csrf_token": {token},
+		"host":       {"smtp.example.com"},
+		"port":       {"not-a-number"},
+		"from":       {"noreply@example.com"},
+		"tls_mode":   {"none"},
+	})
+	if err != nil {
+		t.Fatalf("post email settings: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (re-rendered form)", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	if !strings.Contains(string(body), "Port must be a valid number") {
+		t.Fatalf("response missing expected validation error:\n%s", body)
+	}
+}
+
+// TestNotificationSettingsEmailForm_BlankCredentialsPreservesExisting saves
+// credentials once, then saves again with blank username/password and
+// confirms the channel is still reported "configured" on the list page -
+// the "blank means unchanged" upsert convention holding over real HTTP.
+func TestNotificationSettingsEmailForm_BlankCredentialsPreservesExisting(t *testing.T) {
+	skipIfNotificationDisabled(t)
+	s := newAdminSession(t)
+
+	token := s.csrfToken(t, "/notification-settings/email/edit/")
+	resp, err := s.http.PostForm(s.base+"/notification-settings/email/edit/", url.Values{
+		"csrf_token": {token},
+		"host":       {"smtp.example.com"},
+		"port":       {"587"},
+		"from":       {"noreply@example.com"},
+		"tls_mode":   {"none"},
+		"username":   {"first-user"},
+		"password":   {"first-pass"},
+	})
+	if err != nil {
+		t.Fatalf("post initial email settings: %v", err)
+	}
+	resp.Body.Close()
+
+	token2 := s.csrfToken(t, "/notification-settings/email/edit/")
+	resp2, err := s.http.PostForm(s.base+"/notification-settings/email/edit/", url.Values{
+		"csrf_token": {token2},
+		"host":       {"smtp.example.com"},
+		"port":       {"2525"},
+		"from":       {"noreply@example.com"},
+		"tls_mode":   {"none"},
+	})
+	if err != nil {
+		t.Fatalf("post follow-up email settings: %v", err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("follow-up status = %d, want 200 (after redirect follow)", resp2.StatusCode)
+	}
+
+	listResp, err := s.http.Get(s.base + "/notification-settings/")
+	if err != nil {
+		t.Fatalf("get notification settings list: %v", err)
+	}
+	defer listResp.Body.Close()
+	body, err := io.ReadAll(listResp.Body)
+	if err != nil {
+		t.Fatalf("read list page: %v", err)
+	}
+	if !strings.Contains(string(body), "Configured") {
+		t.Fatalf("email row expected to remain configured after blank-credentials save:\n%s", body)
+	}
+
+	editResp, err := s.http.Get(s.base + "/notification-settings/email/edit/")
+	if err != nil {
+		t.Fatalf("get email edit page: %v", err)
+	}
+	defer editResp.Body.Close()
+	editBody, err := io.ReadAll(editResp.Body)
+	if err != nil {
+		t.Fatalf("read email edit page: %v", err)
+	}
+	if !strings.Contains(string(editBody), "2525") {
+		t.Fatalf("config change from the follow-up save should have persisted:\n%s", editBody)
+	}
+}
+
 func TestCreateNotificationEndpoint_RequiresAPIKeyAuth(t *testing.T) {
 	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
@@ -234,14 +382,18 @@ func TestGetNotificationEndpoint_ReturnsNotFoundForUnknownID(t *testing.T) {
 
 // TestNotificationLifecycle_CreateListGetAndDeliver drives a notification
 // through the live create -> enqueue -> worker -> sent pipeline, exercising
-// create, get, and list along the way.
+// create, get, and list along the way. Uses "inapp" rather than "email":
+// email now sends over real SMTP (see internal/notification/provider/email.go)
+// and fails permanently when no provider settings are configured, whereas
+// inapp has no external provider to fail against and always succeeds.
 func TestNotificationLifecycle_CreateListGetAndDeliver(t *testing.T) {
 	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	apiKey := newAdminSession(t).createServiceClient(t)
+	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
 
 	createResp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
-		[]byte(`{"channel":"email","recipient":{"email":"a@example.com"},"content":{"subject":"hi"}}`))
+		[]byte(`{"channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
 	defer createResp.Body.Close()
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d", createResp.StatusCode)
@@ -254,11 +406,11 @@ func TestNotificationLifecycle_CreateListGetAndDeliver(t *testing.T) {
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if created.Channel != "email" {
-		t.Fatalf("channel = %q, want email", created.Channel)
+	if created.Channel != "inapp" {
+		t.Fatalf("channel = %q, want inapp", created.Channel)
 	}
 
-	listResp := apiRequest(t, base, http.MethodGet, "/api/v1/notifications?channel=email", apiKey, nil)
+	listResp := apiRequest(t, base, http.MethodGet, "/api/v1/notifications?channel=inapp", apiKey, nil)
 	defer listResp.Body.Close()
 	if listResp.StatusCode != http.StatusOK {
 		t.Fatalf("list status = %d", listResp.StatusCode)
@@ -422,15 +574,12 @@ func TestInAppUnreadEndpoint_ListsOnlyThatUsersUnreadAndMarksThemRead(t *testing
 	}
 }
 
-// TestSSEEventsEndpoint_ReceivesDeliveryNotice subscribes to the live SSE
-// stream for a fresh user, creates a notification addressed to that user,
-// and asserts the fire-and-forget delivery notice arrives once the worker
-// processes it.
-func TestSSEEventsEndpoint_ReceivesDeliveryNotice(t *testing.T) {
-	skipIfNotificationDisabled(t)
-	base := e2eBaseURL(t)
-	apiKey := newAdminSession(t).createServiceClient(t)
-	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
+// openSSEStream mints a session token for userID and opens the live SSE
+// stream, returning a channel that receives each event's "data: " payload
+// as it arrives. The caller must close resp.Body (returned for that
+// purpose) once done.
+func openSSEStream(t *testing.T, base, apiKey, userID string) (events chan string, body io.ReadCloser) {
+	t.Helper()
 	token := mintNotificationSessionToken(t, base, apiKey, userID)
 
 	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/notifications/sse/events", nil)
@@ -442,12 +591,12 @@ func TestSSEEventsEndpoint_ReceivesDeliveryNotice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET sse/events: %v", err)
 	}
-	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
 		t.Fatalf("sse status = %d", resp.StatusCode)
 	}
 
-	events := make(chan string, 1)
+	events = make(chan string, 1)
 	go func() {
 		scanner := bufio.NewScanner(resp.Body)
 		for scanner.Scan() {
@@ -458,9 +607,24 @@ func TestSSEEventsEndpoint_ReceivesDeliveryNotice(t *testing.T) {
 			}
 		}
 	}()
+	return events, resp.Body
+}
+
+// TestSSEEventsEndpoint_ReceivesDeliveryNotice subscribes to the live SSE
+// stream for a fresh user, creates an inapp notification addressed to that
+// user, and asserts the fire-and-forget delivery notice arrives once the
+// worker processes it.
+func TestSSEEventsEndpoint_ReceivesDeliveryNotice(t *testing.T) {
+	skipIfNotificationDisabled(t)
+	base := e2eBaseURL(t)
+	apiKey := newAdminSession(t).createServiceClient(t)
+	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
+
+	events, body := openSSEStream(t, base, apiKey, userID)
+	defer body.Close()
 
 	createResp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
-		[]byte(`{"channel":"email","recipient":{"email":"a@example.com","user_id":"`+userID+`"},"content":{"subject":"hi"}}`))
+		[]byte(`{"channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
 	defer createResp.Body.Close()
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d", createResp.StatusCode)
@@ -479,5 +643,58 @@ func TestSSEEventsEndpoint_ReceivesDeliveryNotice(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for sse delivery notice")
+	}
+}
+
+// TestSSEEventsEndpoint_OnlyPublishesForInAppChannel asserts the SSE
+// restriction added alongside real email sending: an email send (which now
+// reaches a terminal status - sent or permanently failed - just like any
+// other channel) must never produce an SSE event, only inapp sends do. This
+// guards internal/notification/worker.go's Worker.publish gate.
+func TestSSEEventsEndpoint_OnlyPublishesForInAppChannel(t *testing.T) {
+	skipIfNotificationDisabled(t)
+	base := e2eBaseURL(t)
+	apiKey := newAdminSession(t).createServiceClient(t)
+	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
+
+	events, body := openSSEStream(t, base, apiKey, userID)
+	defer body.Close()
+
+	createResp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
+		[]byte(`{"channel":"email","recipient":{"email":"a@example.com","user_id":"`+userID+`"},"content":{"subject":"hi"}}`))
+	defer createResp.Body.Close()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d", createResp.StatusCode)
+	}
+
+	select {
+	case payload := <-events:
+		t.Fatalf("expected no sse event for an email send, got: %s", payload)
+	case <-time.After(3 * time.Second):
+		// Expected: no event within the window.
+	}
+
+	// Prove the stream itself is still alive and the hub still works, so the
+	// absence above is the restriction working, not a dead subscription.
+	createResp2 := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
+		[]byte(`{"channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
+	defer createResp2.Body.Close()
+	if createResp2.StatusCode != http.StatusCreated {
+		t.Fatalf("create inapp status = %d", createResp2.StatusCode)
+	}
+	var created2 struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createResp2.Body).Decode(&created2); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	select {
+	case payload := <-events:
+		if !strings.Contains(payload, created2.ID) {
+			t.Fatalf("unexpected sse payload: %s", payload)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for sse delivery notice from inapp send")
 	}
 }

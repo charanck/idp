@@ -50,6 +50,12 @@ func (h *SSEHandler) Stream(c echo.Context) error {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
+	// Go's http.ResponseWriter buffers the status line/headers until enough
+	// body data accumulates or Flush is called - without this, a client
+	// waiting on the response (e.g. to confirm the stream is open before
+	// triggering whatever will publish the first event) never sees the
+	// headers, since nothing else writes to w until an event arrives.
+	w.Flush()
 
 	ctx := c.Request().Context()
 	sub := h.hub.Subscribe(ctx, userID)

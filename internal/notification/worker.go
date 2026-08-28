@@ -13,6 +13,13 @@ import (
 	"controlplane/internal/notification/provider"
 )
 
+// Publisher is the narrow slice of *Hub that Worker needs, satisfied by
+// *Hub. Narrowed to an interface (rather than a concrete *Hub field) so
+// worker tests can fake it without a real Redis.
+type Publisher interface {
+	PublishSent(ctx context.Context, n *model.Notification) error
+}
+
 // Worker processes TaskTypeSend tasks: send via the channel's provider, then
 // mirror the outcome into the notifications table and (if hub is non-nil)
 // publish the final status over SSE.
@@ -20,19 +27,21 @@ type Worker struct {
 	notifications *NotificationService
 	settings      *ProviderSettingService
 	channels      ChannelRegistry
-	hub           *Hub
+	hub           Publisher
 }
 
-func NewWorker(notifications *NotificationService, settings *ProviderSettingService, channels ChannelRegistry, hub *Hub) *Worker {
+func NewWorker(notifications *NotificationService, settings *ProviderSettingService, channels ChannelRegistry, hub Publisher) *Worker {
 	return &Worker{notifications: notifications, settings: settings, channels: channels, hub: hub}
 }
 
 // publish publishes n's current in-memory Status/Provider over SSE, if a hub
-// is configured. Errors are logged, not returned - a failed SSE publish
+// is configured. Restricted to ChannelInApp: SSE is a live nudge for the
+// pull-based in-app inbox, not a generic delivery-status feed for
+// email/sms/whatsapp. Errors are logged, not returned - a failed SSE publish
 // should never fail the send task itself (the row in Postgres is already
 // the source of truth, and SSE is fire-and-forget by design).
 func (w *Worker) publish(ctx context.Context, n *model.Notification) {
-	if w.hub == nil {
+	if w.hub == nil || n.Channel != model.ChannelInApp {
 		return
 	}
 	if err := w.hub.PublishSent(ctx, n); err != nil {
@@ -76,23 +85,32 @@ func (w *Worker) HandleSend(ctx context.Context, task *asynq.Task) error {
 		return fmt.Errorf("%w: %v", asynq.SkipRetry, permErr)
 	}
 
+	var settings provider.Settings
 	if w.settings != nil {
 		setting, err := w.settings.Get(ctx, n.Channel)
 		if err != nil {
 			return fmt.Errorf("load provider setting for %q: %w", n.Channel, err)
 		}
-		if setting != nil && !setting.IsActive {
-			permErr := fmt.Errorf("channel %q is disabled", n.Channel)
-			if markErr := w.notifications.markFailed(ctx, n.ID, n.Attempt, permErr); markErr != nil {
-				slog.Error("mark failed after disabled channel", "id", n.ID, "err", markErr)
+		if setting != nil {
+			if !setting.IsActive {
+				permErr := fmt.Errorf("channel %q is disabled", n.Channel)
+				if markErr := w.notifications.markFailed(ctx, n.ID, n.Attempt, permErr); markErr != nil {
+					slog.Error("mark failed after disabled channel", "id", n.ID, "err", markErr)
+				}
+				n.Status = model.StatusFailed
+				w.publish(ctx, n)
+				return fmt.Errorf("%w: %v", asynq.SkipRetry, permErr)
 			}
-			n.Status = model.StatusFailed
-			w.publish(ctx, n)
-			return fmt.Errorf("%w: %v", asynq.SkipRetry, permErr)
+			settings.Config = setting.Config
+			credentials, err := w.settings.DecryptCredentials(setting)
+			if err != nil {
+				return fmt.Errorf("decrypt provider credentials for %q: %w", n.Channel, err)
+			}
+			settings.Credentials = credentials
 		}
 	}
 
-	result, sendErr := channel.Send(ctx, provider.Notification{Recipient: n.Recipient, Content: n.Content})
+	result, sendErr := channel.Send(ctx, provider.Notification{Recipient: n.Recipient, Content: n.Content}, settings)
 	attempt := n.Attempt + 1
 	if sendErr != nil {
 		return w.handleSendError(ctx, n, attempt, sendErr)

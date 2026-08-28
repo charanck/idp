@@ -50,7 +50,7 @@ func (InAppChannel) Validate(recipient, content []byte) error {
 	return nil
 }
 
-func (InAppChannel) Send(ctx context.Context, n Notification) (*Result, error) {
+func (InAppChannel) Send(ctx context.Context, n Notification, settings Settings) (*Result, error) {
 	slog.InfoContext(ctx, "storing inapp notification", "recipient", string(n.Recipient))
 	return &Result{Provider: "inapp", ProviderMessageID: "inapp-" + uuid.NewString()}, nil
 }

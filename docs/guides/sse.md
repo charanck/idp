@@ -9,6 +9,11 @@ endpoint doesn't accept `X-API-Key`. Instead, your backend (holding the service-
 mints a short-lived bearer token on the user's behalf and hands it to whatever is opening the
 stream (a browser tab, a mobile app, etc.).
 
+Only `inapp` sends ever publish an SSE event — `email`, `sms`, and `whatsapp` are fire-and-forget
+with no live push, since there's no "the recipient is watching a stream" concept for those
+channels. Poll [In-app inbox](inapp-inbox.md) or your own delivery records if you need status for
+those.
+
 ## 1. Mint a session token
 
 `POST /api/v1/notifications/sessions`, authenticated with `X-API-Key: <key_id>.<secret>`.

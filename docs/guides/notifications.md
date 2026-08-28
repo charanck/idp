@@ -5,11 +5,12 @@ and a background worker (running inside the same `cmd/server` process) delivers 
 retries. All endpoints on this page are authenticated with `X-API-Key: <key_id>.<secret>`, the
 same service-client key used for configs/flags.
 
-!!! note "Email, SMS, and WhatsApp are simulated"
-    The `email`, `sms`, and `whatsapp` channels ship as skeleton providers: they validate input,
-    log the send, and report success without calling a real provider — there's no SMTP/Twilio/etc.
-    integration wired up yet. `inapp` is fully functional, since "delivery" is just persisting the
-    row for the recipient to pull later (see [In-app inbox](inapp-inbox.md)).
+!!! note "SMS and WhatsApp are simulated"
+    The `sms` and `whatsapp` channels ship as skeleton providers: they validate input, log the
+    send, and report success without calling a real provider — there's no Twilio/etc. integration
+    wired up yet. `email` sends real mail over SMTP (configured under **Notification Settings** in
+    the web UI); `inapp` is fully functional, since "delivery" is just persisting the row for the
+    recipient to pull later (see [In-app inbox](inapp-inbox.md)).
 
 ## Create a notification
 

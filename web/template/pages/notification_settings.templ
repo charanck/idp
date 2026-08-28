@@ -56,10 +56,21 @@ type NotificationSettingFormData struct {
 	CSRFToken  string
 	Channel    string
 	Label      string
-	Config     string
 	IsActive   bool
 	Configured bool
 	Error      string
+
+	// Config (JSON) - used for every channel except "email", which gets
+	// structured fields below instead (see EmailFrom, EmailHost, etc.).
+	Config string
+
+	// Email-specific structured fields, populated only when Channel == "email".
+	EmailHost     string
+	EmailPort     string
+	EmailFrom     string
+	EmailFromName string
+	EmailTLSMode  string
+	EmailUsername string
 }
 
 templ NotificationSettingForm(flashes []session.Flash, user layout.NavUser, data NotificationSettingFormData) {
@@ -71,18 +82,56 @@ templ NotificationSettingForm(flashes []session.Flash, user layout.NavUser, data
 			}
 			<form method="post" action={ templ.URL("/notification-settings/" + data.Channel + "/edit/") }>
 				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-				<label for="config">
-					Config (JSON)
-					<textarea id="config" name="config" rows="4">{ data.Config }</textarea>
-					<small>Provider-specific, non-secret settings (e.g. sender address), as a JSON object.</small>
-				</label>
-				<label for="credentials">
-					Credentials
-					<input type="password" id="credentials" name="credentials" placeholder="provider API key"/>
-					if data.Configured {
-						<small>Leave blank to keep the current credentials.</small>
-					}
-				</label>
+				if data.Channel == "email" {
+					<label for="host">
+						Host
+						<input type="text" id="host" name="host" value={ data.EmailHost } placeholder="smtp.example.com"/>
+					</label>
+					<label for="port">
+						Port
+						<input type="number" id="port" name="port" value={ data.EmailPort } placeholder="587"/>
+					</label>
+					<label for="from">
+						From address
+						<input type="email" id="from" name="from" value={ data.EmailFrom } placeholder="noreply@example.com"/>
+					</label>
+					<label for="from_name">
+						From name
+						<input type="text" id="from_name" name="from_name" value={ data.EmailFromName } placeholder="Example"/>
+					</label>
+					<label for="tls_mode">
+						TLS mode
+						<select id="tls_mode" name="tls_mode">
+							<option value="none" selected?={ data.EmailTLSMode == "none" }>None</option>
+							<option value="starttls" selected?={ data.EmailTLSMode == "starttls" }>STARTTLS</option>
+							<option value="tls" selected?={ data.EmailTLSMode == "tls" }>TLS</option>
+						</select>
+					</label>
+					<label for="username">
+						Username
+						<input type="text" id="username" name="username" value={ data.EmailUsername } placeholder="smtp username"/>
+					</label>
+					<label for="password">
+						Password
+						<input type="password" id="password" name="password" placeholder="smtp password"/>
+						if data.Configured {
+							<small>Leave username and password both blank to keep the current credentials.</small>
+						}
+					</label>
+				} else {
+					<label for="config">
+						Config (JSON)
+						<textarea id="config" name="config" rows="4">{ data.Config }</textarea>
+						<small>Provider-specific, non-secret settings (e.g. sender address), as a JSON object.</small>
+					</label>
+					<label for="credentials">
+						Credentials
+						<input type="password" id="credentials" name="credentials" placeholder="provider API key"/>
+						if data.Configured {
+							<small>Leave blank to keep the current credentials.</small>
+						}
+					</label>
+				}
 				<label for="is_active">
 					if data.IsActive {
 						<input type="checkbox" id="is_active" name="is_active" checked/>

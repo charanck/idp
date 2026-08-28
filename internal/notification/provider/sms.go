@@ -45,7 +45,7 @@ func (SMSChannel) Validate(recipient, content []byte) error {
 	return nil
 }
 
-func (SMSChannel) Send(ctx context.Context, n Notification) (*Result, error) {
+func (SMSChannel) Send(ctx context.Context, n Notification, settings Settings) (*Result, error) {
 	slog.InfoContext(ctx, "simulating sms send", "recipient", string(n.Recipient))
 	return &Result{Provider: "sms-sim", ProviderMessageID: "sim-" + uuid.NewString()}, nil
 }

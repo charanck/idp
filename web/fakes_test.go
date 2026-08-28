@@ -1017,10 +1017,14 @@ func (f *fakeProviderSettingStore) Upsert(ctx context.Context, in notification.U
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	s := f.settings[in.Channel]
-	s.ID = uuid.New()
+	if s.ID == uuid.Nil {
+		s.ID = uuid.New()
+	}
 	s.Channel = in.Channel
 	s.Config = in.Config
-	s.Credentials = in.Credentials
+	if in.Credentials != "" {
+		s.Credentials = in.Credentials
+	}
 	s.IsActive = in.IsActive
 	f.settings[in.Channel] = s
 	return &s, nil

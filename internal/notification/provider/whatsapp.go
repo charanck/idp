@@ -47,7 +47,7 @@ func (WhatsAppChannel) Validate(recipient, content []byte) error {
 	return nil
 }
 
-func (WhatsAppChannel) Send(ctx context.Context, n Notification) (*Result, error) {
+func (WhatsAppChannel) Send(ctx context.Context, n Notification, settings Settings) (*Result, error) {
 	slog.InfoContext(ctx, "simulating whatsapp send", "recipient", string(n.Recipient))
 	return &Result{Provider: "whatsapp-sim", ProviderMessageID: "sim-" + uuid.NewString()}, nil
 }
