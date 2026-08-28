@@ -31,8 +31,8 @@
 - **Rate limiting** on the login endpoint and failed S2S API-key attempts.
 - **Redis-backed caching** for read-heavy config/flag lookups.
 
-📖 **Full documentation, including per-API guides in cURL/Python/Node.js/Go, is hosted at
-<https://charanck.github.io/idp/>** (source in [`docs/`](./docs)).
+📖 **Full documentation, including per-API guides in cURL/Python/Node.js/Go, lives in
+[`docs/`](./docs).**
 
 ## Quick start
 
@@ -85,8 +85,6 @@ make test
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full dev workflow.
 
 ## Documentation
-
-Hosted at **<https://charanck.github.io/idp/>**; source in [`docs/`](./docs).
 
 | | |
 |---|---|

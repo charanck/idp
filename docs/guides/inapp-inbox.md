@@ -18,12 +18,15 @@ Same as [SSE, step 1](sse.md#1-mint-a-session-token):
 
 `GET /api/v1/notifications/inapp/unread`, authenticated with `Authorization: Bearer <token>`.
 
-!!! warning "This call marks notifications as read"
-    Every notification returned by this call is immediately marked read — there's no separate
-    "peek without consuming" endpoint. If your client needs to display them again later, store
-    the response; a second call won't return the same notifications.
+> **Warning:** This call marks notifications as read
+>
+> Every notification returned by this call is immediately marked read — there's no separate
+> "peek without consuming" endpoint. If your client needs to display them again later, store
+> the response; a second call won't return the same notifications.
 
-```json title="Response"
+Response:
+
+```json
 [
   {
     "id": "d4e1...",
@@ -42,73 +45,73 @@ Same as [SSE, step 1](sse.md#1-mint-a-session-token):
 
 An empty array means there's nothing unread — not an error.
 
-=== "cURL"
+#### cURL
 
-    ```bash
-    TOKEN=$(curl -s -X POST "http://localhost:8000/api/v1/notifications/sessions" \
-      -H "X-API-Key: <key_id>.<secret>" -H "Content-Type: application/json" \
-      -d '{"user_id":"user-123"}' | jq -r .token)
+```bash
+TOKEN=$(curl -s -X POST "http://localhost:8000/api/v1/notifications/sessions" \
+  -H "X-API-Key: <key_id>.<secret>" -H "Content-Type: application/json" \
+  -d '{"user_id":"user-123"}' | jq -r .token)
 
-    curl "http://localhost:8000/api/v1/notifications/inapp/unread" \
-      -H "Authorization: Bearer $TOKEN"
-    ```
+curl "http://localhost:8000/api/v1/notifications/inapp/unread" \
+  -H "Authorization: Bearer $TOKEN"
+```
 
-=== "Python"
+#### Python
 
-    ```python
-    import requests
+```python
+import requests
 
-    def get_unread(base_url, token):
-        response = requests.get(
-            f"{base_url}/api/v1/notifications/inapp/unread",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        response.raise_for_status()
-        return response.json()
+def get_unread(base_url, token):
+    response = requests.get(
+        f"{base_url}/api/v1/notifications/inapp/unread",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    return response.json()
 
-    unread = get_unread("http://localhost:8000", token)
-    for n in unread:
-        print(n["content"])
-    ```
+unread = get_unread("http://localhost:8000", token)
+for n in unread:
+    print(n["content"])
+```
 
-=== "Node.js / TypeScript"
+#### Node.js / TypeScript
 
-    ```typescript
-    async function getUnread(baseUrl: string, token: string) {
-      const res = await fetch(`${baseUrl}/api/v1/notifications/inapp/unread`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to fetch unread notifications: ${res.status}`);
-      }
-      return res.json();
+```typescript
+async function getUnread(baseUrl: string, token: string) {
+  const res = await fetch(`${baseUrl}/api/v1/notifications/inapp/unread`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch unread notifications: ${res.status}`);
+  }
+  return res.json();
+}
+
+const unread = await getUnread("http://localhost:8000", token);
+for (const n of unread) {
+  console.log(n.content);
+}
+```
+
+#### Go
+
+```go
+func getUnread(baseURL, token string) ([]byte, error) {
+    req, err := http.NewRequest(http.MethodGet, baseURL+"/api/v1/notifications/inapp/unread", nil)
+    if err != nil {
+        return nil, err
     }
+    req.Header.Set("Authorization", "Bearer "+token)
 
-    const unread = await getUnread("http://localhost:8000", token);
-    for (const n of unread) {
-      console.log(n.content);
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+        return nil, err
     }
-    ```
-
-=== "Go"
-
-    ```go
-    func getUnread(baseURL, token string) ([]byte, error) {
-        req, err := http.NewRequest(http.MethodGet, baseURL+"/api/v1/notifications/inapp/unread", nil)
-        if err != nil {
-            return nil, err
-        }
-        req.Header.Set("Authorization", "Bearer "+token)
-
-        resp, err := http.DefaultClient.Do(req)
-        if err != nil {
-            return nil, err
-        }
-        defer resp.Body.Close()
-        return io.ReadAll(resp.Body)
-    }
-    ```
+    defer resp.Body.Close()
+    return io.ReadAll(resp.Body)
+}
+```
 
 ## Errors
 
