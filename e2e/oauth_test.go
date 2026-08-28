@@ -43,15 +43,15 @@ func (s *adminSession) createOAuthProvider(t *testing.T, providerURL string) str
 	name := fmt.Sprintf("e2e-provider-%d", time.Now().UnixNano())
 	token := s.csrfToken(t, "/oauth/providers/create/")
 	resp, err := s.http.PostForm(s.base+"/oauth/providers/create/", url.Values{
-		"csrf_token":         {token},
-		"name":               {name},
-		"client_id":          {"client-id"},
-		"client_secret":      {"client-secret"},
-		"authorization_url":  {providerURL + "/authorize"},
-		"token_url":          {providerURL + "/token"},
-		"userinfo_url":       {providerURL + "/userinfo"},
-		"auto_create_users":  {"on"},
-		"is_active":          {"on"},
+		"csrf_token":        {token},
+		"name":              {name},
+		"client_id":         {"client-id"},
+		"client_secret":     {"client-secret"},
+		"authorization_url": {providerURL + "/authorize"},
+		"token_url":         {providerURL + "/token"},
+		"userinfo_url":      {providerURL + "/userinfo"},
+		"auto_create_users": {"on"},
+		"is_active":         {"on"},
 	})
 	if err != nil {
 		t.Fatalf("create oauth provider: %v", err)

@@ -127,6 +127,110 @@ func TestListConfigsForClientEndpoint_ReturnsConfigsEncryptedWithClientKey(t *te
 	}
 }
 
+func TestListConfigsV2Endpoint_ReturnsFlatKeyValueMapEncryptedWithClientKey(t *testing.T) {
+	base := e2eBaseURL(t)
+	admin := newAdminSession(t)
+	apiKey := admin.createServiceClient(t)
+	appName, appID := admin.createApplication(t)
+	envName, envID := admin.createEnvironment(t, appID)
+	admin.createConfig(t, appID, envID, "API_URL", "https://api.example.com")
+
+	resp := apiRequest(t, base, http.MethodGet, "/api/v1/config/v2/configs/list?service="+appName+"&environment="+envName, apiKey, nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	value, ok := body["API_URL"]
+	if !ok {
+		t.Fatalf("unexpected body: %+v", body)
+	}
+	if value == "https://api.example.com" {
+		t.Fatal("expected value to be re-encrypted with the client's key, not returned in plaintext")
+	}
+}
+
+// TestListConfigsV2Endpoint_MatchesV1Entries proves v2 is additive rather
+// than a divergent read path: for the same service/environment/client, v2's
+// flat map must contain exactly the same keys and (still-encrypted) values
+// as v1's array, just reshaped.
+func TestListConfigsV2Endpoint_MatchesV1Entries(t *testing.T) {
+	base := e2eBaseURL(t)
+	admin := newAdminSession(t)
+	apiKey := admin.createServiceClient(t)
+	appName, appID := admin.createApplication(t)
+	envName, envID := admin.createEnvironment(t, appID)
+	admin.createConfig(t, appID, envID, "API_URL", "https://api.example.com")
+	admin.createConfig(t, appID, envID, "TIMEOUT_MS", "3000")
+
+	v1Resp := apiRequest(t, base, http.MethodGet, "/api/v1/config/configs/list?service="+appName+"&environment="+envName, apiKey, nil)
+	defer v1Resp.Body.Close()
+	if v1Resp.StatusCode != http.StatusOK {
+		t.Fatalf("v1 status = %d", v1Resp.StatusCode)
+	}
+	var v1Body []struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(v1Resp.Body).Decode(&v1Body); err != nil {
+		t.Fatalf("decode v1: %v", err)
+	}
+
+	v2Resp := apiRequest(t, base, http.MethodGet, "/api/v1/config/v2/configs/list?service="+appName+"&environment="+envName, apiKey, nil)
+	defer v2Resp.Body.Close()
+	if v2Resp.StatusCode != http.StatusOK {
+		t.Fatalf("v2 status = %d", v2Resp.StatusCode)
+	}
+	var v2Body map[string]string
+	if err := json.NewDecoder(v2Resp.Body).Decode(&v2Body); err != nil {
+		t.Fatalf("decode v2: %v", err)
+	}
+
+	if len(v1Body) != len(v2Body) {
+		t.Fatalf("v1 has %d entries, v2 has %d entries: v1=%+v v2=%+v", len(v1Body), len(v2Body), v1Body, v2Body)
+	}
+	for _, entry := range v1Body {
+		v2Value, ok := v2Body[entry.Key]
+		if !ok {
+			t.Fatalf("key %q present in v1 but missing from v2: %+v", entry.Key, v2Body)
+		}
+		if v2Value != entry.Value {
+			t.Fatalf("key %q: v1 value %q != v2 value %q", entry.Key, entry.Value, v2Value)
+		}
+	}
+}
+
+func TestListConfigsV2Endpoint_UnknownScopeReturnsEmptyMap(t *testing.T) {
+	base := e2eBaseURL(t)
+	admin := newAdminSession(t)
+	apiKey := admin.createServiceClient(t)
+
+	resp := apiRequest(t, base, http.MethodGet, "/api/v1/config/v2/configs/list?service=no-such-service&environment=no-such-env", apiKey, nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body) != 0 {
+		t.Fatalf("body = %+v, want empty map", body)
+	}
+}
+
+func TestListConfigsV2Endpoint_RequiresAPIKeyAuth(t *testing.T) {
+	base := e2eBaseURL(t)
+	resp := apiRequest(t, base, http.MethodGet, "/api/v1/config/v2/configs/list?service=any&environment=any", "", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
 func TestListFeatureFlagsEndpoint_AcceptsServiceClientAPIKey(t *testing.T) {
 	base := e2eBaseURL(t)
 	admin := newAdminSession(t)

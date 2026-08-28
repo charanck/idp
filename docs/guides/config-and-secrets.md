@@ -180,6 +180,151 @@ before encryption; `value` is always the Fernet-encrypted ciphertext string rega
     }
     ```
 
+## List configs/secrets (v2, key-value map)
+
+`GET /api/v1/config/v2/configs/list?service=<name>&environment=<name>`, same auth and scope as v1
+above. Additive, not a replacement: v1's array response is unchanged. Use v2 when the caller only
+needs values and would otherwise discard `id`/`service`/`environment`/`type`/`is_secret` from every
+v1 entry — the response is a flat map instead:
+
+```json
+{
+  "DATABASE_URL": "gAAAAA...",
+  "FEATURE_TIMEOUT_MS": "gAAAAA..."
+}
+```
+
+Every value is still the Fernet ciphertext, encrypted with the calling client's own
+`encryption_key` exactly as in v1 — decrypt each value the same way, there's just no per-entry
+metadata to unwrap first. `type` and `is_secret` aren't in the v2 response, so if the caller needs
+either of those, use v1 instead.
+
+=== "cURL"
+
+    ```bash
+    curl "http://localhost:8000/api/v1/config/v2/configs/list?service=my-app&environment=prod" \
+      -H "X-API-Key: <key_id>.<secret>"
+    ```
+
+=== "Python"
+
+    ```python
+    # pip install requests cryptography
+    import requests
+    from cryptography.fernet import Fernet
+
+    def get_decrypted_configs_v2(base_url, api_key, encryption_key, service, environment):
+        response = requests.get(
+            f"{base_url}/api/v1/config/v2/configs/list",
+            params={"service": service, "environment": environment},
+            headers={"X-API-Key": api_key},
+            timeout=10,
+        )
+        response.raise_for_status()
+
+        fernet = Fernet(encryption_key.encode())
+        return {
+            key: fernet.decrypt(value.encode()).decode()
+            for key, value in response.json().items()
+        }
+
+    configs = get_decrypted_configs_v2(
+        "http://localhost:8000", api_key, encryption_key, "my-app", "prod"
+    )
+    print(configs["DATABASE_URL"])
+    ```
+
+=== "Node.js / TypeScript"
+
+    ```typescript
+    // npm install fernet
+    import Fernet from "fernet";
+
+    async function getDecryptedConfigsV2(
+      baseUrl: string,
+      apiKey: string,        // "<key_id>.<secret>"
+      encryptionKey: string, // this client's Fernet key, shown once at creation
+      service: string,
+      environment: string
+    ): Promise<Record<string, string>> {
+      const url = `${baseUrl}/api/v1/config/v2/configs/list?service=${encodeURIComponent(
+        service
+      )}&environment=${encodeURIComponent(environment)}`;
+
+      const res = await fetch(url, { headers: { "X-API-Key": apiKey } });
+      if (!res.ok) {
+        throw new Error(`Failed to list configs: ${res.status} ${await res.text()}`);
+      }
+
+      const encrypted: Record<string, string> = await res.json();
+      const secret = new Fernet.Secret(encryptionKey);
+
+      const result: Record<string, string> = {};
+      for (const [key, value] of Object.entries(encrypted)) {
+        const token = new Fernet.Token({ secret, token: value, ttl: 0 });
+        result[key] = token.decode() as string;
+      }
+      return result;
+    }
+
+    const configs = await getDecryptedConfigsV2(
+      "http://localhost:8000", apiKey, encryptionKey, "my-app", "prod"
+    );
+    console.log(configs.DATABASE_URL);
+    ```
+
+=== "Go"
+
+    ```go
+    // go get github.com/fernet/fernet-go
+    import (
+        "encoding/json"
+        "fmt"
+        "net/http"
+        "net/url"
+
+        "github.com/fernet/fernet-go"
+    )
+
+    func getDecryptedConfigsV2(baseURL, apiKey, encryptionKey, service, environment string) (map[string]string, error) {
+        reqURL := fmt.Sprintf("%s/api/v1/config/v2/configs/list?%s", baseURL, url.Values{
+            "service":     {service},
+            "environment": {environment},
+        }.Encode())
+
+        req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+        if err != nil {
+            return nil, err
+        }
+        req.Header.Set("X-API-Key", apiKey)
+
+        resp, err := http.DefaultClient.Do(req)
+        if err != nil {
+            return nil, err
+        }
+        defer resp.Body.Close()
+        if resp.StatusCode != http.StatusOK {
+            return nil, fmt.Errorf("list configs: unexpected status %d", resp.StatusCode)
+        }
+
+        var encrypted map[string]string
+        if err := json.NewDecoder(resp.Body).Decode(&encrypted); err != nil {
+            return nil, err
+        }
+
+        keys := fernet.MustDecodeKeys(encryptionKey)
+        result := make(map[string]string, len(encrypted))
+        for key, value := range encrypted {
+            decrypted := fernet.VerifyAndDecrypt([]byte(value), 0, keys)
+            if decrypted == nil {
+                return nil, fmt.Errorf("failed to decrypt config %q", key)
+            }
+            result[key] = string(decrypted)
+        }
+        return result, nil
+    }
+    ```
+
 ## Config history and rollback
 
 Every write is snapshotted as an immutable version. From a config's detail page in the web UI,

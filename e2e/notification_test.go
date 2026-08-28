@@ -19,7 +19,10 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
 	"time"
+
+	"controlplane/internal/notification"
 )
 
 // e2eBaseURL returns the base URL of the running instance under test,
@@ -32,6 +35,19 @@ func e2eBaseURL(t *testing.T) string {
 		t.Skip("CP_E2E_BASE_URL not set, skipping e2e test")
 	}
 	return strings.TrimRight(base, "/")
+}
+
+// skipIfNotificationDisabled skips the calling test when notification.Enabled
+// is false, mirroring how the server itself skips registering the
+// notification routes/worker - see internal/notification/flag.go. Without
+// this, every notification e2e test would fail against the routes 404ing
+// (via the login-required catch-all, since they're never registered) rather
+// than exercising the feature.
+func skipIfNotificationDisabled(t *testing.T) {
+	t.Helper()
+	if !notification.Enabled {
+		t.Skip("notification.Enabled is false, skipping notification e2e test")
+	}
 }
 
 var csrfTokenRe = regexp.MustCompile(`name="csrf_token" value="([^"]*)"`)
@@ -76,6 +92,39 @@ func newAdminSession(t *testing.T) *adminSession {
 	}
 
 	return s
+}
+
+// mustAdminEmail returns ADMIN_EMAIL, skipping the calling test if it isn't
+// set - mirrors the skip newAdminSession already does, for tests that need
+// the bootstrap admin's own email rather than a fresh session.
+func mustAdminEmail(t *testing.T) string {
+	t.Helper()
+	email := os.Getenv("ADMIN_EMAIL")
+	if email == "" {
+		t.Skip("ADMIN_EMAIL not set, skipping e2e test")
+	}
+	return email
+}
+
+// mustAdminPassword returns ADMIN_PASSWORD, skipping the calling test if it
+// isn't set - see mustAdminEmail.
+func mustAdminPassword(t *testing.T) string {
+	t.Helper()
+	password := os.Getenv("ADMIN_PASSWORD")
+	if password == "" {
+		t.Skip("ADMIN_PASSWORD not set, skipping e2e test")
+	}
+	return password
+}
+
+// createUserReturningPassword is like createUser but also returns the fixed
+// password it set, for tests that need to log in as the user afterward.
+func (s *adminSession) createUserReturningPassword(t *testing.T) (email, password string) {
+	t.Helper()
+	email = fmt.Sprintf("e2e-user-%d@example.com", time.Now().UnixNano())
+	password = "password12345"
+	s.createUser(t, email, true)
+	return email, password
 }
 
 // csrfToken GETs path and extracts the hidden csrf_token form field every
@@ -150,6 +199,7 @@ func apiRequest(t *testing.T, base, method, path, apiKey string, body []byte) *h
 }
 
 func TestCreateNotificationEndpoint_RequiresAPIKeyAuth(t *testing.T) {
+	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	resp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", "", []byte(`{"channel":"email","recipient":{},"content":{}}`))
 	defer resp.Body.Close()
@@ -159,6 +209,7 @@ func TestCreateNotificationEndpoint_RequiresAPIKeyAuth(t *testing.T) {
 }
 
 func TestCreateNotificationEndpoint_RejectsInvalidChannel(t *testing.T) {
+	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	apiKey := newAdminSession(t).createServiceClient(t)
 
@@ -170,6 +221,7 @@ func TestCreateNotificationEndpoint_RejectsInvalidChannel(t *testing.T) {
 }
 
 func TestGetNotificationEndpoint_ReturnsNotFoundForUnknownID(t *testing.T) {
+	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	apiKey := newAdminSession(t).createServiceClient(t)
 
@@ -184,6 +236,7 @@ func TestGetNotificationEndpoint_ReturnsNotFoundForUnknownID(t *testing.T) {
 // through the live create -> enqueue -> worker -> sent pipeline, exercising
 // create, get, and list along the way.
 func TestNotificationLifecycle_CreateListGetAndDeliver(t *testing.T) {
+	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	apiKey := newAdminSession(t).createServiceClient(t)
 
@@ -253,6 +306,7 @@ func TestNotificationLifecycle_CreateListGetAndDeliver(t *testing.T) {
 }
 
 func TestCreateSessionEndpoint_MintsToken(t *testing.T) {
+	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	apiKey := newAdminSession(t).createServiceClient(t)
 
@@ -274,6 +328,7 @@ func TestCreateSessionEndpoint_MintsToken(t *testing.T) {
 }
 
 func TestInAppUnreadEndpoint_RejectsMissingAuthorizationHeader(t *testing.T) {
+	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	resp := apiRequest(t, base, http.MethodGet, "/api/v1/notifications/inapp/unread", "", nil)
 	defer resp.Body.Close()
@@ -283,6 +338,7 @@ func TestInAppUnreadEndpoint_RejectsMissingAuthorizationHeader(t *testing.T) {
 }
 
 func TestSSEEventsEndpoint_RejectsMissingAuthorizationHeader(t *testing.T) {
+	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	resp := apiRequest(t, base, http.MethodGet, "/api/v1/notifications/sse/events", "", nil)
 	defer resp.Body.Close()
@@ -310,6 +366,7 @@ func mintNotificationSessionToken(t *testing.T, base, apiKey, userID string) str
 }
 
 func TestInAppUnreadEndpoint_ListsOnlyThatUsersUnreadAndMarksThemRead(t *testing.T) {
+	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	apiKey := newAdminSession(t).createServiceClient(t)
 	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
@@ -370,6 +427,7 @@ func TestInAppUnreadEndpoint_ListsOnlyThatUsersUnreadAndMarksThemRead(t *testing
 // and asserts the fire-and-forget delivery notice arrives once the worker
 // processes it.
 func TestSSEEventsEndpoint_ReceivesDeliveryNotice(t *testing.T) {
+	skipIfNotificationDisabled(t)
 	base := e2eBaseURL(t)
 	apiKey := newAdminSession(t).createServiceClient(t)
 	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
