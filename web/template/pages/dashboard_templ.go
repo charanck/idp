@@ -8,6 +8,7 @@ package pages
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
+import "encoding/json"
 import configmodel "controlplane/internal/model/config"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
@@ -20,6 +21,10 @@ type DashboardData struct {
 	FlagCount        int64
 	ClientCount      int64
 	RecentConfigs    []configmodel.ConfigEntry
+	// AnalyticsJSON is the pre-marshaled analyticsChartData payload (see
+	// web/dashboard_handler.go), embedded verbatim via templ.JSONScript for
+	// the Chart.js trend charts below.
+	AnalyticsJSON string
 }
 
 func Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData) templ.Component {
@@ -101,7 +106,7 @@ func Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData)
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(entry.Application.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 38, Col: 40}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 43, Col: 40}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -114,7 +119,7 @@ func Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData)
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(entry.Environment.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 38, Col: 78}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 43, Col: 78}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -127,7 +132,7 @@ func Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData)
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(entry.Key)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 38, Col: 94}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 43, Col: 94}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -153,7 +158,15 @@ func Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData)
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</tbody></table></article>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</tbody></table></article><h2>Analytics (Last 7 Days)</h2><div class=\"stat-grid\"><article class=\"card\"><header>Activity Trend</header><canvas id=\"chart-activity-trend\"></canvas></article><article class=\"card\"><header>Config / Secret / Flag Growth</header><canvas id=\"chart-growth\"></canvas></article><article class=\"card\"><header>Notification Delivery</header><canvas id=\"chart-notifications\"></canvas></article><article class=\"card\"><header>S2S API Request Volume</header><canvas id=\"chart-s2s-usage\"></canvas></article></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templ.JSONScript("analytics-data", json.RawMessage(data.AnalyticsJSON)).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, " <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4\"></script> <script>\n\t\t\t(function() {\n\t\t\t\tvar data = JSON.parse(document.getElementById('analytics-data').textContent || '{}');\n\t\t\t\tvar labels = data.labels || [];\n\n\t\t\t\tfunction lineChart(canvasId, series) {\n\t\t\t\t\tvar ctx = document.getElementById(canvasId);\n\t\t\t\t\tif (!ctx) return;\n\t\t\t\t\tnew Chart(ctx, {\n\t\t\t\t\t\ttype: 'line',\n\t\t\t\t\t\tdata: { labels: labels, datasets: series },\n\t\t\t\t\t\toptions: { responsive: true, interaction: { mode: 'index', intersect: false } }\n\t\t\t\t\t});\n\t\t\t\t}\n\n\t\t\t\tlineChart('chart-activity-trend', [\n\t\t\t\t\t{ label: 'Create', data: data.activityCreate, borderColor: '#2563eb' },\n\t\t\t\t\t{ label: 'Update', data: data.activityUpdate, borderColor: '#d97706' },\n\t\t\t\t\t{ label: 'Delete', data: data.activityDelete, borderColor: '#dc2626' },\n\t\t\t\t\t{ label: 'Login', data: data.activityLogin, borderColor: '#16a34a' },\n\t\t\t\t\t{ label: 'Login Failed', data: data.activityLoginFailed, borderColor: '#6b7280' }\n\t\t\t\t]);\n\t\t\t\tlineChart('chart-growth', [\n\t\t\t\t\t{ label: 'Configs', data: data.configCount, borderColor: '#2563eb' },\n\t\t\t\t\t{ label: 'Secrets', data: data.secretCount, borderColor: '#d97706' },\n\t\t\t\t\t{ label: 'Flags', data: data.flagCount, borderColor: '#16a34a' }\n\t\t\t\t]);\n\t\t\t\tlineChart('chart-notifications', [\n\t\t\t\t\t{ label: 'Sent', data: data.notificationSent, borderColor: '#16a34a' },\n\t\t\t\t\t{ label: 'Failed', data: data.notificationFailed, borderColor: '#dc2626' }\n\t\t\t\t]);\n\t\t\t\tlineChart('chart-s2s-usage', [\n\t\t\t\t\t{ label: 'S2S Requests', data: data.s2sRequests, borderColor: '#2563eb' }\n\t\t\t\t]);\n\t\t\t})();\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -188,7 +201,7 @@ func statCard(label string, count int64, icon string) templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<article class=\"stat-card\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<article class=\"stat-card\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -197,7 +210,7 @@ func statCard(label string, count int64, icon string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<i class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<i class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -210,33 +223,33 @@ func statCard(label string, count int64, icon string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\"></i><div class=\"stat-count\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\"></i><div class=\"stat-count\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(formatCount(count))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 58, Col: 46}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 120, Col: 46}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</div><div class=\"stat-label\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</div><div class=\"stat-label\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 59, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/dashboard.templ`, Line: 121, Col: 33}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</div></article>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div></article>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

@@ -20,6 +20,7 @@ import (
 	"controlplane/internal/config"
 	"controlplane/internal/dashboard"
 	activitymodel "controlplane/internal/model/activity"
+	analyticsmodel "controlplane/internal/model/analytics"
 	authmodel "controlplane/internal/model/auth"
 	configmodel "controlplane/internal/model/config"
 	notificationmodel "controlplane/internal/model/notification"
@@ -198,6 +199,15 @@ func (f *fakeDashboardReader) RecentConfigs(ctx context.Context, limit int) ([]c
 		return f.recentConfigs[:limit], nil
 	}
 	return f.recentConfigs, nil
+}
+
+// fakeAnalyticsReader implements web.AnalyticsReader.
+type fakeAnalyticsReader struct {
+	snapshots []analyticsmodel.Snapshot
+}
+
+func (f *fakeAnalyticsReader) RecentSnapshots(ctx context.Context) ([]analyticsmodel.Snapshot, error) {
+	return f.snapshots, nil
 }
 
 // fakeApplicationStore implements web.ApplicationStore in-memory.

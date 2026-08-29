@@ -29,18 +29,26 @@ type RateLimiter interface {
 	IsRateLimited(ctx context.Context, key, clientIP string, limit int, window time.Duration) (bool, error)
 }
 
+// UsageCounter is the narrow slice of *analytics.RedisCounter
+// APIKeyAuthMiddleware needs to track S2S request volume for the analytics
+// dashboard.
+type UsageCounter interface {
+	Incr(ctx context.Context) error
+}
+
 // APIKeyAuthMiddleware authenticates the "X-API-Key: <key_id>.<secret>" S2S
 // header, throttled by a plain fixed-window request counter per client IP
 // (every request counts toward the window, not just failed ones).
 type APIKeyAuthMiddleware struct {
 	authenticator APIKeyAuthenticator
 	limiter       RateLimiter
+	usage         UsageCounter
 	windowSeconds int
 	limit         int
 }
 
-func NewAPIKeyAuthMiddleware(authenticator APIKeyAuthenticator, limiter RateLimiter, windowSeconds, limit int) *APIKeyAuthMiddleware {
-	return &APIKeyAuthMiddleware{authenticator: authenticator, limiter: limiter, windowSeconds: windowSeconds, limit: limit}
+func NewAPIKeyAuthMiddleware(authenticator APIKeyAuthenticator, limiter RateLimiter, usage UsageCounter, windowSeconds, limit int) *APIKeyAuthMiddleware {
+	return &APIKeyAuthMiddleware{authenticator: authenticator, limiter: limiter, usage: usage, windowSeconds: windowSeconds, limit: limit}
 }
 
 // Middleware returns the echo.MiddlewareFunc enforcing S2S API-key auth.
@@ -74,6 +82,10 @@ func (m *APIKeyAuthMiddleware) Middleware() echo.MiddlewareFunc {
 				}
 				slog.Warn("API key auth rejected", "key_id", keyID, "path", c.Path())
 				return echo.NewHTTPError(http.StatusUnauthorized, "Unauthorized")
+			}
+
+			if err := m.usage.Incr(c.Request().Context()); err != nil {
+				slog.Warn("failed to record S2S request usage", "err", err)
 			}
 
 			c.Set(contextKeyServiceClient, client)

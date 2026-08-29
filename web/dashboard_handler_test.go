@@ -18,7 +18,7 @@ func TestDashboardShowHandler_RendersCountsAndRecentConfigs(t *testing.T) {
 		},
 		recentConfigs: []configmodel.ConfigEntry{{Key: "a"}, {Key: "b"}, {Key: "c"}},
 	}
-	h := web.NewDashboardHandler(reader)
+	h := web.NewDashboardHandler(reader, &fakeAnalyticsReader{})
 
 	rec := callHandler(t, store, http.MethodGet, "/dashboard/", nil, nil, h.Show)
 
@@ -34,7 +34,7 @@ func TestDashboardShowHandler_RecentConfigsRespectsLimitOfFive(t *testing.T) {
 		many = append(many, configmodel.ConfigEntry{Key: "k"})
 	}
 	reader := &fakeDashboardReader{recentConfigs: many}
-	h := web.NewDashboardHandler(reader)
+	h := web.NewDashboardHandler(reader, &fakeAnalyticsReader{})
 
 	rec := callHandler(t, store, http.MethodGet, "/dashboard/", nil, nil, h.Show)
 

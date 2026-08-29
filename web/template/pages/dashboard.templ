@@ -1,5 +1,6 @@
 package pages
 
+import "encoding/json"
 import configmodel "controlplane/internal/model/config"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
@@ -12,6 +13,10 @@ type DashboardData struct {
 	FlagCount        int64
 	ClientCount      int64
 	RecentConfigs    []configmodel.ConfigEntry
+	// AnalyticsJSON is the pre-marshaled analyticsChartData payload (see
+	// web/dashboard_handler.go), embedded verbatim via templ.JSONScript for
+	// the Chart.js trend charts below.
+	AnalyticsJSON string
 }
 
 templ Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData) {
@@ -49,6 +54,63 @@ templ Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData
 				</tbody>
 			</table>
 		</article>
+		<h2>Analytics (Last 7 Days)</h2>
+		<div class="stat-grid">
+			<article class="card">
+				<header>Activity Trend</header>
+				<canvas id="chart-activity-trend"></canvas>
+			</article>
+			<article class="card">
+				<header>Config / Secret / Flag Growth</header>
+				<canvas id="chart-growth"></canvas>
+			</article>
+			<article class="card">
+				<header>Notification Delivery</header>
+				<canvas id="chart-notifications"></canvas>
+			</article>
+			<article class="card">
+				<header>S2S API Request Volume</header>
+				<canvas id="chart-s2s-usage"></canvas>
+			</article>
+		</div>
+		@templ.JSONScript("analytics-data", json.RawMessage(data.AnalyticsJSON))
+		<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+		<script>
+			(function() {
+				var data = JSON.parse(document.getElementById('analytics-data').textContent || '{}');
+				var labels = data.labels || [];
+
+				function lineChart(canvasId, series) {
+					var ctx = document.getElementById(canvasId);
+					if (!ctx) return;
+					new Chart(ctx, {
+						type: 'line',
+						data: { labels: labels, datasets: series },
+						options: { responsive: true, interaction: { mode: 'index', intersect: false } }
+					});
+				}
+
+				lineChart('chart-activity-trend', [
+					{ label: 'Create', data: data.activityCreate, borderColor: '#2563eb' },
+					{ label: 'Update', data: data.activityUpdate, borderColor: '#d97706' },
+					{ label: 'Delete', data: data.activityDelete, borderColor: '#dc2626' },
+					{ label: 'Login', data: data.activityLogin, borderColor: '#16a34a' },
+					{ label: 'Login Failed', data: data.activityLoginFailed, borderColor: '#6b7280' }
+				]);
+				lineChart('chart-growth', [
+					{ label: 'Configs', data: data.configCount, borderColor: '#2563eb' },
+					{ label: 'Secrets', data: data.secretCount, borderColor: '#d97706' },
+					{ label: 'Flags', data: data.flagCount, borderColor: '#16a34a' }
+				]);
+				lineChart('chart-notifications', [
+					{ label: 'Sent', data: data.notificationSent, borderColor: '#16a34a' },
+					{ label: 'Failed', data: data.notificationFailed, borderColor: '#dc2626' }
+				]);
+				lineChart('chart-s2s-usage', [
+					{ label: 'S2S Requests', data: data.s2sRequests, borderColor: '#2563eb' }
+				]);
+			})();
+		</script>
 	}
 }
 

@@ -28,6 +28,16 @@ func (f *fakeRateLimiter) IsRateLimited(ctx context.Context, key, clientIP strin
 	return f.limited, f.err
 }
 
+type fakeUsageCounter struct {
+	calls int
+	err   error
+}
+
+func (f *fakeUsageCounter) Incr(ctx context.Context) error {
+	f.calls++
+	return f.err
+}
+
 type fakeConfigLister struct {
 	configs []config.ClientConfig
 	err     error

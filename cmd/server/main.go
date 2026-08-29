@@ -67,6 +67,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("setup notification stack: %v", err)
 	}
+	an, err := newAnalyticsStack(dbosCtx, gdb, rdb, svc.Dashboard, svc.Cache)
+	if err != nil {
+		log.Fatalf("setup analytics stack: %v", err)
+	}
 
 	if err := bootstrapAdmin(gdb, cfg); err != nil {
 		log.Fatalf("bootstrap admin user: %v", err)
@@ -81,7 +85,7 @@ func main() {
 	// position accepts the same concrete type. Double-check argument order against each
 	// constructor's signature when editing this block.
 	webHandlers := &web.Handlers{
-		Dashboard:            web.NewDashboardHandler(svc.Dashboard),
+		Dashboard:            web.NewDashboardHandler(svc.Dashboard, an.Service),
 		Activity:             web.NewActivityHandler(svc.Activity),
 		Application:          web.NewApplicationHandler(svc.Config, svc.Activity),
 		Environment:          web.NewEnvironmentHandler(svc.Config, svc.Config, svc.Activity),
@@ -97,7 +101,7 @@ func main() {
 	}
 	web.RegisterRoutes(e, webHandlers, webAuthMW)
 
-	apiKeyAuthMW := apihttp.NewAPIKeyAuthMiddleware(svc.Auth, svc.RateLimiter, cfg.AuthRateLimitWindowSeconds, cfg.S2SAuthRateLimit)
+	apiKeyAuthMW := apihttp.NewAPIKeyAuthMiddleware(svc.Auth, svc.RateLimiter, an.Counter, cfg.AuthRateLimitWindowSeconds, cfg.S2SAuthRateLimit)
 	apiGroup := e.Group("/api/v1")
 	apihttp.RegisterConfigRoutes(apiGroup.Group("/config"), apihttp.NewConfigHandler(svc.Config), apihttp.NewFeatureFlagHandler(svc.Flags), apiKeyAuthMW)
 

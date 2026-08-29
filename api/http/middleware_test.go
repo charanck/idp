@@ -23,7 +23,7 @@ func newMiddlewareRequest(apiKey string) (echo.Context, *httptest.ResponseRecord
 }
 
 func TestAPIKeyAuthMiddleware_MissingHeaderReturns401(t *testing.T) {
-	mw := apihttp.NewAPIKeyAuthMiddleware(&fakeAPIKeyAuthenticator{}, &fakeRateLimiter{}, 60, 100)
+	mw := apihttp.NewAPIKeyAuthMiddleware(&fakeAPIKeyAuthenticator{}, &fakeRateLimiter{}, &fakeUsageCounter{}, 60, 100)
 	called := false
 	handler := mw.Middleware()(func(c echo.Context) error {
 		called = true
@@ -45,7 +45,7 @@ func TestAPIKeyAuthMiddleware_MissingHeaderReturns401(t *testing.T) {
 }
 
 func TestAPIKeyAuthMiddleware_RateLimitedReturns429WithRetryAfter(t *testing.T) {
-	mw := apihttp.NewAPIKeyAuthMiddleware(&fakeAPIKeyAuthenticator{}, &fakeRateLimiter{limited: true}, 60, 100)
+	mw := apihttp.NewAPIKeyAuthMiddleware(&fakeAPIKeyAuthenticator{}, &fakeRateLimiter{limited: true}, &fakeUsageCounter{}, 60, 100)
 	called := false
 	handler := mw.Middleware()(func(c echo.Context) error {
 		called = true
@@ -68,7 +68,7 @@ func TestAPIKeyAuthMiddleware_RateLimitedReturns429WithRetryAfter(t *testing.T) 
 }
 
 func TestAPIKeyAuthMiddleware_InvalidKeyReturns401(t *testing.T) {
-	mw := apihttp.NewAPIKeyAuthMiddleware(&fakeAPIKeyAuthenticator{client: nil}, &fakeRateLimiter{}, 60, 100)
+	mw := apihttp.NewAPIKeyAuthMiddleware(&fakeAPIKeyAuthenticator{client: nil}, &fakeRateLimiter{}, &fakeUsageCounter{}, 60, 100)
 	c, _ := newMiddlewareRequest("bad-key.secret")
 	err := mw.Middleware()(func(c echo.Context) error { return nil })(c)
 	httpErr, ok := err.(*echo.HTTPError)
@@ -82,7 +82,7 @@ func TestAPIKeyAuthMiddleware_InvalidKeyReturns401(t *testing.T) {
 
 func TestAPIKeyAuthMiddleware_ValidKeySetsClientAndCallsNext(t *testing.T) {
 	client := &authmodel.ServiceClient{Name: "billing-service"}
-	mw := apihttp.NewAPIKeyAuthMiddleware(&fakeAPIKeyAuthenticator{client: client}, &fakeRateLimiter{}, 60, 100)
+	mw := apihttp.NewAPIKeyAuthMiddleware(&fakeAPIKeyAuthenticator{client: client}, &fakeRateLimiter{}, &fakeUsageCounter{}, 60, 100)
 
 	var gotClient *authmodel.ServiceClient
 	handler := mw.Middleware()(func(c echo.Context) error {
