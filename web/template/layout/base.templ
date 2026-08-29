@@ -72,6 +72,9 @@ templ sidebar(activeNav string, user NavUser) {
 				@navLink(activeNav, "environments", "/environments/", "bi-layers", "Environments")
 				@navLink(activeNav, "configs", "/configs/", "bi-sliders", "Configs & Secrets")
 				@navLink(activeNav, "flags", "/flags/", "bi-toggle-on", "Feature Flags")
+				if notification.Enabled {
+					@navLink(activeNav, "notifications", "/notifications/", "bi-bell", "Notifications")
+				}
 			</ul>
 		</nav>
 		if user.IsStaff {

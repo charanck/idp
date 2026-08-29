@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"controlplane/internal/crypto"
 )
 
@@ -19,10 +21,11 @@ func TestToken_ValidateRejectsExpiredToken(t *testing.T) {
 	issuer := NewTokenIssuer(enc)
 
 	claims := tokenClaims{
-		UserID: "user-42",
-		Scope:  tokenScope,
-		Aud:    tokenAud,
-		Exp:    time.Now().Add(-time.Minute).Unix(),
+		UserID:        "user-42",
+		ApplicationID: uuid.New().String(),
+		Scope:         tokenScope,
+		Aud:           tokenAud,
+		Exp:           time.Now().Add(-time.Minute).Unix(),
 	}
 	payload, err := json.Marshal(claims)
 	if err != nil {

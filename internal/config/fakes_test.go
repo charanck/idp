@@ -131,6 +131,20 @@ func (f *fakeApplicationRepository) Delete(ctx context.Context, app *configmodel
 	return nil
 }
 
+func (f *fakeApplicationRepository) GetOrCreate(ctx context.Context, name string) (*configmodel.Application, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, a := range f.apps {
+		if a.Name == name {
+			cp := a
+			return &cp, nil
+		}
+	}
+	app := configmodel.Application{ID: uuid.New(), Name: name}
+	f.apps[app.ID] = app
+	return &app, nil
+}
+
 func (f *fakeApplicationRepository) ListDistinctNames(ctx context.Context) ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

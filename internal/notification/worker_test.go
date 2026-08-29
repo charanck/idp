@@ -3,9 +3,13 @@ package notification_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
+	"time"
 
-	"github.com/hibiken/asynq"
+	"github.com/dbos-inc/dbos-transact-golang/dbos"
+	_ "github.com/dbos-inc/dbos-transact-golang/dbos/driver/sqlite"
+	"github.com/google/uuid"
 	"gorm.io/datatypes"
 
 	"controlplane/internal/crypto"
@@ -14,11 +18,33 @@ import (
 	"controlplane/internal/notification/provider"
 )
 
+// newTestDBOSContext returns a DBOS context backed by a throwaway file-based
+// SQLite system database (not sqlite::memory: - that opens a fresh empty
+// database per pooled connection, so migrated tables vanish under
+// concurrent access) - enough to run SendWorkflow's dbos.RunAsStep call
+// (which requires an actual DBOS workflow execution, not just any
+// dbos.Context) in a unit test without a real Postgres instance.
+func newTestDBOSContext(t *testing.T) dbos.Context {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "dbos-test.db")
+	ctx, err := dbos.NewContext(context.Background(), dbos.Config{
+		AppName:     "notification-test",
+		DatabaseURL: "sqlite:" + dbPath,
+	})
+	if err != nil {
+		t.Fatalf("dbos.NewContext: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = dbos.Shutdown(ctx, 5*time.Second)
+	})
+	return ctx
+}
+
 func newUnitWorker(t *testing.T, channels notification.ChannelRegistry, hub notification.Publisher) (*notification.Worker, *fakeNotificationRepository, *notification.NotificationService, *notification.ProviderSettingService) {
 	t.Helper()
 	repo := newFakeNotificationRepository()
 	enqueuer := &fakeEnqueuer{}
-	notifications := notification.NewNotificationService(repo, enqueuer)
+	notifications := notification.NewNotificationService(repo, newFakeApplicationRepository(), enqueuer)
 
 	masterKey, err := crypto.GenerateKey()
 	if err != nil {
@@ -29,12 +55,29 @@ func newUnitWorker(t *testing.T, channels notification.ChannelRegistry, hub noti
 	return notification.NewWorker(notifications, settings, channels, hub), repo, notifications, settings
 }
 
-// handleSend builds the asynq task HandleSend expects for id, mirroring
-// TaskEnqueuer's payload shape, and runs it.
+// handleSend runs w.SendWorkflow for id as a real (SQLite-backed) DBOS
+// workflow execution, mirroring how TaskEnqueuer runs it in production, and
+// waits for it to complete.
 func handleSend(t *testing.T, w *notification.Worker, id string) error {
 	t.Helper()
-	payload := []byte(`{"notification_id":"` + id + `"}`)
-	return w.HandleSend(context.Background(), asynq.NewTask(notification.TaskTypeSend, payload))
+	notificationID, err := uuid.Parse(id)
+	if err != nil {
+		t.Fatalf("uuid.Parse: %v", err)
+	}
+
+	ctx := newTestDBOSContext(t)
+	dbos.RegisterWorkflow(ctx, w.SendWorkflow)
+	if err := dbos.Launch(ctx); err != nil {
+		t.Fatalf("dbos.Launch: %v", err)
+	}
+
+	handle, err := dbos.RunWorkflow(ctx, w.SendWorkflow, notification.SendPayload{NotificationID: notificationID},
+		dbos.WithWorkflowID(id))
+	if err != nil {
+		return err
+	}
+	_, err = handle.GetResult()
+	return err
 }
 
 func TestWorker_InAppSendPublishesToHub(t *testing.T) {

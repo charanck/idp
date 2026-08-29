@@ -21,12 +21,17 @@ Request body:
 
 ```json
 {
+  "service": "orders",
   "channel": "inapp",
   "recipient": { "user_id": "user-123" },
   "content": { "title": "Order shipped", "body": "Your order #4821 is on its way." },
   "idempotency_key": "order-4821-shipped"
 }
 ```
+
+`service` is **required** — the name of the calling application, resolved (get-or-create) into the
+same `Application` scope used by configs/flags. Notifications created under different `service`
+values are isolated from each other, the same way configs/flags are isolated per application.
 
 `recipient` and `content` are raw JSON whose shape depends on `channel` — each channel validates
 its own schema:
@@ -47,6 +52,7 @@ delivery instead of creating a duplicate; once a notification reaches a terminal
 ```json
 {
   "id": "d4e1...",
+  "service": "orders",
   "channel": "inapp",
   "recipient": { "user_id": "user-123" },
   "content": { "title": "Order shipped", "body": "Your order #4821 is on its way." },
@@ -69,6 +75,7 @@ curl -X POST "http://localhost:8000/api/v1/notifications" \
   -H "X-API-Key: <key_id>.<secret>" \
   -H "Content-Type: application/json" \
   -d '{
+        "service": "orders",
         "channel": "inapp",
         "recipient": {"user_id": "user-123"},
         "content": {"title": "Order shipped", "body": "Your order #4821 is on its way."}
@@ -80,8 +87,8 @@ curl -X POST "http://localhost:8000/api/v1/notifications" \
 ```python
 import requests
 
-def create_notification(base_url, api_key, channel, recipient, content, idempotency_key=None):
-    body = {"channel": channel, "recipient": recipient, "content": content}
+def create_notification(base_url, api_key, service, channel, recipient, content, idempotency_key=None):
+    body = {"service": service, "channel": channel, "recipient": recipient, "content": content}
     if idempotency_key:
         body["idempotency_key"] = idempotency_key
     response = requests.post(
@@ -94,7 +101,7 @@ def create_notification(base_url, api_key, channel, recipient, content, idempote
     return response.json()
 
 notification = create_notification(
-    "http://localhost:8000", api_key, "inapp",
+    "http://localhost:8000", api_key, "orders", "inapp",
     {"user_id": "user-123"},
     {"title": "Order shipped", "body": "Your order #4821 is on its way."},
 )
@@ -107,6 +114,7 @@ print(notification["id"], notification["status"])
 async function createNotification(
   baseUrl: string,
   apiKey: string,
+  service: string,
   channel: "email" | "sms" | "whatsapp" | "inapp",
   recipient: Record<string, unknown>,
   content: Record<string, unknown>,
@@ -115,7 +123,7 @@ async function createNotification(
   const res = await fetch(`${baseUrl}/api/v1/notifications`, {
     method: "POST",
     headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ channel, recipient, content, idempotency_key: idempotencyKey }),
+    body: JSON.stringify({ service, channel, recipient, content, idempotency_key: idempotencyKey }),
   });
   if (!res.ok) {
     throw new Error(`Failed to create notification: ${res.status} ${await res.text()}`);
@@ -124,7 +132,7 @@ async function createNotification(
 }
 
 const notification = await createNotification(
-  "http://localhost:8000", apiKey, "inapp",
+  "http://localhost:8000", apiKey, "orders", "inapp",
   { user_id: "user-123" },
   { title: "Order shipped", body: "Your order #4821 is on its way." }
 );
@@ -135,6 +143,7 @@ console.log(notification.id, notification.status);
 
 ```go
 type createRequest struct {
+    Service        string          `json:"service"`
     Channel        string          `json:"channel"`
     Recipient      json.RawMessage `json:"recipient"`
     Content        json.RawMessage `json:"content"`
@@ -164,8 +173,8 @@ func createNotification(baseURL, apiKey string, req createRequest) ([]byte, erro
 
 ## List notifications
 
-`GET /api/v1/notifications?channel=<channel>&status=<status>` — both query params are optional
-filters. Returns a JSON array of the same shape as the create response.
+`GET /api/v1/notifications?service=<service>&channel=<channel>&status=<status>` — all three query
+params are optional filters. Returns a JSON array of the same shape as the create response.
 
 ```bash
 curl "http://localhost:8000/api/v1/notifications?channel=inapp&status=sent" \
@@ -199,7 +208,7 @@ Both require minting a short-lived, user-scoped bearer token first via `POST
 
 | Status | Meaning |
 |---|---|
-| `400` | Invalid JSON body; unknown `channel`; recipient/content fails that channel's schema; malformed `id`. |
+| `400` | Invalid JSON body; missing `service`; unknown `channel`; recipient/content fails that channel's schema; malformed `id`. |
 | `401` | Missing/invalid `X-API-Key`. |
 | `404` | Notification `id` not found (`GET /:id` only). |
 | `429` | S2S rate limit exceeded. |

@@ -8,18 +8,20 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/redis/go-redis/v9"
 
 	apihttp "controlplane/api/http"
+	"controlplane/internal/notification"
 )
 
 type fakeSubscriber struct {
 	rdb *redis.Client
 }
 
-func (f *fakeSubscriber) Subscribe(ctx context.Context, userID string) *redis.PubSub {
-	return f.rdb.Subscribe(ctx, "notif:"+userID)
+func (f *fakeSubscriber) Subscribe(ctx context.Context, userID string, applicationID uuid.UUID) *redis.PubSub {
+	return f.rdb.Subscribe(ctx, "notif:"+applicationID.String()+":"+userID)
 }
 
 func newSSERequest(bearer string) (echo.Context, *httptest.ResponseRecorder) {
@@ -72,7 +74,7 @@ func TestStream_FlushesHeadersBeforeFirstEvent(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	defer rdb.Close()
 
-	h := apihttp.NewSSEHandler(&fakeSessionValidator{userID: "user-1"}, &fakeSubscriber{rdb: rdb})
+	h := apihttp.NewSSEHandler(&fakeSessionValidator{claims: notification.SessionClaims{UserID: "user-1", ApplicationID: uuid.New()}}, &fakeSubscriber{rdb: rdb})
 
 	c, rec := newSSERequest("token")
 	ctx, cancel := context.WithCancel(context.Background())

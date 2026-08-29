@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+
+	configmodel "controlplane/internal/model/config"
 )
 
 const (
@@ -31,19 +33,21 @@ const (
 // recipient/content are genuinely structured, non-secret data stored as
 // native jsonb.
 type Notification struct {
-	ID                uuid.UUID      `gorm:"column:id;type:uuid;primaryKey"`
-	Channel           string         `gorm:"column:channel"`
-	Recipient         datatypes.JSON `gorm:"column:recipient"`
-	Content           datatypes.JSON `gorm:"column:content"`
-	Status            string         `gorm:"column:status"`
-	Provider          *string        `gorm:"column:provider"`
-	ProviderMessageID *string        `gorm:"column:provider_message_id"`
-	Attempt           int            `gorm:"column:attempt"`
-	IdempotencyKey    *string        `gorm:"column:idempotency_key"`
-	Error             *string        `gorm:"column:error"`
-	ReadAt            *time.Time     `gorm:"column:read_at"`
-	CreatedAt         time.Time      `gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt         time.Time      `gorm:"column:updated_at;autoUpdateTime"`
+	ID                uuid.UUID               `gorm:"column:id;type:uuid;primaryKey"`
+	ApplicationID     uuid.UUID               `gorm:"column:application_id"`
+	Application       configmodel.Application `gorm:"foreignKey:ApplicationID"`
+	Channel           string                  `gorm:"column:channel"`
+	Recipient         datatypes.JSON          `gorm:"column:recipient"`
+	Content           datatypes.JSON          `gorm:"column:content"`
+	Status            string                  `gorm:"column:status"`
+	Provider          *string                 `gorm:"column:provider"`
+	ProviderMessageID *string                 `gorm:"column:provider_message_id"`
+	Attempt           int                     `gorm:"column:attempt"`
+	IdempotencyKey    *string                 `gorm:"column:idempotency_key"`
+	Error             *string                 `gorm:"column:error"`
+	ReadAt            *time.Time              `gorm:"column:read_at"`
+	CreatedAt         time.Time               `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt         time.Time               `gorm:"column:updated_at;autoUpdateTime"`
 }
 
 func (Notification) TableName() string { return "notifications" }

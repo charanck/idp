@@ -5,13 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 
 	model "controlplane/internal/model/notification"
 )
 
 // Hub is a thin wrapper around Redis pub/sub for delivering real-time
-// notification events to SSE subscribers, on channel "notifications:{user_id}".
+// notification events to SSE subscribers, on channel
+// "notifications:{application_id}:{user_id}" - scoped by application as
+// well as user so a session token minted for one application can't observe
+// another application's events for the same user ID.
 // Publishing is fire-and-forget: if nobody's subscribed (or Redis is briefly
 // unavailable) the event is simply lost, not queued or retried - SSE is a
 // best-effort live feed, not a delivery channel in its own right, and is
@@ -25,8 +29,8 @@ func NewHub(rdb *redis.Client) *Hub {
 	return &Hub{rdb: rdb}
 }
 
-func sseChannelName(userID string) string {
-	return "notifications:" + userID
+func sseChannelName(applicationID uuid.UUID, userID string) string {
+	return "notifications:" + applicationID.String() + ":" + userID
 }
 
 // SentEvent is the JSON payload published on a notification's SSE channel.
@@ -65,14 +69,16 @@ func (h *Hub) PublishSent(ctx context.Context, n *model.Notification) error {
 		return fmt.Errorf("marshal sse event: %w", err)
 	}
 
-	if err := h.rdb.Publish(ctx, sseChannelName(userID), payload).Err(); err != nil {
+	if err := h.rdb.Publish(ctx, sseChannelName(n.ApplicationID, userID), payload).Err(); err != nil {
 		return fmt.Errorf("publish sse event: %w", err)
 	}
 	return nil
 }
 
-// Subscribe subscribes to a user's SSE channel. The caller must Close() the
-// returned *redis.PubSub when done.
-func (h *Hub) Subscribe(ctx context.Context, userID string) *redis.PubSub {
-	return h.rdb.Subscribe(ctx, sseChannelName(userID))
+// Subscribe subscribes to a user's SSE channel, scoped to applicationID so a
+// token minted for one application can't observe another's events for the
+// same user ID. The caller must Close() the returned *redis.PubSub when
+// done.
+func (h *Hub) Subscribe(ctx context.Context, userID string, applicationID uuid.UUID) *redis.PubSub {
+	return h.rdb.Subscribe(ctx, sseChannelName(applicationID, userID))
 }

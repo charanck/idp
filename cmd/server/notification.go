@@ -1,39 +1,57 @@
 package main
 
 import (
-	"github.com/hibiken/asynq"
+	"fmt"
+
+	"github.com/dbos-inc/dbos-transact-golang/dbos"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
+	configmodel "controlplane/internal/model/config"
 	"controlplane/internal/crypto"
 	"controlplane/internal/notification"
+	configrepo "controlplane/internal/repository/config"
 	notificationrepo "controlplane/internal/repository/notification"
 )
 
-// notificationStack owns construction and lifecycle of the notification
-// subsystem, including the asynq background worker. It stays in the same
-// binary as the HTTP server, but its startup/shutdown is isolated here
-// instead of being inlined in main().
+// notificationStack owns construction of the notification subsystem,
+// including registering its DBOS-backed background delivery workflow
+// against the server's shared dbos.Context (see cmd/server/dbos.go - DBOS
+// bootstrap/lifecycle is not notification-specific). It stays in the same
+// binary as the HTTP server, but its wiring is isolated here instead of
+// being inlined in main().
 type notificationStack struct {
 	Settings    *notification.ProviderSettingService
 	TokenIssuer *notification.TokenIssuer
 	Channels    notification.ChannelRegistry
 	Service     *notification.NotificationService
 	Hub         *notification.Hub
-
-	asynqServer *asynq.Server
-	asynqMux    *asynq.ServeMux
+	Apps        configmodel.ApplicationRepository
 }
 
-func newNotificationStack(gdb *gorm.DB, rdb *redis.Client, encryption *crypto.EncryptionService) *notificationStack {
+// newNotificationStack wires the notification subsystem, including
+// registering its DBOS workflow/queue against the caller-supplied dbosCtx.
+// Construction happens in two phases to break a dependency cycle: the DBOS
+// Enqueuer needs a *Worker, and *Worker needs the *NotificationService it's
+// later attached to - so the service is built with a nil enqueuer first,
+// then service.SetEnqueuer is called once the worker/enqueuer exist. No
+// caller can reach CreateNotification before newNotificationStack returns,
+// so there's no window where the nil enqueuer is used for real.
+func newNotificationStack(dbosCtx dbos.Context, gdb *gorm.DB, rdb *redis.Client, encryption *crypto.EncryptionService) (*notificationStack, error) {
 	settings := notification.NewProviderSettingService(notificationrepo.NewProviderSettingRepository(gdb), encryption)
 	tokenIssuer := notification.NewTokenIssuer(encryption)
 	channels := notification.NewChannelRegistry()
-	asynqClient := notification.NewAsynqClient(rdb)
-	enqueuer := notification.NewTaskEnqueuer(asynqClient)
-	service := notification.NewNotificationService(notificationrepo.NewNotificationRepository(gdb), enqueuer)
 	hub := notification.NewHub(rdb)
+
+	apps := configrepo.NewApplicationRepository(gdb)
+	service := notification.NewNotificationService(notificationrepo.NewNotificationRepository(gdb), apps, nil)
 	worker := notification.NewWorker(service, settings, channels, hub)
+
+	enqueuer, err := notification.NewTaskEnqueuer(dbosCtx, worker)
+	if err != nil {
+		return nil, fmt.Errorf("register notification send workflow: %w", err)
+	}
+	service.SetEnqueuer(enqueuer)
 
 	return &notificationStack{
 		Settings:    settings,
@@ -41,17 +59,6 @@ func newNotificationStack(gdb *gorm.DB, rdb *redis.Client, encryption *crypto.En
 		Channels:    channels,
 		Service:     service,
 		Hub:         hub,
-		asynqServer: notification.NewAsynqServer(rdb, asynq.Config{}),
-		asynqMux:    notification.NewAsynqMux(worker),
-	}
-}
-
-// Run blocks, processing background tasks until Shutdown is called.
-func (n *notificationStack) Run() error {
-	return n.asynqServer.Run(n.asynqMux)
-}
-
-// Shutdown stops the background worker gracefully.
-func (n *notificationStack) Shutdown() {
-	n.asynqServer.Shutdown()
+		Apps:        apps,
+	}, nil
 }

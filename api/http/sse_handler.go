@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/redis/go-redis/v9"
 
@@ -14,12 +15,12 @@ import (
 // SessionValidator is the narrow slice of *notification.TokenIssuer that
 // SSEHandler and InAppHandler need.
 type SessionValidator interface {
-	Validate(token string) (userID string, err error)
+	Validate(token string) (notification.SessionClaims, error)
 }
 
 // Subscriber is the narrow slice of *notification.Hub that SSEHandler needs.
 type Subscriber interface {
-	Subscribe(ctx context.Context, userID string) *redis.PubSub
+	Subscribe(ctx context.Context, userID string, applicationID uuid.UUID) *redis.PubSub
 }
 
 // SSEHandler streams real-time delivery notices for the bearer token's
@@ -40,7 +41,7 @@ func (h *SSEHandler) Stream(c echo.Context) error {
 	if token == "" {
 		return echo.NewHTTPError(http.StatusUnauthorized, "missing authorization header")
 	}
-	userID, err := h.validator.Validate(token)
+	claims, err := h.validator.Validate(token)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "invalid or expired session")
 	}
@@ -58,7 +59,7 @@ func (h *SSEHandler) Stream(c echo.Context) error {
 	w.Flush()
 
 	ctx := c.Request().Context()
-	sub := h.hub.Subscribe(ctx, userID)
+	sub := h.hub.Subscribe(ctx, claims.UserID, claims.ApplicationID)
 	defer sub.Close()
 
 	ch := sub.Channel()

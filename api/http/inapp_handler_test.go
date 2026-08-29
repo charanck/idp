@@ -12,6 +12,7 @@ import (
 
 	apihttp "controlplane/api/http"
 	notificationmodel "controlplane/internal/model/notification"
+	"controlplane/internal/notification"
 )
 
 func newInAppRequest(bearer string) (echo.Context, *httptest.ResponseRecorder) {
@@ -57,7 +58,7 @@ func TestUnread_ReturnsConsumedNotificationsAsJSON(t *testing.T) {
 	consumer := &fakeUnreadConsumer{notifications: []notificationmodel.Notification{
 		{ID: uuid.New(), Channel: "inapp", Status: notificationmodel.StatusSent, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`)},
 	}}
-	h := apihttp.NewInAppHandler(&fakeSessionValidator{userID: "user-1"}, consumer)
+	h := apihttp.NewInAppHandler(&fakeSessionValidator{claims: notification.SessionClaims{UserID: "user-1", ApplicationID: uuid.New()}}, consumer)
 
 	c, rec := newInAppRequest("good-token")
 	if err := h.ConsumeUnread(c); err != nil {

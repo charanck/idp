@@ -47,11 +47,25 @@ func TestCreate_UnknownChannelReturns400(t *testing.T) {
 	_ = rec
 }
 
+func TestCreate_MissingServiceReturns400(t *testing.T) {
+	h := apihttp.NewNotificationHandler(&fakeNotificationCreator{}, &fakeNotificationLister{}, &fakeNotificationGetter{}, notification.NewChannelRegistry())
+
+	c, _ := newNotificationRequest(http.MethodPost, "/notifications", `{"channel":"email","recipient":{"email":"a@example.com"},"content":{"subject":"hi"}}`)
+	err := h.Create(c)
+	httpErr, ok := err.(*echo.HTTPError)
+	if !ok {
+		t.Fatalf("expected *echo.HTTPError, got %T", err)
+	}
+	if httpErr.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d, want 400", httpErr.Code)
+	}
+}
+
 func TestCreate_ServiceErrorReturns500(t *testing.T) {
 	creator := &fakeNotificationCreator{err: errFakeNotificationService}
 	h := apihttp.NewNotificationHandler(creator, &fakeNotificationLister{}, &fakeNotificationGetter{}, notification.NewChannelRegistry())
 
-	c, _ := newNotificationRequest(http.MethodPost, "/notifications", `{"channel":"email","recipient":{"email":"a@example.com"},"content":{"subject":"hi"}}`)
+	c, _ := newNotificationRequest(http.MethodPost, "/notifications", `{"service":"acme","channel":"email","recipient":{"email":"a@example.com"},"content":{"subject":"hi"}}`)
 	err := h.Create(c)
 	httpErr, ok := err.(*echo.HTTPError)
 	if !ok {
@@ -75,7 +89,7 @@ func TestCreate_ReturnsCreatedNotificationAsJSON(t *testing.T) {
 	creator := &fakeNotificationCreator{notification: n}
 	h := apihttp.NewNotificationHandler(creator, &fakeNotificationLister{}, &fakeNotificationGetter{}, notification.NewChannelRegistry())
 
-	c, rec := newNotificationRequest(http.MethodPost, "/notifications", `{"channel":"email","recipient":{"email":"a@example.com"},"content":{"subject":"hi"}}`)
+	c, rec := newNotificationRequest(http.MethodPost, "/notifications", `{"service":"acme","channel":"email","recipient":{"email":"a@example.com"},"content":{"subject":"hi"}}`)
 	if err := h.Create(c); err != nil {
 		t.Fatalf("Create: %v", err)
 	}

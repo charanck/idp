@@ -11,7 +11,8 @@ token, not `X-API-Key`.
 ## 1. Mint a session token
 
 Same as [SSE, step 1](sse.md#1-mint-a-session-token):
-`POST /api/v1/notifications/sessions` with `X-API-Key`, body `{"user_id": "user-123"}`, returns
+`POST /api/v1/notifications/sessions` with `X-API-Key`, body
+`{"user_id": "user-123", "service": "orders"}`, returns
 `{"token": "...", "expires_in_seconds": 300}`.
 
 ## 2. Fetch and consume unread notifications
@@ -50,7 +51,7 @@ An empty array means there's nothing unread — not an error.
 ```bash
 TOKEN=$(curl -s -X POST "http://localhost:8000/api/v1/notifications/sessions" \
   -H "X-API-Key: <key_id>.<secret>" -H "Content-Type: application/json" \
-  -d '{"user_id":"user-123"}' | jq -r .token)
+  -d '{"user_id":"user-123","service":"orders"}' | jq -r .token)
 
 curl "http://localhost:8000/api/v1/notifications/inapp/unread" \
   -H "Authorization: Bearer $TOKEN"

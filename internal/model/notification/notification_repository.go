@@ -6,10 +6,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// ListNotificationsFilter filters NotificationRepository.List.
+// ListNotificationsFilter filters NotificationRepository.List. ApplicationID
+// is used by the web UI (which already has the Application's ID from its
+// dropdown); Service is used by the S2S API's ?service= query param (which
+// only has the Application's name) - either may be set, never both.
 type ListNotificationsFilter struct {
-	Channel string
-	Status  string
+	ApplicationID *uuid.UUID
+	Service       string
+	Channel       string
+	Status        string
 }
 
 // NotificationRepository is the persistence seam for Notification rows.
@@ -19,11 +24,11 @@ type NotificationRepository interface {
 	List(ctx context.Context, filter ListNotificationsFilter) ([]Notification, error)
 	Create(ctx context.Context, n *Notification) error
 	// ConsumeUnreadInApp atomically lists and marks-read a user's unread
-	// InApp notifications, newest first - kept as one transactional
-	// repository method (rather than List+Update called separately by the
-	// service) so a client catching up on missed notifications is
-	// guaranteed to see each one exactly once.
-	ConsumeUnreadInApp(ctx context.Context, userID string) ([]Notification, error)
+	// InApp notifications under applicationID, newest first - kept as one
+	// transactional repository method (rather than List+Update called
+	// separately by the service) so a client catching up on missed
+	// notifications is guaranteed to see each one exactly once.
+	ConsumeUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]Notification, error)
 	MarkProcessing(ctx context.Context, id uuid.UUID) error
 	MarkSent(ctx context.Context, id uuid.UUID, provider, providerMessageID string) error
 	MarkRetrying(ctx context.Context, id uuid.UUID, attempt int, sendErr error) error

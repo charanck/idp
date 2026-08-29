@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	notificationmodel "controlplane/internal/model/notification"
@@ -13,7 +14,7 @@ import (
 // UnreadConsumer is the narrow slice of *notification.NotificationService
 // that InAppHandler needs.
 type UnreadConsumer interface {
-	ConsumeUnreadInAppForUser(ctx context.Context, userID string) ([]notificationmodel.Notification, error)
+	ConsumeUnreadInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error)
 }
 
 // InAppHandler lists the bearer token's authorized user's unread InApp
@@ -34,12 +35,12 @@ func (h *InAppHandler) ConsumeUnread(c echo.Context) error {
 	if token == "" {
 		return echo.NewHTTPError(http.StatusUnauthorized, "missing authorization header")
 	}
-	userID, err := h.validator.Validate(token)
+	claims, err := h.validator.Validate(token)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "invalid or expired session")
 	}
 
-	notifications, err := h.consumer.ConsumeUnreadInAppForUser(c.Request().Context(), userID)
+	notifications, err := h.consumer.ConsumeUnreadInAppForUser(c.Request().Context(), claims.UserID, claims.ApplicationID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to list unread notifications")
 	}

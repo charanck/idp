@@ -393,7 +393,7 @@ func TestNotificationLifecycle_CreateListGetAndDeliver(t *testing.T) {
 	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
 
 	createResp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
-		[]byte(`{"channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
+		[]byte(`{"service":"e2e-test","channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
 	defer createResp.Body.Close()
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d", createResp.StatusCode)
@@ -462,7 +462,7 @@ func TestCreateSessionEndpoint_MintsToken(t *testing.T) {
 	base := e2eBaseURL(t)
 	apiKey := newAdminSession(t).createServiceClient(t)
 
-	resp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications/sessions", apiKey, []byte(`{"user_id":"e2e-user-1"}`))
+	resp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications/sessions", apiKey, []byte(`{"user_id":"e2e-user-1","service":"e2e-test"}`))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
@@ -499,11 +499,20 @@ func TestSSEEventsEndpoint_RejectsMissingAuthorizationHeader(t *testing.T) {
 	}
 }
 
-// mintNotificationSessionToken is createSessionEndpoint's flow, reused by
-// tests that need a bearer token authorizing them as userID.
+// mintNotificationSessionToken is createSessionEndpoint's flow for the
+// "e2e-test" application, reused by tests that need a bearer token
+// authorizing them as userID against that application's notifications.
 func mintNotificationSessionToken(t *testing.T, base, apiKey, userID string) string {
 	t.Helper()
-	resp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications/sessions", apiKey, []byte(`{"user_id":"`+userID+`"}`))
+	return mintNotificationSessionTokenForService(t, base, apiKey, userID, "e2e-test")
+}
+
+// mintNotificationSessionTokenForService is mintNotificationSessionToken but
+// lets the caller pick the application (service) the minted token is scoped
+// to, for tests that need tokens scoped to distinct applications.
+func mintNotificationSessionTokenForService(t *testing.T, base, apiKey, userID, service string) string {
+	t.Helper()
+	resp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications/sessions", apiKey, []byte(`{"user_id":"`+userID+`","service":"`+service+`"}`))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("mint session status = %d", resp.StatusCode)
@@ -524,7 +533,7 @@ func TestInAppUnreadEndpoint_ListsOnlyThatUsersUnreadAndMarksThemRead(t *testing
 	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
 
 	createResp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
-		[]byte(`{"channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
+		[]byte(`{"service":"e2e-test","channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
 	defer createResp.Body.Close()
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d", createResp.StatusCode)
@@ -574,13 +583,20 @@ func TestInAppUnreadEndpoint_ListsOnlyThatUsersUnreadAndMarksThemRead(t *testing
 	}
 }
 
-// openSSEStream mints a session token for userID and opens the live SSE
-// stream, returning a channel that receives each event's "data: " payload
-// as it arrives. The caller must close resp.Body (returned for that
-// purpose) once done.
+// openSSEStream mints a session token for userID scoped to the "e2e-test"
+// application and opens the live SSE stream, returning a channel that
+// receives each event's "data: " payload as it arrives. The caller must
+// close resp.Body (returned for that purpose) once done.
 func openSSEStream(t *testing.T, base, apiKey, userID string) (events chan string, body io.ReadCloser) {
 	t.Helper()
-	token := mintNotificationSessionToken(t, base, apiKey, userID)
+	return openSSEStreamForService(t, base, apiKey, userID, "e2e-test")
+}
+
+// openSSEStreamForService is openSSEStream but lets the caller pick the
+// application (service) the stream's session token is scoped to.
+func openSSEStreamForService(t *testing.T, base, apiKey, userID, service string) (events chan string, body io.ReadCloser) {
+	t.Helper()
+	token := mintNotificationSessionTokenForService(t, base, apiKey, userID, service)
 
 	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/notifications/sse/events", nil)
 	if err != nil {
@@ -624,7 +640,7 @@ func TestSSEEventsEndpoint_ReceivesDeliveryNotice(t *testing.T) {
 	defer body.Close()
 
 	createResp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
-		[]byte(`{"channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
+		[]byte(`{"service":"e2e-test","channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
 	defer createResp.Body.Close()
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d", createResp.StatusCode)
@@ -661,7 +677,7 @@ func TestSSEEventsEndpoint_OnlyPublishesForInAppChannel(t *testing.T) {
 	defer body.Close()
 
 	createResp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
-		[]byte(`{"channel":"email","recipient":{"email":"a@example.com","user_id":"`+userID+`"},"content":{"subject":"hi"}}`))
+		[]byte(`{"service":"e2e-test","channel":"email","recipient":{"email":"a@example.com","user_id":"`+userID+`"},"content":{"subject":"hi"}}`))
 	defer createResp.Body.Close()
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("create status = %d", createResp.StatusCode)
@@ -677,7 +693,7 @@ func TestSSEEventsEndpoint_OnlyPublishesForInAppChannel(t *testing.T) {
 	// Prove the stream itself is still alive and the hub still works, so the
 	// absence above is the restriction working, not a dead subscription.
 	createResp2 := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
-		[]byte(`{"channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
+		[]byte(`{"service":"e2e-test","channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
 	defer createResp2.Body.Close()
 	if createResp2.StatusCode != http.StatusCreated {
 		t.Fatalf("create inapp status = %d", createResp2.StatusCode)
@@ -696,5 +712,153 @@ func TestSSEEventsEndpoint_OnlyPublishesForInAppChannel(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for sse delivery notice from inapp send")
+	}
+}
+
+// TestCreateSessionEndpoint_RequiresService asserts the session-minting
+// endpoint rejects a request missing "service" with 400, mirroring
+// createNotificationRequest's own required-service validation - a session
+// token with no application to scope it to must never be issued.
+func TestCreateSessionEndpoint_RequiresService(t *testing.T) {
+	skipIfNotificationDisabled(t)
+	base := e2eBaseURL(t)
+	apiKey := newAdminSession(t).createServiceClient(t)
+
+	resp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications/sessions", apiKey, []byte(`{"user_id":"e2e-user-1"}`))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// TestInAppUnreadEndpoint_ScopedByApplication_DoesNotLeakAcrossServices
+// covers the application-scoping fix: the same user_id has an inapp
+// notification created under application "a", but a session token minted
+// for the same user_id under a different application "b" must not see it -
+// only a token minted for application "a" should. This guards against a
+// cross-tenant leak through a token that only carried user_id before.
+func TestInAppUnreadEndpoint_ScopedByApplication_DoesNotLeakAcrossServices(t *testing.T) {
+	skipIfNotificationDisabled(t)
+	base := e2eBaseURL(t)
+	apiKey := newAdminSession(t).createServiceClient(t)
+	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
+	serviceA := fmt.Sprintf("e2e-app-a-%d", time.Now().UnixNano())
+	serviceB := fmt.Sprintf("e2e-app-b-%d", time.Now().UnixNano())
+
+	createResp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
+		[]byte(`{"service":"`+serviceA+`","channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
+	defer createResp.Body.Close()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d", createResp.StatusCode)
+	}
+
+	// A token minted for the same user_id, but a different application, must
+	// not surface application a's notification.
+	tokenB := mintNotificationSessionTokenForService(t, base, apiKey, userID, serviceB)
+	reqB, err := http.NewRequest(http.MethodGet, base+"/api/v1/notifications/inapp/unread", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	reqB.Header.Set("Authorization", "Bearer "+tokenB)
+	unreadRespB, err := http.DefaultClient.Do(reqB)
+	if err != nil {
+		t.Fatalf("GET inapp/unread (service b): %v", err)
+	}
+	defer unreadRespB.Body.Close()
+	if unreadRespB.StatusCode != http.StatusOK {
+		t.Fatalf("unread (service b) status = %d", unreadRespB.StatusCode)
+	}
+	var unreadB []struct{}
+	if err := json.NewDecoder(unreadRespB.Body).Decode(&unreadB); err != nil {
+		t.Fatalf("decode unread (service b) response: %v", err)
+	}
+	if len(unreadB) != 0 {
+		t.Fatalf("unread (service b) = %+v, want none - notification belongs to a different application", unreadB)
+	}
+
+	// A token minted for the matching application must see it.
+	tokenA := mintNotificationSessionTokenForService(t, base, apiKey, userID, serviceA)
+	reqA, err := http.NewRequest(http.MethodGet, base+"/api/v1/notifications/inapp/unread", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	reqA.Header.Set("Authorization", "Bearer "+tokenA)
+	unreadRespA, err := http.DefaultClient.Do(reqA)
+	if err != nil {
+		t.Fatalf("GET inapp/unread (service a): %v", err)
+	}
+	defer unreadRespA.Body.Close()
+	if unreadRespA.StatusCode != http.StatusOK {
+		t.Fatalf("unread (service a) status = %d", unreadRespA.StatusCode)
+	}
+	var unreadA []struct {
+		Channel string `json:"channel"`
+	}
+	if err := json.NewDecoder(unreadRespA.Body).Decode(&unreadA); err != nil {
+		t.Fatalf("decode unread (service a) response: %v", err)
+	}
+	if len(unreadA) != 1 || unreadA[0].Channel != "inapp" {
+		t.Fatalf("unread (service a) = %+v, want exactly one inapp notification", unreadA)
+	}
+}
+
+// TestSSEEventsEndpoint_ScopedByApplication_DoesNotLeakAcrossServices is the
+// SSE-stream counterpart to
+// TestInAppUnreadEndpoint_ScopedByApplication_DoesNotLeakAcrossServices: a
+// stream opened with a token scoped to application "b" must not receive an
+// event published for the same user_id's notification under application
+// "a", proving sseChannelName's application-scoped Redis channel naming
+// actually isolates the two.
+func TestSSEEventsEndpoint_ScopedByApplication_DoesNotLeakAcrossServices(t *testing.T) {
+	skipIfNotificationDisabled(t)
+	base := e2eBaseURL(t)
+	apiKey := newAdminSession(t).createServiceClient(t)
+	userID := fmt.Sprintf("e2e-user-%d", time.Now().UnixNano())
+	serviceA := fmt.Sprintf("e2e-app-a-%d", time.Now().UnixNano())
+	serviceB := fmt.Sprintf("e2e-app-b-%d", time.Now().UnixNano())
+
+	eventsB, bodyB := openSSEStreamForService(t, base, apiKey, userID, serviceB)
+	defer bodyB.Close()
+
+	createResp := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
+		[]byte(`{"service":"`+serviceA+`","channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
+	defer createResp.Body.Close()
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d", createResp.StatusCode)
+	}
+
+	select {
+	case payload := <-eventsB:
+		t.Fatalf("expected no sse event on a different application's stream, got: %s", payload)
+	case <-time.After(3 * time.Second):
+		// Expected: no event within the window.
+	}
+
+	// Prove the notification really did send, and that a stream scoped to
+	// the matching application does receive it - so the absence above is the
+	// scoping working, not a dead subscription or an undelivered send.
+	eventsA, bodyA := openSSEStreamForService(t, base, apiKey, userID, serviceA)
+	defer bodyA.Close()
+
+	createResp2 := apiRequest(t, base, http.MethodPost, "/api/v1/notifications", apiKey,
+		[]byte(`{"service":"`+serviceA+`","channel":"inapp","recipient":{"user_id":"`+userID+`"},"content":{"title":"hi"}}`))
+	defer createResp2.Body.Close()
+	if createResp2.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d", createResp2.StatusCode)
+	}
+	var created2 struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(createResp2.Body).Decode(&created2); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	select {
+	case payload := <-eventsA:
+		if !strings.Contains(payload, created2.ID) {
+			t.Fatalf("unexpected sse payload: %s", payload)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for sse delivery notice on the matching application's stream")
 	}
 }

@@ -607,6 +607,28 @@ func (f *fakeFlagStore) SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*
 	return &fl, nil
 }
 
+// fakeNotificationStore implements web.NotificationStore in-memory.
+type fakeNotificationStore struct {
+	notifications []notificationmodel.Notification
+}
+
+func (f *fakeNotificationStore) ListNotifications(ctx context.Context, filter notificationmodel.ListNotificationsFilter) ([]notificationmodel.Notification, error) {
+	var out []notificationmodel.Notification
+	for _, n := range f.notifications {
+		if filter.ApplicationID != nil && n.ApplicationID != *filter.ApplicationID {
+			continue
+		}
+		if filter.Channel != "" && n.Channel != filter.Channel {
+			continue
+		}
+		if filter.Status != "" && n.Status != filter.Status {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out, nil
+}
+
 // fakeClientStore implements web.ClientStore in-memory.
 type fakeClientStore struct {
 	mu      sync.Mutex

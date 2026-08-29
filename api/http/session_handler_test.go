@@ -22,7 +22,7 @@ func newSessionRequest(body string) (echo.Context, *httptest.ResponseRecorder) {
 }
 
 func TestSessionCreate_MissingUserIDReturns400(t *testing.T) {
-	h := apihttp.NewSessionHandler(&fakeSessionIssuer{})
+	h := apihttp.NewSessionHandler(&fakeSessionIssuer{}, &fakeApplicationResolver{})
 
 	c, _ := newSessionRequest(`{}`)
 	err := h.Create(c)
@@ -36,9 +36,9 @@ func TestSessionCreate_MissingUserIDReturns400(t *testing.T) {
 }
 
 func TestSessionCreate_IssuerErrorReturns500(t *testing.T) {
-	h := apihttp.NewSessionHandler(&fakeSessionIssuer{err: errFakeNotificationService})
+	h := apihttp.NewSessionHandler(&fakeSessionIssuer{err: errFakeNotificationService}, &fakeApplicationResolver{})
 
-	c, _ := newSessionRequest(`{"user_id":"user-1"}`)
+	c, _ := newSessionRequest(`{"user_id":"user-1","service":"svc-1"}`)
 	err := h.Create(c)
 	httpErr, ok := err.(*echo.HTTPError)
 	if !ok {
@@ -50,9 +50,9 @@ func TestSessionCreate_IssuerErrorReturns500(t *testing.T) {
 }
 
 func TestSessionCreate_ReturnsTokenAsJSON(t *testing.T) {
-	h := apihttp.NewSessionHandler(&fakeSessionIssuer{token: "minted-token"})
+	h := apihttp.NewSessionHandler(&fakeSessionIssuer{token: "minted-token"}, &fakeApplicationResolver{})
 
-	c, rec := newSessionRequest(`{"user_id":"user-1"}`)
+	c, rec := newSessionRequest(`{"user_id":"user-1","service":"svc-1"}`)
 	if err := h.Create(c); err != nil {
 		t.Fatalf("Create: %v", err)
 	}

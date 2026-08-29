@@ -21,7 +21,7 @@ func NewNotificationRepository(db *gorm.DB) *gormNotificationRepository {
 
 func (r *gormNotificationRepository) FindByIdempotencyKey(ctx context.Context, key string) (*model.Notification, error) {
 	var n model.Notification
-	err := r.db.WithContext(ctx).Where("idempotency_key = ?", key).First(&n).Error
+	err := r.db.WithContext(ctx).Preload("Application").Where("idempotency_key = ?", key).First(&n).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
 	}
@@ -33,7 +33,7 @@ func (r *gormNotificationRepository) FindByIdempotencyKey(ctx context.Context, k
 
 func (r *gormNotificationRepository) FindByID(ctx context.Context, id uuid.UUID) (*model.Notification, error) {
 	var n model.Notification
-	err := r.db.WithContext(ctx).First(&n, "id = ?", id).Error
+	err := r.db.WithContext(ctx).Preload("Application").First(&n, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
 	}
@@ -44,7 +44,14 @@ func (r *gormNotificationRepository) FindByID(ctx context.Context, id uuid.UUID)
 }
 
 func (r *gormNotificationRepository) List(ctx context.Context, filter model.ListNotificationsFilter) ([]model.Notification, error) {
-	query := r.db.WithContext(ctx).Order("created_at DESC")
+	query := r.db.WithContext(ctx).Preload("Application").Order("created_at DESC")
+	if filter.ApplicationID != nil {
+		query = query.Where("application_id = ?", *filter.ApplicationID)
+	}
+	if filter.Service != "" {
+		query = query.Joins("JOIN applications ON applications.id = notifications.application_id").
+			Where("applications.name = ?", filter.Service)
+	}
 	if filter.Channel != "" {
 		query = query.Where("channel = ?", filter.Channel)
 	}
@@ -62,10 +69,12 @@ func (r *gormNotificationRepository) Create(ctx context.Context, n *model.Notifi
 	return r.db.WithContext(ctx).Create(n).Error
 }
 
-func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string) ([]model.Notification, error) {
+func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
 	var notifications []model.Notification
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.
+			Preload("Application").
+			Where("application_id = ?", applicationID).
 			Where("channel = ?", model.ChannelInApp).
 			Where("recipient ->> 'user_id' = ?", userID).
 			Where("read_at IS NULL").

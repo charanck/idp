@@ -21,7 +21,7 @@ those.
 Request body:
 
 ```json
-{ "user_id": "user-123" }
+{ "user_id": "user-123", "service": "orders" }
 ```
 
 Response:
@@ -30,8 +30,10 @@ Response:
 { "token": "eyJ...", "expires_in_seconds": 300 }
 ```
 
-The token is a short-lived, Fernet-signed credential scoped to that one `user_id` — it authorizes
-the bearer to read *that user's* events/inbox and nothing else.
+The token is a short-lived, Fernet-signed credential scoped to that one `user_id` *and* `service`
+(the same `service` used when creating notifications) — it authorizes the bearer to read that
+user's events/inbox for that application only, never another application's notifications for the
+same `user_id`.
 
 ## 2. Open the stream
 
@@ -50,7 +52,7 @@ data: {"id":"d4e1...","channel":"inapp","status":"sent",...}
 ```bash
 TOKEN=$(curl -s -X POST "http://localhost:8000/api/v1/notifications/sessions" \
   -H "X-API-Key: <key_id>.<secret>" -H "Content-Type: application/json" \
-  -d '{"user_id":"user-123"}' | jq -r .token)
+  -d '{"user_id":"user-123","service":"orders"}' | jq -r .token)
 
 curl -N "http://localhost:8000/api/v1/notifications/sse/events" \
   -H "Authorization: Bearer $TOKEN"
@@ -63,10 +65,10 @@ curl -N "http://localhost:8000/api/v1/notifications/sse/events" \
 import json
 import requests
 
-def mint_session(base_url, api_key, user_id):
+def mint_session(base_url, api_key, user_id, service):
     response = requests.post(
         f"{base_url}/api/v1/notifications/sessions",
-        json={"user_id": user_id},
+        json={"user_id": user_id, "service": service},
         headers={"X-API-Key": api_key},
         timeout=10,
     )
@@ -86,7 +88,7 @@ def stream_events(base_url, token):
                 event = json.loads(line[len("data: "):])
                 print(event)
 
-token = mint_session("http://localhost:8000", api_key, "user-123")
+token = mint_session("http://localhost:8000", api_key, "user-123", "orders")
 stream_events("http://localhost:8000", token)
 ```
 
@@ -100,17 +102,17 @@ that supports headers:
 ```typescript
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 
-async function mintSession(baseUrl: string, apiKey: string, userId: string): Promise<string> {
+async function mintSession(baseUrl: string, apiKey: string, userId: string, service: string): Promise<string> {
   const res = await fetch(`${baseUrl}/api/v1/notifications/sessions`, {
     method: "POST",
     headers: { "X-API-Key": apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId }),
+    body: JSON.stringify({ user_id: userId, service }),
   });
   const { token } = await res.json();
   return token;
 }
 
-const token = await mintSession("http://localhost:8000", apiKey, "user-123");
+const token = await mintSession("http://localhost:8000", apiKey, "user-123", "orders");
 
 await fetchEventSource("http://localhost:8000/api/v1/notifications/sse/events", {
   headers: { Authorization: `Bearer ${token}` },
@@ -152,7 +154,7 @@ func streamEvents(baseURL, token string) error {
 | Status | Meaning |
 |---|---|
 | `401` | Missing/invalid/expired bearer token (from `sse/events`), or missing/invalid `X-API-Key` (from `sessions`). |
-| `400` | Missing `user_id` when minting a session. |
+| `400` | Missing `user_id` or `service` when minting a session. |
 
 The connection stays open until the client disconnects or the request context is cancelled (e.g.
 server shutdown) — there's no server-initiated timeout beyond that.

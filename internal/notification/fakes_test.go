@@ -9,10 +9,65 @@ import (
 
 	"github.com/google/uuid"
 
+	configmodel "controlplane/internal/model/config"
 	model "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 	"controlplane/internal/notification/provider"
 )
+
+// fakeApplicationRepository is an in-memory configmodel.ApplicationRepository,
+// narrowed here to just what NotificationService.CreateNotification needs
+// (GetOrCreate) - see internal/config/fakes_test.go for the fuller fake used
+// by the config package's own tests.
+type fakeApplicationRepository struct {
+	mu   sync.Mutex
+	apps map[string]configmodel.Application
+}
+
+func newFakeApplicationRepository() *fakeApplicationRepository {
+	return &fakeApplicationRepository{apps: make(map[string]configmodel.Application)}
+}
+
+func (f *fakeApplicationRepository) List(ctx context.Context, q string) ([]configmodel.Application, error) {
+	return nil, nil
+}
+
+func (f *fakeApplicationRepository) FindByID(ctx context.Context, id uuid.UUID) (*configmodel.Application, error) {
+	return nil, nil
+}
+
+func (f *fakeApplicationRepository) FindByName(ctx context.Context, name string) (*configmodel.Application, error) {
+	return nil, nil
+}
+
+func (f *fakeApplicationRepository) Create(ctx context.Context, app *configmodel.Application) error {
+	return nil
+}
+
+func (f *fakeApplicationRepository) Update(ctx context.Context, app *configmodel.Application) error {
+	return nil
+}
+
+func (f *fakeApplicationRepository) Delete(ctx context.Context, app *configmodel.Application) error {
+	return nil
+}
+
+func (f *fakeApplicationRepository) ListDistinctNames(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (f *fakeApplicationRepository) GetOrCreate(ctx context.Context, name string) (*configmodel.Application, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if app, ok := f.apps[name]; ok {
+		return &app, nil
+	}
+	app := configmodel.Application{ID: uuid.New(), Name: name}
+	f.apps[name] = app
+	return &app, nil
+}
+
+var _ configmodel.ApplicationRepository = (*fakeApplicationRepository)(nil)
 
 type fakeNotificationRepository struct {
 	mu            sync.Mutex
@@ -76,13 +131,13 @@ func (f *fakeNotificationRepository) Create(ctx context.Context, n *model.Notifi
 	return nil
 }
 
-func (f *fakeNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string) ([]model.Notification, error) {
+func (f *fakeNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	var out []model.Notification
 	for _, n := range f.notifications {
-		if n.Channel != model.ChannelInApp || n.ReadAt != nil {
+		if n.Channel != model.ChannelInApp || n.ReadAt != nil || n.ApplicationID != applicationID {
 			continue
 		}
 		var recipient struct {

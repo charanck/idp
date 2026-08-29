@@ -1,0 +1,134 @@
+package pages
+
+import "controlplane/internal/session"
+import configmodel "controlplane/internal/model/config"
+import "controlplane/web/template/layout"
+
+type NotificationRow struct {
+	ID              string
+	ApplicationName string
+	Channel         string
+	Status          string
+	Attempt         int
+	Provider        string
+	Error           string
+	CreatedAt       string
+	UpdatedAt       string
+}
+
+type NotificationListData struct {
+	Notifications  []NotificationRow
+	Applications   []configmodel.Application
+	CurrentAppID   string
+	CurrentChannel string
+	CurrentStatus  string
+	Page           int
+	NumPages       int
+	HasPrev        bool
+	HasNext        bool
+	PrevNum        int
+	NextNum        int
+	Window         []int
+	ExtraQuery     string
+}
+
+templ NotificationList(flashes []session.Flash, user layout.NavUser, data NotificationListData) {
+	@layout.Base("Notifications", "notifications", user, flashes) {
+		<h2>Notifications</h2>
+		<form method="get" class="filter-bar">
+			<div>
+				<label for="application_id">Application</label>
+				<select id="application_id" name="application_id">
+					<option value="">All applications</option>
+					for _, app := range data.Applications {
+						if app.ID.String() == data.CurrentAppID {
+							<option value={ app.ID.String() } selected>{ app.Name }</option>
+						} else {
+							<option value={ app.ID.String() }>{ app.Name }</option>
+						}
+					}
+				</select>
+			</div>
+			<div>
+				<label for="channel">Channel</label>
+				<select id="channel" name="channel">
+					<option value="">All channels</option>
+					for _, ch := range []string{"email", "sms", "whatsapp", "inapp"} {
+						if ch == data.CurrentChannel {
+							<option value={ ch } selected>{ ch }</option>
+						} else {
+							<option value={ ch }>{ ch }</option>
+						}
+					}
+				</select>
+			</div>
+			<div>
+				<label for="status">Status</label>
+				<select id="status" name="status">
+					<option value="">All statuses</option>
+					for _, st := range []string{"queued", "processing", "retrying", "sent", "failed"} {
+						if st == data.CurrentStatus {
+							<option value={ st } selected>{ st }</option>
+						} else {
+							<option value={ st }>{ st }</option>
+						}
+					}
+				</select>
+			</div>
+			<button class="btn-sm secondary" type="submit">Filter</button>
+			<button class="btn-sm secondary" type="button" onclick="window.location.reload()">Refresh</button>
+		</form>
+		<article class="card">
+			<table>
+				<thead>
+					<tr>
+						<th>Application</th>
+						<th>Channel</th>
+						<th>Status</th>
+						<th>Attempt</th>
+						<th>Provider</th>
+						<th>Error</th>
+						<th>Created</th>
+						<th>Updated</th>
+					</tr>
+				</thead>
+				<tbody>
+					if len(data.Notifications) == 0 {
+						<tr><td colspan="8">No notifications recorded.</td></tr>
+					}
+					for _, n := range data.Notifications {
+						<tr>
+							<td>{ n.ApplicationName }</td>
+							<td>{ n.Channel }</td>
+							<td>
+								<span class={ "badge", statusBadgeClass(n.Status) }>{ n.Status }</span>
+							</td>
+							<td>{ n.Attempt }</td>
+							<td>{ n.Provider }</td>
+							<td>{ n.Error }</td>
+							<td>{ n.CreatedAt }</td>
+							<td>{ n.UpdatedAt }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</article>
+		@PaginationNav("/notifications/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		<script>
+			setTimeout(function() { window.location.reload(); }, 60000);
+		</script>
+	}
+}
+
+func statusBadgeClass(status string) string {
+	switch status {
+	case "sent":
+		return "badge-success"
+	case "failed":
+		return "badge-danger"
+	case "retrying":
+		return "badge-warning"
+	default:
+		return "badge-secondary"
+	}
+}

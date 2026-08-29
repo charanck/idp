@@ -12,8 +12,9 @@ import (
 	"controlplane/internal/notification"
 )
 
-// fakeEnqueuer records EnqueueSend calls instead of talking to Redis, so
-// NotificationService's logic can be tested independently of asynq.
+// fakeEnqueuer records EnqueueSend calls instead of running a real DBOS
+// workflow, so NotificationService's logic can be tested independently of
+// DBOS/Postgres.
 type fakeEnqueuer struct {
 	mu       sync.Mutex
 	enqueued []uuid.UUID
@@ -35,7 +36,7 @@ func (f *fakeEnqueuer) count() int {
 func TestCreateNotification_InsertsQueuedAndEnqueues(t *testing.T) {
 	repo := newFakeNotificationRepository()
 	enqueuer := &fakeEnqueuer{}
-	svc := notification.NewNotificationService(repo, enqueuer)
+	svc := notification.NewNotificationService(repo, newFakeApplicationRepository(), enqueuer)
 
 	n, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
 		Channel:   model.ChannelEmail,
@@ -64,7 +65,7 @@ func TestCreateNotification_InsertsQueuedAndEnqueues(t *testing.T) {
 func TestCreateNotification_IdempotentQueuedReEnqueues(t *testing.T) {
 	repo := newFakeNotificationRepository()
 	enqueuer := &fakeEnqueuer{}
-	svc := notification.NewNotificationService(repo, enqueuer)
+	svc := notification.NewNotificationService(repo, newFakeApplicationRepository(), enqueuer)
 	ctx := context.Background()
 
 	in := notification.CreateNotificationInput{
@@ -97,7 +98,7 @@ func TestCreateNotification_IdempotentQueuedReEnqueues(t *testing.T) {
 }
 
 func TestGetNotification_ReturnsNilForUnknownID(t *testing.T) {
-	svc := notification.NewNotificationService(newFakeNotificationRepository(), &fakeEnqueuer{})
+	svc := notification.NewNotificationService(newFakeNotificationRepository(), newFakeApplicationRepository(), &fakeEnqueuer{})
 
 	got, err := svc.GetNotification(context.Background(), uuid.New())
 	if err != nil {
@@ -109,7 +110,7 @@ func TestGetNotification_ReturnsNilForUnknownID(t *testing.T) {
 }
 
 func TestListNotifications_FiltersByChannelAndStatus(t *testing.T) {
-	svc := notification.NewNotificationService(newFakeNotificationRepository(), &fakeEnqueuer{})
+	svc := notification.NewNotificationService(newFakeNotificationRepository(), newFakeApplicationRepository(), &fakeEnqueuer{})
 
 	if _, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
 		Channel: model.ChannelEmail, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`),
@@ -141,7 +142,7 @@ func TestListNotifications_FiltersByChannelAndStatus(t *testing.T) {
 
 func TestConsumeUnreadInAppForUser_OnlyInAppChannelAndMarksRead(t *testing.T) {
 	repo := newFakeNotificationRepository()
-	svc := notification.NewNotificationService(repo, &fakeEnqueuer{})
+	svc := notification.NewNotificationService(repo, newFakeApplicationRepository(), &fakeEnqueuer{})
 	ctx := context.Background()
 
 	mustCreate := func(channel, userID string) *model.Notification {
@@ -160,7 +161,7 @@ func TestConsumeUnreadInAppForUser_OnlyInAppChannelAndMarksRead(t *testing.T) {
 	mustCreate(model.ChannelEmail, "u1")
 	mustCreate(model.ChannelInApp, "u2")
 
-	unread, err := svc.ConsumeUnreadInAppForUser(ctx, "u1")
+	unread, err := svc.ConsumeUnreadInAppForUser(ctx, "u1", inApp.ApplicationID)
 	if err != nil {
 		t.Fatalf("ConsumeUnreadInAppForUser: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestConsumeUnreadInAppForUser_OnlyInAppChannelAndMarksRead(t *testing.T) {
 
 	// A second call should see nothing left unread - the first call marked
 	// what it returned as read.
-	againUnread, err := svc.ConsumeUnreadInAppForUser(ctx, "u1")
+	againUnread, err := svc.ConsumeUnreadInAppForUser(ctx, "u1", inApp.ApplicationID)
 	if err != nil {
 		t.Fatalf("ConsumeUnreadInAppForUser (2nd): %v", err)
 	}

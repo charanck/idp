@@ -15,6 +15,7 @@ import (
 )
 
 type createNotificationRequest struct {
+	Service        string          `json:"service"`
 	Channel        string          `json:"channel"`
 	Recipient      json.RawMessage `json:"recipient"`
 	Content        json.RawMessage `json:"content"`
@@ -23,6 +24,7 @@ type createNotificationRequest struct {
 
 type notificationResponse struct {
 	ID                string          `json:"id"`
+	Service           string          `json:"service"`
 	Channel           string          `json:"channel"`
 	Recipient         json.RawMessage `json:"recipient"`
 	Content           json.RawMessage `json:"content"`
@@ -39,6 +41,7 @@ type notificationResponse struct {
 func toNotificationResponse(n *notificationmodel.Notification) notificationResponse {
 	resp := notificationResponse{
 		ID:        n.ID.String(),
+		Service:   n.Application.Name,
 		Channel:   n.Channel,
 		Recipient: json.RawMessage(n.Recipient),
 		Content:   json.RawMessage(n.Content),
@@ -98,6 +101,9 @@ func (h *NotificationHandler) Create(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
+	if req.Service == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "service is required")
+	}
 
 	channel, ok := h.channels[req.Channel]
 	if !ok {
@@ -108,6 +114,7 @@ func (h *NotificationHandler) Create(c echo.Context) error {
 	}
 
 	n, err := h.creator.CreateNotification(c.Request().Context(), notification.CreateNotificationInput{
+		Service:        req.Service,
 		Channel:        req.Channel,
 		Recipient:      datatypes.JSON(req.Recipient),
 		Content:        datatypes.JSON(req.Content),
@@ -123,6 +130,7 @@ func (h *NotificationHandler) Create(c echo.Context) error {
 // List serves GET /notifications.
 func (h *NotificationHandler) List(c echo.Context) error {
 	filter := notificationmodel.ListNotificationsFilter{
+		Service: c.QueryParam("service"),
 		Channel: c.QueryParam("channel"),
 		Status:  c.QueryParam("status"),
 	}

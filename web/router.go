@@ -43,6 +43,10 @@ func RegisterRoutes(e *echo.Echo, h *Handlers, authMW *AuthMiddleware) {
 	authed.POST("/flags/:id/delete/", h.Flag.Delete)
 	authed.GET("/flags/:id/delete/", h.Flag.Delete)
 
+	if notification.Enabled {
+		authed.GET("/notifications/", h.Notification.List)
+	}
+
 	admin := e.Group("", authMW.AdminRequired())
 	admin.GET("/applications/", h.Application.List)
 	admin.POST("/applications/create/", h.Application.Create)

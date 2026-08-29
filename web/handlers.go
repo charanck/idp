@@ -17,4 +17,5 @@ type Handlers struct {
 	OAuthLogin           *OAuthLoginHandler
 	OAuthProvider        *OAuthProviderHandler
 	NotificationSettings *NotificationSettingsHandler
+	Notification         *NotificationHandler
 }

@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dbos-inc/dbos-transact-golang/dbos"
+
 	apihttp "controlplane/api/http"
 	"controlplane/internal/appconfig"
 	"controlplane/internal/auth"
@@ -55,8 +57,16 @@ func main() {
 		log.Fatalf("%v", err)
 	}
 
+	dbosCtx, err := newDBOSContext(cfg)
+	if err != nil {
+		log.Fatalf("setup dbos context: %v", err)
+	}
+
 	svc := newCoreServices(gdb, rdb, cfg)
-	notif := newNotificationStack(gdb, rdb, svc.Encryption)
+	notif, err := newNotificationStack(dbosCtx, gdb, rdb, svc.Encryption)
+	if err != nil {
+		log.Fatalf("setup notification stack: %v", err)
+	}
 
 	if err := bootstrapAdmin(gdb, cfg); err != nil {
 		log.Fatalf("bootstrap admin user: %v", err)
@@ -83,6 +93,7 @@ func main() {
 		OAuthLogin:           web.NewOAuthLoginHandler(svc.OAuth, svc.Activity),
 		OAuthProvider:        web.NewOAuthProviderHandler(svc.OAuth, svc.Activity),
 		NotificationSettings: web.NewNotificationSettingsHandler(notif.Settings, svc.Activity),
+		Notification:         web.NewNotificationHandler(notif.Service, svc.Config),
 	}
 	web.RegisterRoutes(e, webHandlers, webAuthMW)
 
@@ -100,17 +111,15 @@ func main() {
 		apihttp.RegisterNotificationRoutes(
 			apiGroup.Group("/notifications"),
 			apihttp.NewNotificationHandler(notif.Service, notif.Service, notif.Service, notif.Channels),
-			apihttp.NewSessionHandler(notif.TokenIssuer),
+			apihttp.NewSessionHandler(notif.TokenIssuer, notif.Apps),
 			apihttp.NewSSEHandler(notif.TokenIssuer, notif.Hub),
 			apihttp.NewInAppHandler(notif.TokenIssuer, notif.Service),
 			notifAuthMW,
 		)
+	}
 
-		go func() {
-			if err := notif.Run(); err != nil {
-				slog.Error("asynq server stopped", "err", err)
-			}
-		}()
+	if err := dbos.Launch(dbosCtx); err != nil {
+		log.Fatalf("launch dbos context: %v", err)
 	}
 
 	go func() {
@@ -125,7 +134,9 @@ func main() {
 	<-quit
 
 	slog.Info("shutting down")
-	notif.Shutdown()
+	if err := dbos.Shutdown(dbosCtx, 10*time.Second); err != nil {
+		slog.Error("dbos shutdown", "err", err)
+	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := e.Shutdown(shutdownCtx); err != nil {

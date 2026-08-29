@@ -32,7 +32,7 @@ func TestHub_PublishSentDeliversToSubscriber(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	pubsub := hub.Subscribe(ctx, "user-1")
+	pubsub := hub.Subscribe(ctx, "user-1", uuid.Nil)
 	defer pubsub.Close()
 	if _, err := pubsub.Receive(ctx); err != nil {
 		t.Fatalf("Receive (subscribe confirmation): %v", err)

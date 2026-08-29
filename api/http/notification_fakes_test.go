@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	configmodel "controlplane/internal/model/config"
 	notificationmodel "controlplane/internal/model/notification"
 	"controlplane/internal/notification"
 )
@@ -42,17 +43,32 @@ type fakeSessionIssuer struct {
 	err   error
 }
 
-func (f *fakeSessionIssuer) Issue(userID string) (string, error) {
+func (f *fakeSessionIssuer) Issue(userID string, applicationID uuid.UUID) (string, error) {
 	return f.token, f.err
 }
 
+type fakeApplicationResolver struct {
+	app *configmodel.Application
+	err error
+}
+
+func (f *fakeApplicationResolver) GetOrCreate(ctx context.Context, name string) (*configmodel.Application, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.app != nil {
+		return f.app, nil
+	}
+	return &configmodel.Application{ID: uuid.New(), Name: name}, nil
+}
+
 type fakeSessionValidator struct {
-	userID string
+	claims notification.SessionClaims
 	err    error
 }
 
-func (f *fakeSessionValidator) Validate(token string) (string, error) {
-	return f.userID, f.err
+func (f *fakeSessionValidator) Validate(token string) (notification.SessionClaims, error) {
+	return f.claims, f.err
 }
 
 type fakeUnreadConsumer struct {
@@ -60,7 +76,7 @@ type fakeUnreadConsumer struct {
 	err           error
 }
 
-func (f *fakeUnreadConsumer) ConsumeUnreadInAppForUser(ctx context.Context, userID string) ([]notificationmodel.Notification, error) {
+func (f *fakeUnreadConsumer) ConsumeUnreadInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error) {
 	return f.notifications, f.err
 }
 

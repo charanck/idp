@@ -1,10 +1,9 @@
 // Package cache provides the small key/value + scope-version-counter
 // interface config.ConfigService and config.FeatureFlagService cache
 // through. The Go server treats Redis as a hard dependency - it's already
-// required at startup for sessions and rate limiting, and future work (an
-// asynq job queue + asynqmon admin page) will need it too - so RedisCache is
-// always used in production. NoopCache remains only as a lightweight
-// stand-in for tests that don't care about caching behavior.
+// required at startup for sessions, rate limiting, and the SSE hub - so
+// RedisCache is always used in production. NoopCache remains only as a
+// lightweight stand-in for tests that don't care about caching behavior.
 package cache
 
 import (
