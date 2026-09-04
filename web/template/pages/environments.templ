@@ -103,6 +103,7 @@ templ EnvironmentForm(flashes []session.Flash, user layout.NavUser, data Environ
 				<label for="application">
 					Application
 					<select id="application" name="application_id" required>
+						<option value="">Select an application</option>
 						for _, app := range data.Applications {
 							if app.ID.String() == data.ApplicationID {
 								<option value={ app.ID.String() } selected>{ app.Name }</option>

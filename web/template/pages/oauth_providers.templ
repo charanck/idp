@@ -50,7 +50,7 @@ templ OAuthProvidersList(flashes []session.Flash, user layout.NavUser, data OAut
 					for _, p := range data.Providers {
 						<tr>
 							<td>{ p.Name }</td>
-							<td><code>{ p.ClientID }</code></td>
+							<td class="truncate max-w-[16rem]" title={ p.ClientID }><code>{ p.ClientID }</code></td>
 							<td>
 								if p.IsActive {
 									<span class="badge badge-success">Active</span>

@@ -153,25 +153,29 @@ templ ClientDetail(flashes []session.Flash, user layout.NavUser, data ClientDeta
 					<span class="badge badge-secondary">Inactive</span>
 				}
 			</div>
-			<table>
-				<tbody>
-					<tr><th>Name</th><td>{ data.Name }</td></tr>
-					<tr><th>API Key ID</th><td><code>{ data.APIKeyID }</code></td></tr>
-					<tr><th>ID</th><td><code>{ data.ID }</code></td></tr>
-					<tr>
-						<th>Encryption Key</th>
-						<td>
-							<code>{ data.EncryptionKey }</code>
-							<form method="post" action={ templ.URL("/clients/" + data.ID + "/regenerate-key/") } class="inline" onsubmit="return confirm('Regenerate the encryption key? The current key stops working immediately.')">
-								<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-								<button type="submit" class="btn-sm outline secondary ml-2"><i class="bi bi-arrow-repeat"></i> Regenerate</button>
-							</form>
-						</td>
-					</tr>
-					<tr><th>Created</th><td>{ data.CreatedAt }</td></tr>
-					<tr><th>Updated</th><td>{ data.UpdatedAt }</td></tr>
-				</tbody>
-			</table>
+			<div class="table-scroll">
+				<table>
+					<tbody>
+						<tr><th>Name</th><td>{ data.Name }</td></tr>
+						<tr><th>API Key ID</th><td><code>{ data.APIKeyID }</code></td></tr>
+						<tr><th>ID</th><td><code>{ data.ID }</code></td></tr>
+						<tr>
+							<th>Encryption Key</th>
+							<td>
+								<div class="form-actions">
+									<code>{ data.EncryptionKey }</code>
+									<form method="post" action={ templ.URL("/clients/" + data.ID + "/regenerate-key/") } onsubmit="return confirm('Regenerate the encryption key? The current key stops working immediately.')">
+										<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+										<button type="submit" class="btn-sm outline secondary"><i class="bi bi-arrow-repeat"></i> Regenerate</button>
+									</form>
+								</div>
+							</td>
+						</tr>
+						<tr><th>Created</th><td>{ data.CreatedAt }</td></tr>
+						<tr><th>Updated</th><td>{ data.UpdatedAt }</td></tr>
+					</tbody>
+				</table>
+			</div>
 			<div class="toolbar">
 				<a role="button" class="secondary outline" href="/clients/">Back to Clients</a>
 				<div class="actions">

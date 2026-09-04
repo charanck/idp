@@ -17,9 +17,7 @@ type NotificationSettingsListData struct {
 
 templ NotificationSettingsList(flashes []session.Flash, user layout.NavUser, data NotificationSettingsListData) {
 	@layout.Base("Notification Settings", "notification_settings", user, flashes) {
-		<div class="toolbar">
-			<h2>Notification Settings</h2>
-		</div>
+		<h2>Notification Settings</h2>
 		<article class="card">
 			<table>
 				<thead><tr><th>Channel</th><th>Credentials</th><th>Status</th><th class="actions">Actions</th></tr></thead>

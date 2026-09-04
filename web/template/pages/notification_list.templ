@@ -104,13 +104,13 @@ templ NotificationList(flashes []session.Flash, user layout.NavUser, data Notifi
 						<tr>
 							<td>{ n.ApplicationName }</td>
 							<td>{ n.Channel }</td>
-							<td>{ n.Recipient }</td>
+							<td class="truncate max-w-[12rem]" title={ n.Recipient }>{ n.Recipient }</td>
 							<td>
 								<span class={ "badge", statusBadgeClass(n.Status) }>{ n.Status }</span>
 							</td>
 							<td>{ n.Attempt }</td>
 							<td>{ n.Provider }</td>
-							<td>{ n.Error }</td>
+							<td class="truncate max-w-[12rem]" title={ n.Error }>{ n.Error }</td>
 							<td>{ n.CreatedAt }</td>
 							<td>{ n.UpdatedAt }</td>
 							<td class="actions">
@@ -168,28 +168,30 @@ templ NotificationDetail(flashes []session.Flash, user layout.NavUser, data Noti
 				</div>
 				<span class={ "badge", statusBadgeClass(data.Status) }>{ data.Status }</span>
 			</div>
-			<table>
-				<tbody>
-					<tr><th>ID</th><td><code>{ data.ID }</code></td></tr>
-					<tr><th>Application</th><td>{ data.ApplicationName }</td></tr>
-					<tr><th>Channel</th><td>{ data.Channel }</td></tr>
-					<tr><th>Status</th><td><span class={ "badge", statusBadgeClass(data.Status) }>{ data.Status }</span></td></tr>
-					<tr><th>Attempt</th><td>{ data.Attempt }</td></tr>
-					<tr><th>Provider</th><td>{ data.Provider }</td></tr>
-					<tr><th>Provider Message ID</th><td><code>{ data.ProviderMessageID }</code></td></tr>
-					<tr><th>Idempotency Key</th><td><code>{ data.IdempotencyKey }</code></td></tr>
-					if data.Error != "" {
-						<tr><th>Error</th><td>{ data.Error }</td></tr>
-					}
-					if data.ReadAt != "" {
-						<tr><th>Read At</th><td>{ data.ReadAt }</td></tr>
-					}
-					<tr><th>Created</th><td>{ data.CreatedAt }</td></tr>
-					<tr><th>Updated</th><td>{ data.UpdatedAt }</td></tr>
-					<tr><th>Recipient</th><td><pre>{ data.Recipient }</pre></td></tr>
-					<tr><th>Content</th><td><pre>{ data.Content }</pre></td></tr>
-				</tbody>
-			</table>
+			<div class="table-scroll">
+				<table>
+					<tbody>
+						<tr><th>ID</th><td><code>{ data.ID }</code></td></tr>
+						<tr><th>Application</th><td>{ data.ApplicationName }</td></tr>
+						<tr><th>Channel</th><td>{ data.Channel }</td></tr>
+						<tr><th>Status</th><td><span class={ "badge", statusBadgeClass(data.Status) }>{ data.Status }</span></td></tr>
+						<tr><th>Attempt</th><td>{ data.Attempt }</td></tr>
+						<tr><th>Provider</th><td>{ data.Provider }</td></tr>
+						<tr><th>Provider Message ID</th><td><code>{ data.ProviderMessageID }</code></td></tr>
+						<tr><th>Idempotency Key</th><td><code>{ data.IdempotencyKey }</code></td></tr>
+						if data.Error != "" {
+							<tr><th>Error</th><td>{ data.Error }</td></tr>
+						}
+						if data.ReadAt != "" {
+							<tr><th>Read At</th><td>{ data.ReadAt }</td></tr>
+						}
+						<tr><th>Created</th><td>{ data.CreatedAt }</td></tr>
+						<tr><th>Updated</th><td>{ data.UpdatedAt }</td></tr>
+						<tr><th>Recipient</th><td><pre>{ data.Recipient }</pre></td></tr>
+						<tr><th>Content</th><td><pre>{ data.Content }</pre></td></tr>
+					</tbody>
+				</table>
+			</div>
 			<div class="toolbar">
 				<a role="button" class="secondary outline" href="/notifications/">Back to Notifications</a>
 			</div>

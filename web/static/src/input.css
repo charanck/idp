@@ -132,8 +132,12 @@
   }
 
   code {
-    @apply bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 text-[0.85em];
+    @apply bg-slate-100 text-slate-700 rounded px-1.5 py-0.5 text-[0.85em] break-all;
     @apply dark:bg-slate-900 dark:text-slate-300;
+  }
+
+  pre {
+    @apply whitespace-pre-wrap break-words;
   }
 
   small {
@@ -191,12 +195,12 @@
   }
 
   .topbar {
-    @apply flex items-center justify-end gap-3 border-b border-slate-200 bg-white px-6 py-3;
+    @apply flex flex-wrap items-center justify-end gap-3 border-b border-slate-200 bg-white px-6 py-3;
     @apply dark:bg-slate-900 dark:border-slate-800;
   }
 
   .topbar .user-email {
-    @apply mr-auto text-sm text-slate-500 dark:text-slate-400;
+    @apply mr-auto min-w-0 max-w-[16rem] truncate text-sm text-slate-500 dark:text-slate-400;
   }
 
   .theme-toggle {
@@ -219,7 +223,7 @@
   /* Toolbar / page header -------------------------------------------------- */
 
   .toolbar {
-    @apply flex items-center justify-between gap-4 mb-5;
+    @apply flex flex-wrap items-center justify-between gap-4 mb-5;
   }
 
   .toolbar h2 {
@@ -321,6 +325,10 @@
     @apply p-0 overflow-x-auto;
   }
 
+  article.card + article.card {
+    @apply mt-4;
+  }
+
   article.card > header {
     @apply border-b border-slate-200 px-4 py-3 font-semibold text-sm text-slate-700;
     @apply dark:border-slate-700 dark:text-slate-300;
@@ -328,6 +336,13 @@
 
   article.card table {
     @apply mb-0;
+  }
+
+  /* Scroll fallback for standalone detail tables that aren't wrapped in
+     article.card (which already gets overflow-x-auto above) - used by
+     ClientDetail / NotificationDetail's key-value tables. */
+  .table-scroll {
+    @apply overflow-x-auto;
   }
 
   /* Pagination -------------------------------------------------------------------- */
@@ -371,5 +386,21 @@
 
   .stat-card .stat-label {
     @apply text-xs text-slate-500 mt-0.5 dark:text-slate-400;
+  }
+
+  /* Dashboard analytics charts -------------------------------------------------------- */
+
+  .chart-grid {
+    @apply grid gap-4 mb-6;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .chart-wrap {
+    @apply p-4;
+  }
+
+  .chart-wrap canvas {
+    @apply block w-full;
+    min-height: 220px;
   }
 }

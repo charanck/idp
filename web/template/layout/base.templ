@@ -112,7 +112,7 @@ templ navLink(activeNav, key, href, icon, label string) {
 
 templ topbar(user NavUser) {
 	<div class="topbar">
-		<span class="user-email">{ user.Email }</span>
+		<span class="user-email" title={ user.Email }>{ user.Email }</span>
 		<button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
 			<i class="bi bi-moon-stars"></i>
 			<i class="bi bi-sun"></i>

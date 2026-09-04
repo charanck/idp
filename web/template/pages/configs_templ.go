@@ -318,7 +318,7 @@ func ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsListD
 							return templ_7745c5c3_Err
 						}
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</td><td class=\"actions w-[18.75rem]\"><a role=\"button\" class=\"btn-sm outline secondary\" href=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</td><td class=\"actions\"><a role=\"button\" class=\"btn-sm outline secondary\" href=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -522,7 +522,7 @@ func ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDat
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "\"> <label for=\"application\">Application <select id=\"application\" name=\"application_id\" required>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "\"> <label for=\"application\">Application <select id=\"application\" name=\"application_id\" required><option value=\"\">Select an application</option> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -535,7 +535,7 @@ func ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDat
 					var templ_7745c5c3_Var24 string
 					templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(app.ID.String())
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 180, Col: 39}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 181, Col: 39}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 					if templ_7745c5c3_Err != nil {
@@ -548,7 +548,7 @@ func ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDat
 					var templ_7745c5c3_Var25 string
 					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(app.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 180, Col: 61}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 181, Col: 61}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 					if templ_7745c5c3_Err != nil {
@@ -566,7 +566,7 @@ func ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDat
 					var templ_7745c5c3_Var26 string
 					templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(app.ID.String())
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 182, Col: 39}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 183, Col: 39}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 					if templ_7745c5c3_Err != nil {
@@ -579,7 +579,7 @@ func ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDat
 					var templ_7745c5c3_Var27 string
 					templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(app.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 182, Col: 52}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 183, Col: 52}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 					if templ_7745c5c3_Err != nil {
@@ -598,7 +598,7 @@ func ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDat
 			var templ_7745c5c3_Var28 string
 			templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.EnvironmentID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 189, Col: 102}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 190, Col: 102}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 			if templ_7745c5c3_Err != nil {
@@ -611,7 +611,7 @@ func ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDat
 			var templ_7745c5c3_Var29 string
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.Key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 193, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 194, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var29)
 			if templ_7745c5c3_Err != nil {
@@ -624,7 +624,7 @@ func ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDat
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(data.Value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 197, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 198, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
@@ -730,7 +730,7 @@ func typeOption(current, value, label string) templ.Component {
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 263, Col: 23}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 264, Col: 23}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 			if templ_7745c5c3_Err != nil {
@@ -743,7 +743,7 @@ func typeOption(current, value, label string) templ.Component {
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 263, Col: 42}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 264, Col: 42}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {
@@ -761,7 +761,7 @@ func typeOption(current, value, label string) templ.Component {
 			var templ_7745c5c3_Var34 string
 			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 265, Col: 23}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 266, Col: 23}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 			if templ_7745c5c3_Err != nil {
@@ -774,7 +774,7 @@ func typeOption(current, value, label string) templ.Component {
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 265, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 266, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 			if templ_7745c5c3_Err != nil {
@@ -845,7 +845,7 @@ func ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHist
 			var templ_7745c5c3_Var38 string
 			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(data.Application)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 287, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 288, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 			if templ_7745c5c3_Err != nil {
@@ -858,7 +858,7 @@ func ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHist
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(data.Environment)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 287, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 288, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 			if templ_7745c5c3_Err != nil {
@@ -871,7 +871,7 @@ func ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHist
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(data.Key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 287, Col: 62}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 288, Col: 62}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 			if templ_7745c5c3_Err != nil {
@@ -895,7 +895,7 @@ func ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHist
 				var templ_7745c5c3_Var41 string
 				templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(v.Version)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 298, Col: 22}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 299, Col: 22}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 				if templ_7745c5c3_Err != nil {
@@ -908,7 +908,7 @@ func ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHist
 				var templ_7745c5c3_Var42 string
 				templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(v.Action)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 299, Col: 21}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 300, Col: 21}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 				if templ_7745c5c3_Err != nil {
@@ -921,7 +921,7 @@ func ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHist
 				var templ_7745c5c3_Var43 string
 				templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(v.ChangedBy)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 300, Col: 24}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 301, Col: 24}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 				if templ_7745c5c3_Err != nil {
@@ -934,7 +934,7 @@ func ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHist
 				var templ_7745c5c3_Var44 string
 				templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(v.CreatedAt)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 301, Col: 24}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 302, Col: 24}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 				if templ_7745c5c3_Err != nil {
@@ -947,7 +947,7 @@ func ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHist
 				var templ_7745c5c3_Var45 templ.SafeURL
 				templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL("/configs/" + data.ConfigID + "/rollback/" + v.Version + "/"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 303, Col: 108}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 304, Col: 108}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 				if templ_7745c5c3_Err != nil {
@@ -960,7 +960,7 @@ func ConfigHistory(flashes []session.Flash, user layout.NavUser, data ConfigHist
 				var templ_7745c5c3_Var46 string
 				templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.CSRFToken)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 304, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/configs.templ`, Line: 305, Col: 70}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 				if templ_7745c5c3_Err != nil {

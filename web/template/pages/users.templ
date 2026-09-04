@@ -48,8 +48,8 @@ templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData
 					}
 					for _, u := range data.Users {
 						<tr>
-							<td>{ u.Email }</td>
-							<td>{ u.Username }</td>
+							<td class="truncate max-w-xs" title={ u.Email }>{ u.Email }</td>
+							<td class="truncate max-w-[10rem]" title={ u.Username }>{ u.Username }</td>
 							<td>
 								if u.IsActive {
 									<span class="badge badge-success">Active</span>

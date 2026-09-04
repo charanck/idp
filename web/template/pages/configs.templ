@@ -107,7 +107,7 @@ templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsList
 										<code>{ entry.DisplayValue }</code>
 									}
 								</td>
-								<td class="actions w-[18.75rem]">
+								<td class="actions">
 									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/history/") }>History</a>
 									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/clone/") }>Clone</a>
 									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/edit/") }>Edit</a>
@@ -175,6 +175,7 @@ templ ConfigForm(flashes []session.Flash, user layout.NavUser, data ConfigFormDa
 				<label for="application">
 					Application
 					<select id="application" name="application_id" required>
+						<option value="">Select an application</option>
 						for _, app := range data.Applications {
 							if app.ID.String() == data.ApplicationID {
 								<option value={ app.ID.String() } selected>{ app.Name }</option>

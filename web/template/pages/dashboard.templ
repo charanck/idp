@@ -39,7 +39,7 @@ templ Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData
 					}
 					for _, entry := range data.RecentConfigs {
 						<tr>
-							<td>
+							<td class="truncate max-w-md" title={ entry.Application.Name + " / " + entry.Environment.Name + " / " + entry.Key }>
 								<strong>{ entry.Application.Name }</strong> / { entry.Environment.Name } / { entry.Key }
 							</td>
 							<td class="text-right">
@@ -55,22 +55,30 @@ templ Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData
 			</table>
 		</article>
 		<h2>Analytics (Last 7 Days)</h2>
-		<div class="stat-grid">
+		<div class="chart-grid">
 			<article class="card">
 				<header>Activity Trend</header>
-				<canvas id="chart-activity-trend"></canvas>
+				<div class="chart-wrap">
+					<canvas id="chart-activity-trend"></canvas>
+				</div>
 			</article>
 			<article class="card">
 				<header>Config / Secret / Flag Growth</header>
-				<canvas id="chart-growth"></canvas>
+				<div class="chart-wrap">
+					<canvas id="chart-growth"></canvas>
+				</div>
 			</article>
 			<article class="card">
 				<header>Notification Delivery</header>
-				<canvas id="chart-notifications"></canvas>
+				<div class="chart-wrap">
+					<canvas id="chart-notifications"></canvas>
+				</div>
 			</article>
 			<article class="card">
 				<header>S2S API Request Volume</header>
-				<canvas id="chart-s2s-usage"></canvas>
+				<div class="chart-wrap">
+					<canvas id="chart-s2s-usage"></canvas>
+				</div>
 			</article>
 		</div>
 		@templ.JSONScript("analytics-data", json.RawMessage(data.AnalyticsJSON))
