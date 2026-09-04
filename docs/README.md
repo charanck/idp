@@ -1,14 +1,14 @@
 # Documentation
 
 A Go control plane for configuration & secret management and feature flags, with API-key
-service-to-service (S2S) auth, OAuth2/OIDC login, a notification system (email/SMS/WhatsApp/in-app,
+service-to-service (S2S) auth, OAuth2/OIDC login, a notification system (email/SMS/in-app,
 with realtime SSE delivery), and a server-rendered web UI.
 
 - **Configuration & secrets** scoped per application + environment, **encrypted at rest** and
   re-encrypted per service client on read — a client only ever sees ciphertext it can decrypt with
   its own key. See [Config & Secrets](./guides/config-and-secrets.md).
 - **Feature flags**, per application + environment. See [Feature Flags](./guides/feature-flags.md).
-- **Notifications** across email, SMS, WhatsApp, and in-app channels, processed by a background
+- **Notifications** across email, SMS, and in-app channels, processed by a background
   worker with retries. See [Notifications](./guides/notifications.md).
 - **Realtime delivery events over SSE** and a **persisted, pull-based in-app inbox** for
   user-facing notifications. See [Realtime events](./guides/sse.md) and

@@ -1,7 +1,10 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
 	"net/url"
 
 	"github.com/google/uuid"
@@ -19,6 +22,35 @@ const notificationsPageSize = 25
 // *notification.NotificationService.
 type NotificationStore interface {
 	ListNotifications(ctx context.Context, filter notificationmodel.ListNotificationsFilter) ([]notificationmodel.Notification, error)
+	GetNotification(ctx context.Context, id uuid.UUID) (*notificationmodel.Notification, error)
+}
+
+// notificationRecipientSummary best-effort extracts a human-readable
+// recipient string ("email"/"phone"/"user_id", whichever is present) from a
+// notification's raw jsonb Recipient blob, for display in the list without
+// requiring the full JSON detail view.
+func notificationRecipientSummary(recipient []byte) string {
+	var fields map[string]any
+	if err := json.Unmarshal(recipient, &fields); err != nil {
+		return "-"
+	}
+	for _, key := range []string{"email", "phone", "user_id"} {
+		if v, ok := fields[key].(string); ok && v != "" {
+			return v
+		}
+	}
+	return "-"
+}
+
+// prettyJSON indents raw jsonb bytes for display; falls back to the raw
+// string if it isn't valid JSON (shouldn't happen for jsonb columns, but the
+// detail page must never fail to render over it).
+func prettyJSON(raw []byte) string {
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, raw, "", "  "); err != nil {
+		return string(raw)
+	}
+	return indented.String()
 }
 
 type NotificationHandler struct {
@@ -61,12 +93,14 @@ func (h *NotificationHandler) List(c echo.Context) error {
 			ID:              n.ID.String(),
 			ApplicationName: n.Application.Name,
 			Channel:         n.Channel,
+			Recipient:       notificationRecipientSummary(n.Recipient),
 			Status:          n.Status,
 			Attempt:         n.Attempt,
 			Provider:        providerName,
 			Error:           errMsg,
 			CreatedAt:       n.CreatedAt.Format("2006-01-02 15:04:05"),
 			UpdatedAt:       n.UpdatedAt.Format("2006-01-02 15:04:05"),
+			DetailURL:       "/notifications/" + n.ID.String() + "/",
 		})
 	}
 
@@ -95,6 +129,59 @@ func (h *NotificationHandler) List(c echo.Context) error {
 		HasPrev: page.HasPrevious, HasNext: page.HasNext,
 		PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
 		Window: page.PageRange(), ExtraQuery: extra.Encode(),
+	}).Render(c.Request().Context(), c.Response())
+}
+
+func (h *NotificationHandler) Detail(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+
+	n, err := h.notifications.GetNotification(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+	if n == nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+
+	errMsg := ""
+	if n.Error != nil {
+		errMsg = *n.Error
+	}
+	providerName := ""
+	if n.Provider != nil {
+		providerName = *n.Provider
+	}
+	providerMessageID := ""
+	if n.ProviderMessageID != nil {
+		providerMessageID = *n.ProviderMessageID
+	}
+	idempotencyKey := ""
+	if n.IdempotencyKey != nil {
+		idempotencyKey = *n.IdempotencyKey
+	}
+	readAt := ""
+	if n.ReadAt != nil {
+		readAt = n.ReadAt.Format("2006-01-02 15:04:05")
+	}
+
+	return pages.NotificationDetail(flashes(c), navUser(c), pages.NotificationDetailData{
+		ID:                n.ID.String(),
+		ApplicationName:   n.Application.Name,
+		Channel:           n.Channel,
+		Status:            n.Status,
+		Attempt:           n.Attempt,
+		Provider:          providerName,
+		ProviderMessageID: providerMessageID,
+		IdempotencyKey:    idempotencyKey,
+		Error:             errMsg,
+		Recipient:         prettyJSON(n.Recipient),
+		Content:           prettyJSON(n.Content),
+		ReadAt:            readAt,
+		CreatedAt:         n.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:         n.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}).Render(c.Request().Context(), c.Response())
 }
 

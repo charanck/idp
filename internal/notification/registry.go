@@ -9,12 +9,11 @@ import (
 type ChannelRegistry map[string]provider.Channel
 
 // NewChannelRegistry returns the registry wired to the skeleton
-// Email/SMS/WhatsApp channels plus InApp.
+// Email/SMS channels plus InApp.
 func NewChannelRegistry() ChannelRegistry {
 	return ChannelRegistry{
-		model.ChannelEmail:    provider.EmailChannel{},
-		model.ChannelSMS:      provider.SMSChannel{},
-		model.ChannelWhatsApp: provider.WhatsAppChannel{},
-		model.ChannelInApp:    provider.InAppChannel{},
+		model.ChannelEmail: provider.EmailChannel{},
+		model.ChannelSMS:   provider.SMSChannel{},
+		model.ChannelInApp: provider.InAppChannel{},
 	}
 }

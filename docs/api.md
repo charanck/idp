@@ -28,7 +28,7 @@ Details: [Feature Flags guide](guides/feature-flags.md).
 
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/api/v1/notifications` | POST | `X-API-Key` | Create (queue) a notification on `email`/`sms`/`whatsapp`/`inapp`. |
+| `/api/v1/notifications` | POST | `X-API-Key` | Create (queue) a notification on `email`/`sms`/`inapp`. |
 | `/api/v1/notifications` | GET | `X-API-Key` | List notifications, filterable by `?channel=&status=`. |
 | `/api/v1/notifications/:id` | GET | `X-API-Key` | Get a single notification by ID. |
 | `/api/v1/notifications/sessions` | POST | `X-API-Key` | Mint a short-lived bearer token scoped to one `user_id`, for the two end-user endpoints below. |

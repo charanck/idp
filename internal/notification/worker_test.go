@@ -113,7 +113,7 @@ func TestWorker_InAppSendPublishesToHub(t *testing.T) {
 }
 
 func TestWorker_NonInAppSentNeverPublishes(t *testing.T) {
-	for _, channelName := range []string{model.ChannelEmail, model.ChannelSMS, model.ChannelWhatsApp} {
+	for _, channelName := range []string{model.ChannelEmail, model.ChannelSMS} {
 		t.Run(channelName, func(t *testing.T) {
 			channel := &fakeChannel{result: &provider.Result{Provider: channelName, ProviderMessageID: "m1"}}
 			hub := &fakeHub{}

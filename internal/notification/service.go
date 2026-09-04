@@ -138,7 +138,7 @@ func (s *NotificationService) ListNotifications(ctx context.Context, filter mode
 // applicationID, newest first, and marks them read in the same transaction -
 // e.g. so a client catching up on missed notifications only ever sees each
 // one once. Scoped to ChannelInApp only: InApp is the sole channel with a
-// pull-based inbox, unlike email/sms/whatsapp (fire-and-forget delivery) or
+// pull-based inbox, unlike email/sms (fire-and-forget delivery) or
 // SSE (never persisted at all). The user is matched by the "user_id" field
 // in the jsonb Recipient blob, the same external identifier the
 // notification session token uses; applicationID is the application that

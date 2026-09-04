@@ -42,6 +42,38 @@ func TestNotificationListHandler_FiltersByChannelAndStatus(t *testing.T) {
 	}
 }
 
+func TestNotificationDetailHandler_ReturnsOKForKnownID(t *testing.T) {
+	store := newSessionStore(t)
+	id := uuid.New()
+	notifications := &fakeNotificationStore{notifications: []notificationmodel.Notification{
+		{ID: id, Channel: "email", Status: notificationmodel.StatusSent},
+	}}
+	apps := newFakeApplicationStore()
+	h := web.NewNotificationHandler(notifications, apps)
+
+	rec := callHandlerWithParams(t, store, http.MethodGet, "/notifications/"+id.String()+"/",
+		map[string]string{"id": id.String()}, nil, nil, h.Detail)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+}
+
+func TestNotificationDetailHandler_ReturnsNotFoundForUnknownID(t *testing.T) {
+	store := newSessionStore(t)
+	notifications := &fakeNotificationStore{}
+	apps := newFakeApplicationStore()
+	h := web.NewNotificationHandler(notifications, apps)
+
+	id := uuid.New()
+	rec := callHandlerWithParams(t, store, http.MethodGet, "/notifications/"+id.String()+"/",
+		map[string]string{"id": id.String()}, nil, nil, h.Detail)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
 func TestNotificationListHandler_FiltersByApplicationID(t *testing.T) {
 	store := newSessionStore(t)
 	appID := uuid.New()

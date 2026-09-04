@@ -70,7 +70,7 @@ func TestUpsert_PreservesExistingCredentialsWhenBlank(t *testing.T) {
 func TestProviderSettingGet_ReturnsNilWhenNotConfigured(t *testing.T) {
 	svc, _ := newUnitProviderSettingService(t)
 
-	got, err := svc.Get(context.Background(), model.ChannelWhatsApp)
+	got, err := svc.Get(context.Background(), model.ChannelSMS)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}

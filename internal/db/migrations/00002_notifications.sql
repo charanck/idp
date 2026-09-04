@@ -1,6 +1,6 @@
 -- +goose Up
 -- Notification module: S2S-created notifications delivered asynchronously
--- via ASYNQ over skeleton Email/SMS/WhatsApp channels. No tenant isolation
+-- via ASYNQ over skeleton Email/SMS channels. No tenant isolation
 -- (see plan) - idempotency_key is a plain unique column, not scoped further.
 
 CREATE TABLE IF NOT EXISTS notifications (

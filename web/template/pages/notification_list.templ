@@ -8,12 +8,14 @@ type NotificationRow struct {
 	ID              string
 	ApplicationName string
 	Channel         string
+	Recipient       string
 	Status          string
 	Attempt         int
 	Provider        string
 	Error           string
 	CreatedAt       string
 	UpdatedAt       string
+	DetailURL       string
 }
 
 type NotificationListData struct {
@@ -53,7 +55,7 @@ templ NotificationList(flashes []session.Flash, user layout.NavUser, data Notifi
 				<label for="channel">Channel</label>
 				<select id="channel" name="channel">
 					<option value="">All channels</option>
-					for _, ch := range []string{"email", "sms", "whatsapp", "inapp"} {
+					for _, ch := range []string{"email", "sms", "inapp"} {
 						if ch == data.CurrentChannel {
 							<option value={ ch } selected>{ ch }</option>
 						} else {
@@ -84,22 +86,25 @@ templ NotificationList(flashes []session.Flash, user layout.NavUser, data Notifi
 					<tr>
 						<th>Application</th>
 						<th>Channel</th>
+						<th>Recipient</th>
 						<th>Status</th>
 						<th>Attempt</th>
 						<th>Provider</th>
 						<th>Error</th>
 						<th>Created</th>
 						<th>Updated</th>
+						<th class="actions">Actions</th>
 					</tr>
 				</thead>
 				<tbody>
 					if len(data.Notifications) == 0 {
-						<tr><td colspan="8">No notifications recorded.</td></tr>
+						<tr><td colspan="10">No notifications recorded.</td></tr>
 					}
 					for _, n := range data.Notifications {
 						<tr>
 							<td>{ n.ApplicationName }</td>
 							<td>{ n.Channel }</td>
+							<td>{ n.Recipient }</td>
 							<td>
 								<span class={ "badge", statusBadgeClass(n.Status) }>{ n.Status }</span>
 							</td>
@@ -108,6 +113,9 @@ templ NotificationList(flashes []session.Flash, user layout.NavUser, data Notifi
 							<td>{ n.Error }</td>
 							<td>{ n.CreatedAt }</td>
 							<td>{ n.UpdatedAt }</td>
+							<td class="actions">
+								<a role="button" class="btn-sm outline secondary" href={ templ.URL(n.DetailURL) }>View</a>
+							</td>
 						</tr>
 					}
 				</tbody>
@@ -130,5 +138,61 @@ func statusBadgeClass(status string) string {
 		return "badge-warning"
 	default:
 		return "badge-secondary"
+	}
+}
+
+type NotificationDetailData struct {
+	ID                string
+	ApplicationName   string
+	Channel           string
+	Status            string
+	Attempt           int
+	Provider          string
+	ProviderMessageID string
+	IdempotencyKey    string
+	Error             string
+	Recipient         string
+	Content           string
+	ReadAt            string
+	CreatedAt         string
+	UpdatedAt         string
+}
+
+templ NotificationDetail(flashes []session.Flash, user layout.NavUser, data NotificationDetailData) {
+	@layout.Base("Notification Details", "notifications", user, flashes) {
+		<article class="form-card-xl">
+			<div class="toolbar">
+				<div>
+					<h3 class="mb-1">{ data.ApplicationName } &middot; { data.Channel }</h3>
+					<p class="stat-label m-0">Notification delivery details.</p>
+				</div>
+				<span class={ "badge", statusBadgeClass(data.Status) }>{ data.Status }</span>
+			</div>
+			<table>
+				<tbody>
+					<tr><th>ID</th><td><code>{ data.ID }</code></td></tr>
+					<tr><th>Application</th><td>{ data.ApplicationName }</td></tr>
+					<tr><th>Channel</th><td>{ data.Channel }</td></tr>
+					<tr><th>Status</th><td><span class={ "badge", statusBadgeClass(data.Status) }>{ data.Status }</span></td></tr>
+					<tr><th>Attempt</th><td>{ data.Attempt }</td></tr>
+					<tr><th>Provider</th><td>{ data.Provider }</td></tr>
+					<tr><th>Provider Message ID</th><td><code>{ data.ProviderMessageID }</code></td></tr>
+					<tr><th>Idempotency Key</th><td><code>{ data.IdempotencyKey }</code></td></tr>
+					if data.Error != "" {
+						<tr><th>Error</th><td>{ data.Error }</td></tr>
+					}
+					if data.ReadAt != "" {
+						<tr><th>Read At</th><td>{ data.ReadAt }</td></tr>
+					}
+					<tr><th>Created</th><td>{ data.CreatedAt }</td></tr>
+					<tr><th>Updated</th><td>{ data.UpdatedAt }</td></tr>
+					<tr><th>Recipient</th><td><pre>{ data.Recipient }</pre></td></tr>
+					<tr><th>Content</th><td><pre>{ data.Content }</pre></td></tr>
+				</tbody>
+			</table>
+			<div class="toolbar">
+				<a role="button" class="secondary outline" href="/notifications/">Back to Notifications</a>
+			</div>
+		</article>
 	}
 }

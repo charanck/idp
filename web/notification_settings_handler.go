@@ -39,7 +39,6 @@ var notificationChannelLabels = []struct {
 }{
 	{notificationmodel.ChannelEmail, "Email"},
 	{notificationmodel.ChannelSMS, "SMS"},
-	{notificationmodel.ChannelWhatsApp, "WhatsApp"},
 }
 
 func notificationChannelLabel(channel string) string {
@@ -51,7 +50,7 @@ func notificationChannelLabel(channel string) string {
 	return ""
 }
 
-// List shows a fixed 3-row list (email/sms/whatsapp) with only a
+// List shows a fixed 2-row list (email/sms) with only a
 // "configured"/"not configured" indicator - never the decrypted
 // credentials, mirroring ConfigService's "***ENCRYPTED***" convention.
 func (h *NotificationSettingsHandler) List(c echo.Context) error {

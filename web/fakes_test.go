@@ -639,6 +639,15 @@ func (f *fakeNotificationStore) ListNotifications(ctx context.Context, filter no
 	return out, nil
 }
 
+func (f *fakeNotificationStore) GetNotification(ctx context.Context, id uuid.UUID) (*notificationmodel.Notification, error) {
+	for _, n := range f.notifications {
+		if n.ID == id {
+			return &n, nil
+		}
+	}
+	return nil, nil
+}
+
 // fakeClientStore implements web.ClientStore in-memory.
 type fakeClientStore struct {
 	mu      sync.Mutex

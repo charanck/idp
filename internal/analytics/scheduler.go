@@ -28,12 +28,17 @@ func NewScheduler(ctx dbos.Context, service *Service) (*Scheduler, error) {
 
 	dbos.RegisterWorkflow(ctx, s.SnapshotWorkflow)
 
-	if err := dbos.CreateSchedule(ctx, dbos.ScheduleSpec{
-		ScheduleName: snapshotScheduleName,
-		Schedule:     snapshotCron,
-		Workflow:     s.SnapshotWorkflow,
+	// ApplySchedules upserts by schedule_name, unlike CreateSchedule (a plain
+	// insert) - this must be idempotent across restarts, since the schedule
+	// row from a prior run is still there.
+	if err := dbos.ApplySchedules(ctx, []dbos.ScheduleSpec{
+		{
+			ScheduleName: snapshotScheduleName,
+			Schedule:     snapshotCron,
+			Workflow:     s.SnapshotWorkflow,
+		},
 	}); err != nil {
-		return nil, fmt.Errorf("create %s schedule: %w", snapshotScheduleName, err)
+		return nil, fmt.Errorf("apply %s schedule: %w", snapshotScheduleName, err)
 	}
 
 	return s, nil

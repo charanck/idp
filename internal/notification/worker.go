@@ -37,7 +37,7 @@ func NewWorker(notifications *NotificationService, settings *ProviderSettingServ
 // publish publishes n's current in-memory Status/Provider over SSE, if a hub
 // is configured. Restricted to ChannelInApp: SSE is a live nudge for the
 // pull-based in-app inbox, not a generic delivery-status feed for
-// email/sms/whatsapp. Errors are logged, not returned - a failed SSE publish
+// email/sms. Errors are logged, not returned - a failed SSE publish
 // should never fail the send workflow itself (the row in Postgres is already
 // the source of truth, and SSE is fire-and-forget by design).
 func (w *Worker) publish(ctx context.Context, n *model.Notification) {

@@ -107,7 +107,7 @@ func (h *NotificationHandler) Create(c echo.Context) error {
 
 	channel, ok := h.channels[req.Channel]
 	if !ok {
-		return echo.NewHTTPError(http.StatusBadRequest, "channel must be one of: email, sms, whatsapp, inapp")
+		return echo.NewHTTPError(http.StatusBadRequest, "channel must be one of: email, sms, inapp")
 	}
 	if err := channel.Validate(req.Recipient, req.Content); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())

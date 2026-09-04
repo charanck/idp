@@ -45,6 +45,7 @@ func RegisterRoutes(e *echo.Echo, h *Handlers, authMW *AuthMiddleware) {
 
 	if notification.Enabled {
 		authed.GET("/notifications/", h.Notification.List)
+		authed.GET("/notifications/:id/", h.Notification.Detail)
 	}
 
 	admin := e.Group("", authMW.AdminRequired())

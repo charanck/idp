@@ -1,17 +1,17 @@
 # Notifications
 
-The notification API queues messages across four channels — `email`, `sms`, `whatsapp`, `inapp` —
-and a background worker (running inside the same `cmd/server` process) delivers them with
-retries. All endpoints on this page are authenticated with `X-API-Key: <key_id>.<secret>`, the
-same service-client key used for configs/flags.
+The notification API queues messages across three channels — `email`, `sms`, `inapp` — and a
+background worker (running inside the same `cmd/server` process) delivers them with retries. All
+endpoints on this page are authenticated with `X-API-Key: <key_id>.<secret>`, the same
+service-client key used for configs/flags.
 
-> **Note:** SMS and WhatsApp are simulated
+> **Note:** SMS is simulated
 >
-> The `sms` and `whatsapp` channels ship as skeleton providers: they validate input, log the
-> send, and report success without calling a real provider — there's no Twilio/etc. integration
-> wired up yet. `email` sends real mail over SMTP (configured under **Notification Settings** in
-> the web UI); `inapp` is fully functional, since "delivery" is just persisting the row for the
-> recipient to pull later (see [In-app inbox](inapp-inbox.md)).
+> The `sms` channel ships as a skeleton provider: it validates input, logs the send, and reports
+> success without calling a real provider — there's no Twilio/etc. integration wired up yet.
+> `email` sends real mail over SMTP (configured under **Notification Settings** in the web UI);
+> `inapp` is fully functional, since "delivery" is just persisting the row for the recipient to
+> pull later (see [In-app inbox](inapp-inbox.md)).
 
 ## Create a notification
 
@@ -40,7 +40,6 @@ its own schema:
 |---|---|---|
 | `email` | `email` (string); `user_id` optional | `subject`; `body` optional |
 | `sms` | `phone` (string); `user_id` optional | `body` |
-| `whatsapp` | `phone` (string); `user_id` optional | `body` |
 | `inapp` | `user_id` (string, **required** — it's how the notification is ever retrieved) | `title`; `body` optional |
 
 `idempotency_key` is optional — reusing one for a notification still in `queued` status re-enqueues
@@ -115,7 +114,7 @@ async function createNotification(
   baseUrl: string,
   apiKey: string,
   service: string,
-  channel: "email" | "sms" | "whatsapp" | "inapp",
+  channel: "email" | "sms" | "inapp",
   recipient: Record<string, unknown>,
   content: Record<string, unknown>,
   idempotencyKey?: string
