@@ -71,12 +71,22 @@ func newFakeApplicationRepository() *fakeApplicationRepository {
 	return &fakeApplicationRepository{apps: make(map[uuid.UUID]configmodel.Application)}
 }
 
-func (f *fakeApplicationRepository) List(ctx context.Context, q string) ([]configmodel.Application, error) {
+func (f *fakeApplicationRepository) List(ctx context.Context, q string, allowedIDs []uuid.UUID) ([]configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	var allowed map[uuid.UUID]bool
+	if len(allowedIDs) > 0 {
+		allowed = make(map[uuid.UUID]bool, len(allowedIDs))
+		for _, id := range allowedIDs {
+			allowed[id] = true
+		}
+	}
 	var out []configmodel.Application
 	for _, a := range f.apps {
 		if q != "" && !strings.Contains(strings.ToLower(a.Name), strings.ToLower(q)) {
+			continue
+		}
+		if allowed != nil && !allowed[a.ID] {
 			continue
 		}
 		out = append(out, a)

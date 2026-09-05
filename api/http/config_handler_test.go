@@ -6,11 +6,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	apihttp "controlplane/api/http"
 	"controlplane/internal/config"
 	authmodel "controlplane/internal/model/auth"
+	configmodel "controlplane/internal/model/config"
 )
 
 func newConfigListRequest(service, environment string) (echo.Context, *httptest.ResponseRecorder) {
@@ -26,7 +28,7 @@ func TestList_ReturnsConfigsAsJSON(t *testing.T) {
 	lister := &fakeConfigLister{configs: []config.ClientConfig{
 		{ID: "1", Service: "payments", Environment: "prod", Key: "API_URL", Value: "https://api.example.com", Type: "string", IsSecret: false},
 	}}
-	h := apihttp.NewConfigHandler(lister)
+	h := apihttp.NewConfigHandler(lister, &fakeApplicationFinder{}, &fakeClientApplicationScoper{})
 
 	c, rec := newConfigListRequest("payments", "prod")
 	if err := h.List(c); err != nil {
@@ -52,7 +54,7 @@ func TestListV2_ReturnsConfigsAsKeyValueMap(t *testing.T) {
 	lister := &fakeConfigLister{configs: []config.ClientConfig{
 		{ID: "1", Service: "payments", Environment: "prod", Key: "API_URL", Value: "https://api.example.com", Type: "string", IsSecret: false},
 	}}
-	h := apihttp.NewConfigHandler(lister)
+	h := apihttp.NewConfigHandler(lister, &fakeApplicationFinder{}, &fakeClientApplicationScoper{})
 
 	c, rec := newConfigListRequest("payments", "prod")
 	if err := h.ListV2(c); err != nil {
@@ -73,7 +75,7 @@ func TestListV2_ReturnsConfigsAsKeyValueMap(t *testing.T) {
 
 func TestListV2_ServiceErrorReturns500(t *testing.T) {
 	lister := &fakeConfigLister{err: errFakeService}
-	h := apihttp.NewConfigHandler(lister)
+	h := apihttp.NewConfigHandler(lister, &fakeApplicationFinder{}, &fakeClientApplicationScoper{})
 
 	c, _ := newConfigListRequest("payments", "prod")
 	err := h.ListV2(c)
@@ -89,9 +91,51 @@ func TestListV2_ServiceErrorReturns500(t *testing.T) {
 	}
 }
 
+func TestList_OutsideApplicationScopeReturns404(t *testing.T) {
+	paymentsID := uuid.New()
+	lister := &fakeConfigLister{configs: []config.ClientConfig{
+		{ID: "1", Service: "payments", Environment: "prod", Key: "API_URL", Value: "https://api.example.com", Type: "string", IsSecret: false},
+	}}
+	apps := &fakeApplicationFinder{apps: map[string]*configmodel.Application{
+		"other-service": {ID: uuid.New()},
+	}}
+	scoper := &fakeClientApplicationScoper{allowedIDs: []uuid.UUID{paymentsID}}
+	h := apihttp.NewConfigHandler(lister, apps, scoper)
+
+	c, rec := newConfigListRequest("other-service", "prod")
+	if err := h.List(c); err != nil {
+		httpErr, ok := err.(*echo.HTTPError)
+		if !ok || httpErr.Code != http.StatusNotFound {
+			t.Fatalf("List: %v, want 404", err)
+		}
+	} else if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestList_InsideApplicationScopeSucceeds(t *testing.T) {
+	paymentsID := uuid.New()
+	lister := &fakeConfigLister{configs: []config.ClientConfig{
+		{ID: "1", Service: "payments", Environment: "prod", Key: "API_URL", Value: "https://api.example.com", Type: "string", IsSecret: false},
+	}}
+	apps := &fakeApplicationFinder{apps: map[string]*configmodel.Application{
+		"payments": {ID: paymentsID},
+	}}
+	scoper := &fakeClientApplicationScoper{allowedIDs: []uuid.UUID{paymentsID}}
+	h := apihttp.NewConfigHandler(lister, apps, scoper)
+
+	c, rec := newConfigListRequest("payments", "prod")
+	if err := h.List(c); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestList_ServiceErrorReturns500(t *testing.T) {
 	lister := &fakeConfigLister{err: errFakeService}
-	h := apihttp.NewConfigHandler(lister)
+	h := apihttp.NewConfigHandler(lister, &fakeApplicationFinder{}, &fakeClientApplicationScoper{})
 
 	c, _ := newConfigListRequest("payments", "prod")
 	err := h.List(c)

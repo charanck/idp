@@ -29,10 +29,12 @@ type configResponse struct {
 // ConfigHandler serves the read-only S2S config/secrets listing endpoint.
 type ConfigHandler struct {
 	configs ConfigLister
+	apps    ApplicationFinder
+	clients ClientApplicationScoper
 }
 
-func NewConfigHandler(configs ConfigLister) *ConfigHandler {
-	return &ConfigHandler{configs: configs}
+func NewConfigHandler(configs ConfigLister, apps ApplicationFinder, clients ClientApplicationScoper) *ConfigHandler {
+	return &ConfigHandler{configs: configs, apps: apps, clients: clients}
 }
 
 // List serves GET /configs/list.
@@ -40,6 +42,10 @@ func (h *ConfigHandler) List(c echo.Context) error {
 	service := c.QueryParam("service")
 	environment := c.QueryParam("environment")
 	client := ServiceClientFromContext(c)
+
+	if err := checkApplicationScope(c.Request().Context(), h.apps, h.clients, client.ID, service); err != nil {
+		return err
+	}
 
 	configs, err := h.configs.ListConfigsForClient(c.Request().Context(), service, environment, client.EncryptionKey)
 	if err != nil {
@@ -71,6 +77,10 @@ func (h *ConfigHandler) ListV2(c echo.Context) error {
 	service := c.QueryParam("service")
 	environment := c.QueryParam("environment")
 	client := ServiceClientFromContext(c)
+
+	if err := checkApplicationScope(c.Request().Context(), h.apps, h.clients, client.ID, service); err != nil {
+		return err
+	}
 
 	configs, err := h.configs.ListConfigsForClient(c.Request().Context(), service, environment, client.EncryptionKey)
 	if err != nil {

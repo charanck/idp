@@ -4,18 +4,24 @@ import authmodel "controlplane/internal/model/auth"
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
+type UserRow struct {
+	authmodel.User
+	Groups []authmodel.Group
+}
+
 type UsersListData struct {
-	Users         []authmodel.User
-	CurrentQ      string
-	CurrentStaff  string
-	Page          int
-	NumPages      int
-	HasPrev       bool
-	HasNext       bool
-	PrevNum       int
-	NextNum       int
-	Window        []int
-	ExtraQuery    string
+	Users        []UserRow
+	Groups       []authmodel.Group
+	CurrentQ     string
+	CurrentGroup string
+	Page         int
+	NumPages     int
+	HasPrev      bool
+	HasNext      bool
+	PrevNum      int
+	NextNum      int
+	Window       []int
+	ExtraQuery   string
 }
 
 templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData) {
@@ -30,41 +36,42 @@ templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData
 				<input type="text" id="q" name="q" placeholder="Email" value={ data.CurrentQ }/>
 			</div>
 			<div>
-				<label for="staff">Role</label>
-				<select id="staff" name="staff">
-					<option value="" selected?={ data.CurrentStaff == "" }>All</option>
-					<option value="yes" selected?={ data.CurrentStaff == "yes" }>Staff only</option>
-					<option value="no" selected?={ data.CurrentStaff == "no" }>Non-staff only</option>
+				<label for="group">Group</label>
+				<select id="group" name="group">
+					<option value="" selected?={ data.CurrentGroup == "" }>All</option>
+					for _, g := range data.Groups {
+						<option value={ g.ID.String() } selected?={ data.CurrentGroup == g.ID.String() }>{ g.Name }</option>
+					}
 				</select>
 			</div>
 			<button type="submit" class="btn-sm secondary">Filter</button>
 		</form>
 		<article class="card">
 			<table>
-				<thead><tr><th>Email</th><th>Username</th><th>Active</th><th>Staff</th><th class="actions">Actions</th></tr></thead>
+				<thead><tr><th>Email</th><th>Username</th><th>Active</th><th>Groups</th><th class="actions">Actions</th></tr></thead>
 				<tbody>
 					if len(data.Users) == 0 {
 						<tr><td colspan="5">No users found.</td></tr>
 					}
-					for _, u := range data.Users {
+					for _, row := range data.Users {
 						<tr>
-							<td class="truncate max-w-xs" title={ u.Email }>{ u.Email }</td>
-							<td class="truncate max-w-[10rem]" title={ u.Username }>{ u.Username }</td>
+							<td class="truncate max-w-xs" title={ row.Email }>{ row.Email }</td>
+							<td class="truncate max-w-[10rem]" title={ row.Username }>{ row.Username }</td>
 							<td>
-								if u.IsActive {
+								if row.IsActive {
 									<span class="badge badge-success">Active</span>
 								} else {
 									<span class="badge badge-secondary">Inactive</span>
 								}
 							</td>
 							<td>
-								if u.IsStaff {
-									<span class="badge badge-info">Staff</span>
+								for _, g := range row.Groups {
+									<span class="badge badge-info">{ g.Name }</span>
 								}
 							</td>
 							<td class="actions">
-								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/users/" + u.ID.String() + "/edit/") }>Edit</a>
-								<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/users/" + u.ID.String() + "/delete/") }>Delete</a>
+								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/users/" + row.ID.String() + "/edit/") }>Edit</a>
+								<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/users/" + row.ID.String() + "/delete/") }>Delete</a>
 							</td>
 						</tr>
 					}
@@ -76,16 +83,17 @@ templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData
 }
 
 type UserFormData struct {
-	CSRFToken    string
-	Email        string
-	Username     string
-	IsActive     bool
-	IsStaff      bool
-	Error        string
-	Action       string
-	Title        string
-	IsEdit       bool
-	EditingSelf  bool
+	CSRFToken        string
+	Email            string
+	Username         string
+	IsActive         bool
+	Error            string
+	Action           string
+	Title            string
+	IsEdit           bool
+	EditingSelf      bool
+	Groups           []authmodel.Group
+	SelectedGroupIDs map[string]bool
 }
 
 templ UserForm(flashes []session.Flash, user layout.NavUser, data UserFormData) {
@@ -96,7 +104,7 @@ templ UserForm(flashes []session.Flash, user layout.NavUser, data UserFormData) 
 				<div class="alert alert-danger">{ data.Error }</div>
 			}
 			if data.IsEdit && data.EditingSelf {
-				<div class="alert alert-info">You cannot change your own active/staff status here — ask another admin.</div>
+				<div class="alert alert-info">You cannot change your own active status or group membership here — ask another admin.</div>
 			}
 			<form method="post" action={ templ.URL(data.Action) }>
 				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
@@ -133,16 +141,19 @@ templ UserForm(flashes []session.Flash, user layout.NavUser, data UserFormData) 
 				if !data.IsEdit {
 					<small>Leave unchecked to require a separate admin activation step before this user can log in.</small>
 				}
-				if data.IsEdit {
-					<label for="is_staff">
-						if data.IsStaff {
-							<input type="checkbox" id="is_staff" name="is_staff" checked/>
-						} else {
-							<input type="checkbox" id="is_staff" name="is_staff"/>
-						}
-						Staff (admin access)
-					</label>
-				}
+				<fieldset>
+					<legend>Groups</legend>
+					for _, g := range data.Groups {
+						<label class="checkbox-inline">
+							if data.SelectedGroupIDs[g.ID.String()] {
+								<input type="checkbox" name="group_ids" value={ g.ID.String() } checked/>
+							} else {
+								<input type="checkbox" name="group_ids" value={ g.ID.String() }/>
+							}
+							{ g.Name }
+						</label>
+					}
+				</fieldset>
 				<div class="form-actions">
 					<button type="submit">Save</button>
 					<a role="button" class="secondary outline" href="/users/">Cancel</a>

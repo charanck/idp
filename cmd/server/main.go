@@ -78,7 +78,7 @@ func main() {
 
 	e := newEchoServer(svc.Sessions)
 
-	webAuthMW := web.NewAuthMiddleware(svc.Auth)
+	webAuthMW := web.NewAuthMiddleware(svc.Auth, svc.Auth)
 	// svc.Config satisfies web.ApplicationStore, web.EnvironmentStore, and web.ConfigStore
 	// all at once, so several constructors below take it more than once, positionally, for
 	// different parameters - the compiler can't catch a swapped argument order here since every
@@ -91,11 +91,14 @@ func main() {
 		Environment:          web.NewEnvironmentHandler(svc.Config, svc.Config, svc.Activity),
 		Config:               web.NewConfigHandler(svc.Config, svc.Config, svc.Config, svc.Activity),
 		Flag:                 web.NewFlagHandler(svc.Flags, svc.Config, svc.Config, svc.Activity),
-		Client:               web.NewClientHandler(svc.Auth, svc.Activity),
+		Client:               web.NewClientHandler(svc.Auth, svc.Config, svc.Auth, svc.Activity),
 		User:                 web.NewUserHandler(svc.Auth, svc.Activity),
+		Group:                web.NewGroupHandler(svc.Auth, svc.Config, svc.Activity),
+		Policy:               web.NewPolicyHandler(svc.Auth, svc.Activity),
 		Auth:                 web.NewAuthHandler(svc.Auth, svc.OAuth, svc.RateLimiter, svc.Activity, cfg.AuthRateLimit, cfg.AuthRateLimitWindowSeconds),
 		OAuthLogin:           web.NewOAuthLoginHandler(svc.OAuth, svc.Activity),
 		OAuthProvider:        web.NewOAuthProviderHandler(svc.OAuth, svc.Activity),
+		OIDC:                 web.NewOIDCHandler(svc.OIDC, svc.Activity),
 		NotificationSettings: web.NewNotificationSettingsHandler(notif.Settings, svc.Activity),
 		Notification:         web.NewNotificationHandler(notif.Service, svc.Config),
 	}
@@ -103,7 +106,8 @@ func main() {
 
 	apiKeyAuthMW := apihttp.NewAPIKeyAuthMiddleware(svc.Auth, svc.RateLimiter, an.Counter, cfg.AuthRateLimitWindowSeconds, cfg.S2SAuthRateLimit)
 	apiGroup := e.Group("/api/v1")
-	apihttp.RegisterConfigRoutes(apiGroup.Group("/config"), apihttp.NewConfigHandler(svc.Config), apihttp.NewFeatureFlagHandler(svc.Flags), apiKeyAuthMW)
+	apihttp.RegisterConfigRoutes(apiGroup.Group("/config"), apihttp.NewConfigHandler(svc.Config, svc.Config, svc.Auth), apihttp.NewFeatureFlagHandler(svc.Flags, svc.Flags, svc.Auth), apiKeyAuthMW)
+	apihttp.RegisterOIDCRoutes(e, apihttp.NewOIDCHandler(svc.OIDC))
 
 	if notification.Enabled {
 		notifAuthMW := apihttp.NewNotificationAPIKeyAuthMiddleware(

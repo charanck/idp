@@ -28,6 +28,7 @@ type coreServices struct {
 	Encryption  *crypto.EncryptionService
 	Auth        *auth.AuthService
 	OAuth       *auth.OAuthService
+	OIDC        *auth.OIDCService
 	Config      *config.ConfigService
 	Flags       *config.FeatureFlagService
 	Activity    *activity.Logger
@@ -45,8 +46,9 @@ func newCoreServices(gdb *gorm.DB, rdb *redis.Client, cfg *appconfig.Config) *co
 
 	return &coreServices{
 		Encryption:  encryption,
-		Auth:        auth.NewAuthService(authrepo.NewUserRepository(gdb), authrepo.NewServiceClientRepository(gdb)),
+		Auth:        auth.NewAuthService(authrepo.NewUserRepository(gdb), authrepo.NewServiceClientRepository(gdb), authrepo.NewGroupRepository(gdb), authrepo.NewPolicyRepository(gdb)),
 		OAuth:       auth.NewOAuthService(authrepo.NewOAuthProviderRepository(gdb), authrepo.NewOAuthUserTokenRepository(gdb), authrepo.NewUserRepository(gdb)),
+		OIDC:        auth.NewOIDCService(authrepo.NewOIDCSigningKeyRepository(gdb), authrepo.NewOIDCAuthorizationCodeRepository(gdb), authrepo.NewServiceClientRepository(gdb), authrepo.NewGroupRepository(gdb), authrepo.NewUserRepository(gdb), encryption),
 		Config:      config.NewConfigService(configrepo.NewConfigRepository(gdb), configrepo.NewApplicationRepository(gdb), configrepo.NewEnvironmentRepository(gdb), encryption, appCache, cacheTimeout),
 		Flags:       config.NewFeatureFlagService(configrepo.NewFeatureFlagRepository(gdb), configrepo.NewApplicationRepository(gdb), configrepo.NewEnvironmentRepository(gdb), appCache, cacheTimeout),
 		Activity:    activity.NewLogger(activityrepo.NewRepository(gdb)),

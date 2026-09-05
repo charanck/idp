@@ -24,6 +24,9 @@ type UserStore interface {
 	GetUserByIDAny(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
 	UpdateUserAdmin(ctx context.Context, id uuid.UUID, in auth.UpdateUserAdminInput) (*authmodel.User, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
+	ListGroups(ctx context.Context, q string) ([]authmodel.Group, error)
+	UserGroups(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error)
+	SetUserGroups(ctx context.Context, userID uuid.UUID, groupIDs []uuid.UUID) error
 }
 
 type UserHandler struct {
@@ -36,35 +39,42 @@ func NewUserHandler(users UserStore, activity ActivityRecorder) *UserHandler {
 }
 
 func (h *UserHandler) List(c echo.Context) error {
+	ctx := c.Request().Context()
 	q := strings.TrimSpace(c.QueryParam("q"))
-	staffFilter := c.QueryParam("staff")
+	groupFilter := strings.TrimSpace(c.QueryParam("group"))
 
-	var isStaff *bool
-	switch staffFilter {
-	case "yes":
-		v := true
-		isStaff = &v
-	case "no":
-		v := false
-		isStaff = &v
-	}
-
-	users, err := h.users.ListUsers(c.Request().Context(), q, isStaff)
+	users, err := h.users.ListUsers(ctx, q, nil)
 	if err != nil {
 		return err
+	}
+	groups, err := h.users.ListGroups(ctx, "")
+	if err != nil {
+		return err
+	}
+
+	rows := make([]pages.UserRow, 0, len(users))
+	for _, u := range users {
+		userGroups, err := h.users.UserGroups(ctx, u.ID)
+		if err != nil {
+			return err
+		}
+		if groupFilter != "" && !containsGroupID(userGroups, groupFilter) {
+			continue
+		}
+		rows = append(rows, pages.UserRow{User: u, Groups: userGroups})
 	}
 
 	extra := url.Values{}
 	if q != "" {
 		extra.Set("q", q)
 	}
-	if staffFilter != "" {
-		extra.Set("staff", staffFilter)
+	if groupFilter != "" {
+		extra.Set("group", groupFilter)
 	}
 
-	page := Paginate(users, usersPageSize, PageParam(c))
+	page := Paginate(rows, usersPageSize, PageParam(c))
 	return pages.UsersList(flashes(c), navUser(c), pages.UsersListData{
-		Users: page.Items, CurrentQ: q, CurrentStaff: staffFilter, ExtraQuery: extra.Encode(),
+		Users: page.Items, Groups: groups, CurrentQ: q, CurrentGroup: groupFilter, ExtraQuery: extra.Encode(),
 		Page: page.Number, NumPages: page.NumPages,
 		HasPrev: page.HasPrevious, HasNext: page.HasNext,
 		PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
@@ -72,18 +82,62 @@ func (h *UserHandler) List(c echo.Context) error {
 	}).Render(c.Request().Context(), c.Response())
 }
 
+func containsGroupID(groups []authmodel.Group, id string) bool {
+	for _, g := range groups {
+		if g.ID.String() == id {
+			return true
+		}
+	}
+	return false
+}
+
+// userGroupIDsFromForm reads the group_ids multi-value form field, requiring
+// c.Request().ParseForm() to have already been called.
+func userGroupIDsFromForm(c echo.Context) []uuid.UUID {
+	var ids []uuid.UUID
+	for _, idStr := range c.Request().Form["group_ids"] {
+		if id, err := uuid.Parse(idStr); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
+// defaultUserGroupIDs returns the built-in User group's ID (pre-checked on
+// the Create form, mirroring the default group new users are assigned to).
+func defaultUserGroupIDs(groups []authmodel.Group) map[string]bool {
+	for _, g := range groups {
+		if g.IsSystem && g.Name == "User" {
+			return map[string]bool{g.ID.String(): true}
+		}
+	}
+	return map[string]bool{}
+}
+
 func (h *UserHandler) Create(c echo.Context) error {
+	groups, err := h.users.ListGroups(c.Request().Context(), "")
+	if err != nil {
+		return err
+	}
+
 	if c.Request().Method == http.MethodGet {
 		return pages.UserForm(flashes(c), navUser(c), pages.UserFormData{
 			CSRFToken: csrfToken(c), Action: "/users/create/", Title: "Create User",
+			Groups: groups, SelectedGroupIDs: defaultUserGroupIDs(groups),
 		}).Render(c.Request().Context(), c.Response())
 	}
+
+	if err := c.Request().ParseForm(); err != nil {
+		return err
+	}
+	groupIDs := userGroupIDsFromForm(c)
 
 	reRender := func(errMsg string) error {
 		return pages.UserForm(flashes(c), navUser(c), pages.UserFormData{
 			CSRFToken: csrfToken(c), Action: "/users/create/", Title: "Create User",
 			Email: c.FormValue("email"), Username: c.FormValue("username"),
 			IsActive: c.FormValue("is_active") != "", Error: errMsg,
+			Groups: groups, SelectedGroupIDs: selectedSet(groupIDs),
 		}).Render(c.Request().Context(), c.Response())
 	}
 
@@ -111,6 +165,9 @@ func (h *UserHandler) Create(c echo.Context) error {
 		}
 		return err
 	}
+	if err := h.users.SetUserGroups(c.Request().Context(), newUser.ID, groupIDs); err != nil {
+		return err
+	}
 
 	h.activity.LogCreate(requestContext(c), "user", newUser.ID.String(), newUser.Email, nil)
 	AddFlash(c, "success", "User "+newUser.Email+" created successfully.")
@@ -118,14 +175,15 @@ func (h *UserHandler) Create(c echo.Context) error {
 }
 
 // Edit mirrors web_ui/views.py's user_edit: if an admin edits their own
-// account and tries to change is_staff/is_active, those two fields are
-// silently reverted (role changes must come from another admin).
+// account and tries to change their active status or group membership, those
+// changes are silently reverted (role changes must come from another admin).
 func (h *UserHandler) Edit(c echo.Context) error {
+	ctx := c.Request().Context()
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	target, err := h.users.GetUserByIDAny(c.Request().Context(), id)
+	target, err := h.users.GetUserByIDAny(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -136,21 +194,41 @@ func (h *UserHandler) Edit(c echo.Context) error {
 	current := CurrentUser(c)
 	editingSelf := current != nil && current.ID == target.ID
 
+	groups, err := h.users.ListGroups(ctx, "")
+	if err != nil {
+		return err
+	}
+	targetGroups, err := h.users.UserGroups(ctx, target.ID)
+	if err != nil {
+		return err
+	}
+	targetGroupIDs := make([]uuid.UUID, 0, len(targetGroups))
+	for _, g := range targetGroups {
+		targetGroupIDs = append(targetGroupIDs, g.ID)
+	}
+
 	if c.Request().Method == http.MethodGet {
 		return pages.UserForm(flashes(c), navUser(c), pages.UserFormData{
 			CSRFToken: csrfToken(c), Action: "/users/" + target.ID.String() + "/edit/", Title: "Edit User",
-			Email: target.Email, Username: target.Username, IsActive: target.IsActive, IsStaff: target.IsStaff,
+			Email: target.Email, Username: target.Username, IsActive: target.IsActive,
 			IsEdit: true, EditingSelf: editingSelf,
-		}).Render(c.Request().Context(), c.Response())
+			Groups: groups, SelectedGroupIDs: selectedSet(targetGroupIDs),
+		}).Render(ctx, c.Response())
 	}
+
+	if err := c.Request().ParseForm(); err != nil {
+		return err
+	}
+	groupIDs := userGroupIDsFromForm(c)
 
 	reRender := func(errMsg string) error {
 		return pages.UserForm(flashes(c), navUser(c), pages.UserFormData{
 			CSRFToken: csrfToken(c), Action: "/users/" + target.ID.String() + "/edit/", Title: "Edit User",
 			Email: c.FormValue("email"), Username: c.FormValue("username"),
-			IsActive: c.FormValue("is_active") != "", IsStaff: c.FormValue("is_staff") != "",
+			IsActive: c.FormValue("is_active") != "",
 			IsEdit: true, EditingSelf: editingSelf, Error: errMsg,
-		}).Render(c.Request().Context(), c.Response())
+			Groups: groups, SelectedGroupIDs: selectedSet(groupIDs),
+		}).Render(ctx, c.Response())
 	}
 
 	email := strings.TrimSpace(c.FormValue("email"))
@@ -160,24 +238,45 @@ func (h *UserHandler) Edit(c echo.Context) error {
 	}
 
 	newIsActive := c.FormValue("is_active") != ""
-	newIsStaff := c.FormValue("is_staff") != ""
 
-	if editingSelf && (newIsActive != target.IsActive || newIsStaff != target.IsStaff) {
+	if editingSelf && newIsActive != target.IsActive {
 		newIsActive = target.IsActive
-		newIsStaff = target.IsStaff
-		AddFlash(c, "warning", "You cannot change your own role or active status. Ask another admin to do it.")
+		AddFlash(c, "warning", "You cannot change your own active status. Ask another admin to do it.")
+	}
+	if editingSelf && !sameGroupSet(groupIDs, targetGroupIDs) {
+		groupIDs = targetGroupIDs
+		AddFlash(c, "warning", "You cannot change your own group membership. Ask another admin to do it.")
 	}
 
-	updated, err := h.users.UpdateUserAdmin(c.Request().Context(), id, auth.UpdateUserAdminInput{
-		Email: email, Username: username, IsActive: newIsActive, IsStaff: newIsStaff,
+	updated, err := h.users.UpdateUserAdmin(ctx, id, auth.UpdateUserAdminInput{
+		Email: email, Username: username, IsActive: newIsActive, IsStaff: target.IsStaff,
 	})
 	if err != nil {
+		return err
+	}
+	if err := h.users.SetUserGroups(ctx, updated.ID, groupIDs); err != nil {
 		return err
 	}
 
 	h.activity.LogUpdate(requestContext(c), "user", updated.ID.String(), updated.Email, nil)
 	AddFlash(c, "success", "User "+updated.Email+" updated successfully.")
 	return c.Redirect(http.StatusFound, "/users/")
+}
+
+func sameGroupSet(a, b []uuid.UUID) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[uuid.UUID]bool, len(a))
+	for _, id := range a {
+		set[id] = true
+	}
+	for _, id := range b {
+		if !set[id] {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *UserHandler) Delete(c echo.Context) error {

@@ -25,15 +25,21 @@ type ClientStore interface {
 	ToggleServiceClient(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error)
 	DeleteServiceClient(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error)
 	RegenerateServiceClientKey(ctx context.Context, id uuid.UUID) (*authmodel.ServiceClient, error)
+	ServiceClientApplicationIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error)
+	ServiceClientRedirectURIs(ctx context.Context, id uuid.UUID) ([]string, error)
+	ServiceClientAllowedGroupIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error)
+	UpdateServiceClientSettings(ctx context.Context, id uuid.UUID, in auth.UpdateServiceClientSettingsInput) (*authmodel.ServiceClient, error)
 }
 
 type ClientHandler struct {
 	clients  ClientStore
+	apps     ApplicationStore
+	groups   GroupStore
 	activity ActivityRecorder
 }
 
-func NewClientHandler(clients ClientStore, activity ActivityRecorder) *ClientHandler {
-	return &ClientHandler{clients: clients, activity: activity}
+func NewClientHandler(clients ClientStore, apps ApplicationStore, groups GroupStore, activity ActivityRecorder) *ClientHandler {
+	return &ClientHandler{clients: clients, apps: apps, groups: groups, activity: activity}
 }
 
 func (h *ClientHandler) List(c echo.Context) error {
@@ -136,9 +142,126 @@ func (h *ClientHandler) Detail(c echo.Context) error {
 	}
 	return pages.ClientDetail(flashes(c), navUser(c), pages.ClientDetailData{
 		CSRFToken: csrfToken(c), ID: client.ID.String(), Name: client.Name, APIKeyID: apiKeyID,
-		EncryptionKey: client.EncryptionKey, IsActive: client.IsActive,
+		EncryptionKey: client.EncryptionKey, IsActive: client.IsActive, IsAuthApplication: client.IsAuthApplication,
 		CreatedAt: client.CreatedAt.Format("2006-01-02 15:04"), UpdatedAt: client.UpdatedAt.Format("2006-01-02 15:04"),
 	}).Render(c.Request().Context(), c.Response())
+}
+
+func (h *ClientHandler) allApplicationOptions(ctx context.Context) ([]pages.GroupApplicationOption, error) {
+	apps, err := h.apps.ListAllApplications(ctx, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	opts := make([]pages.GroupApplicationOption, 0, len(apps))
+	for _, app := range apps {
+		opts = append(opts, pages.GroupApplicationOption{ID: app.ID.String(), Name: app.Name})
+	}
+	return opts, nil
+}
+
+func (h *ClientHandler) allGroupOptions(ctx context.Context) ([]pages.ClientGroupOption, error) {
+	groups, err := h.groups.ListGroups(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	opts := make([]pages.ClientGroupOption, 0, len(groups))
+	for _, g := range groups {
+		opts = append(opts, pages.ClientGroupOption{ID: g.ID.String(), Name: g.Name})
+	}
+	return opts, nil
+}
+
+func clientSettingsInput(c echo.Context) auth.UpdateServiceClientSettingsInput {
+	in := auth.UpdateServiceClientSettingsInput{
+		IsAuthApplication: c.FormValue("is_auth_application") != "",
+		RequireConsent:    c.FormValue("require_consent") != "",
+	}
+	for _, idStr := range c.Request().Form["application_ids"] {
+		if id, err := uuid.Parse(idStr); err == nil {
+			in.ApplicationIDs = append(in.ApplicationIDs, id)
+		}
+	}
+	for _, idStr := range c.Request().Form["allowed_group_ids"] {
+		if id, err := uuid.Parse(idStr); err == nil {
+			in.AllowedGroupIDs = append(in.AllowedGroupIDs, id)
+		}
+	}
+	for _, line := range strings.Split(c.FormValue("redirect_uris"), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			in.RedirectURIs = append(in.RedirectURIs, line)
+		}
+	}
+	return in
+}
+
+func (h *ClientHandler) Edit(c echo.Context) error {
+	client, err := h.loadClient(c)
+	if err != nil {
+		return err
+	}
+
+	apps, err := h.allApplicationOptions(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	groupOpts, err := h.allGroupOptions(c.Request().Context())
+	if err != nil {
+		return err
+	}
+
+	action := "/clients/" + client.ID.String() + "/edit/"
+	if c.Request().Method == http.MethodGet {
+		appIDs, err := h.clients.ServiceClientApplicationIDs(c.Request().Context(), client.ID)
+		if err != nil {
+			return err
+		}
+		redirectURIs, err := h.clients.ServiceClientRedirectURIs(c.Request().Context(), client.ID)
+		if err != nil {
+			return err
+		}
+		allowedGroupIDs, err := h.clients.ServiceClientAllowedGroupIDs(c.Request().Context(), client.ID)
+		if err != nil {
+			return err
+		}
+		return pages.ClientEdit(flashes(c), navUser(c), pages.ClientEditData{
+			CSRFToken: csrfToken(c), ID: client.ID.String(), Name: client.Name, Action: action,
+			IsAuthApplication: client.IsAuthApplication, RequireConsent: client.RequireConsent,
+			RedirectURIs:           strings.Join(redirectURIs, "\n"),
+			Applications:           apps,
+			SelectedApplicationIDs: selectedSet(appIDs),
+			Groups:                 groupOpts,
+			SelectedGroupIDs:       selectedSet(allowedGroupIDs),
+		}).Render(c.Request().Context(), c.Response())
+	}
+
+	if err := c.Request().ParseForm(); err != nil {
+		return err
+	}
+	in := clientSettingsInput(c)
+	reRender := func(errMsg string) error {
+		return pages.ClientEdit(flashes(c), navUser(c), pages.ClientEditData{
+			CSRFToken: csrfToken(c), ID: client.ID.String(), Name: client.Name, Action: action, Error: errMsg,
+			IsAuthApplication: in.IsAuthApplication, RequireConsent: in.RequireConsent,
+			RedirectURIs:           strings.Join(in.RedirectURIs, "\n"),
+			Applications:           apps,
+			SelectedApplicationIDs: selectedSet(in.ApplicationIDs),
+			Groups:                 groupOpts,
+			SelectedGroupIDs:       selectedSet(in.AllowedGroupIDs),
+		}).Render(c.Request().Context(), c.Response())
+	}
+
+	if in.IsAuthApplication && len(in.RedirectURIs) == 0 {
+		return reRender("At least one redirect URI is required to enable this as an auth application.")
+	}
+
+	updated, err := h.clients.UpdateServiceClientSettings(c.Request().Context(), client.ID, in)
+	if err != nil {
+		return reRender(err.Error())
+	}
+
+	h.activity.LogUpdate(requestContext(c), "client", updated.ID.String(), updated.Name, nil)
+	AddFlash(c, "success", "Service client \""+updated.Name+"\" updated.")
+	return c.Redirect(http.StatusFound, "/clients/"+updated.ID.String()+"/")
 }
 
 func (h *ClientHandler) Toggle(c echo.Context) error {

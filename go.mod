@@ -8,6 +8,7 @@ require (
 	github.com/a-h/templ v0.3.1020
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/dbos-inc/dbos-transact-golang v1.2.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1

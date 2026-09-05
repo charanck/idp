@@ -12,6 +12,18 @@ func RegisterConfigRoutes(g *echo.Group, configs *ConfigHandler, flags *FeatureF
 	g.GET("/feature-flags", flags.List, authMW.Middleware())
 }
 
+// RegisterOIDCRoutes mounts the stateless, machine-facing half of the OIDC
+// Identity Provider directly on e (not under /api/v1) since
+// /.well-known/... and /oauth2/... are conventionally root-level paths. The
+// browser-facing GET/POST /oauth2/authorize route lives in web/router.go
+// instead, since it needs session auth + CSRF.
+func RegisterOIDCRoutes(e *echo.Echo, oidc *OIDCHandler) {
+	e.GET("/.well-known/openid-configuration", oidc.Discovery)
+	e.GET("/.well-known/jwks.json", oidc.JWKS)
+	e.POST("/oauth2/token", oidc.Token)
+	e.GET("/oauth2/userinfo", oidc.UserInfo)
+}
+
 // RegisterNotificationRoutes mounts the notification S2S API under g
 // (expected to be apiGroup.Group("/notifications")).
 func RegisterNotificationRoutes(g *echo.Group, notifications *NotificationHandler, sessions *SessionHandler, sse *SSEHandler, inapp *InAppHandler, authMW *NotificationAPIKeyAuthMiddleware) {

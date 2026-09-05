@@ -79,3 +79,88 @@ func (r *gormServiceClientRepository) List(ctx context.Context, q string, isActi
 	}
 	return clients, nil
 }
+
+func (r *gormServiceClientRepository) ListApplicationIDs(ctx context.Context, clientID uuid.UUID) ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	err := r.db.WithContext(ctx).Table("service_client_applications").
+		Where("service_client_id = ?", clientID).
+		Pluck("application_id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func (r *gormServiceClientRepository) SetApplications(ctx context.Context, clientID uuid.UUID, applicationIDs []uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("service_client_applications").Where("service_client_id = ?", clientID).Delete(nil).Error; err != nil {
+			return err
+		}
+		for _, appID := range applicationIDs {
+			if err := tx.Table("service_client_applications").Create(map[string]any{
+				"service_client_id": clientID,
+				"application_id":    appID,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *gormServiceClientRepository) ListRedirectURIs(ctx context.Context, clientID uuid.UUID) ([]string, error) {
+	var uris []string
+	err := r.db.WithContext(ctx).Table("service_client_redirect_uris").
+		Where("service_client_id = ?", clientID).
+		Pluck("redirect_uri", &uris).Error
+	if err != nil {
+		return nil, err
+	}
+	return uris, nil
+}
+
+func (r *gormServiceClientRepository) SetRedirectURIs(ctx context.Context, clientID uuid.UUID, redirectURIs []string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("service_client_redirect_uris").Where("service_client_id = ?", clientID).Delete(nil).Error; err != nil {
+			return err
+		}
+		for _, uri := range redirectURIs {
+			if err := tx.Table("service_client_redirect_uris").Create(map[string]any{
+				"id":                uuid.New(),
+				"service_client_id": clientID,
+				"redirect_uri":      uri,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *gormServiceClientRepository) ListAllowedGroupIDs(ctx context.Context, clientID uuid.UUID) ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	err := r.db.WithContext(ctx).Table("service_client_allowed_groups").
+		Where("service_client_id = ?", clientID).
+		Pluck("group_id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func (r *gormServiceClientRepository) SetAllowedGroups(ctx context.Context, clientID uuid.UUID, groupIDs []uuid.UUID) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("service_client_allowed_groups").Where("service_client_id = ?", clientID).Delete(nil).Error; err != nil {
+			return err
+		}
+		for _, groupID := range groupIDs {
+			if err := tx.Table("service_client_allowed_groups").Create(map[string]any{
+				"service_client_id": clientID,
+				"group_id":          groupID,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}

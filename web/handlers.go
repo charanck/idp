@@ -13,9 +13,12 @@ type Handlers struct {
 	Flag                 *FlagHandler
 	Client               *ClientHandler
 	User                 *UserHandler
+	Group                *GroupHandler
+	Policy               *PolicyHandler
 	Auth                 *AuthHandler
 	OAuthLogin           *OAuthLoginHandler
 	OAuthProvider        *OAuthProviderHandler
+	OIDC                 *OIDCHandler
 	NotificationSettings *NotificationSettingsHandler
 	Notification         *NotificationHandler
 }

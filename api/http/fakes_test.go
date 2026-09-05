@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
+
 	"controlplane/internal/config"
 	authmodel "controlplane/internal/model/auth"
 	configmodel "controlplane/internal/model/config"
@@ -54,6 +56,27 @@ type fakeFeatureFlagLister struct {
 
 func (f *fakeFeatureFlagLister) ListFlags(ctx context.Context, service, environment string) ([]configmodel.FeatureFlag, error) {
 	return f.flags, f.err
+}
+
+type fakeApplicationFinder struct {
+	apps map[string]*configmodel.Application
+	err  error
+}
+
+func (f *fakeApplicationFinder) GetApplicationByName(ctx context.Context, name string) (*configmodel.Application, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.apps[name], nil
+}
+
+type fakeClientApplicationScoper struct {
+	allowedIDs []uuid.UUID
+	err        error
+}
+
+func (f *fakeClientApplicationScoper) ServiceClientApplicationIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
+	return f.allowedIDs, f.err
 }
 
 var errFakeService = errors.New("fake service error")

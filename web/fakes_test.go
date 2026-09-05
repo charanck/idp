@@ -85,13 +85,16 @@ func callHandlerWithParams(t *testing.T, store *session.Store, method, target st
 	if user != nil {
 		loader[user.ID] = *user
 	}
-	authMW := web.NewAuthMiddleware(loader)
+	authMW := web.NewAuthMiddleware(loader, fakeGroupPermissionLoader{})
 
 	handler := store.Middleware()(func(c echo.Context) error {
 		if user != nil {
 			session.FromContext(c).SetUserID(user.ID.String())
 		}
-		return authMW.LoadUser()(fn)(c)
+		return authMW.LoadUser()(func(c echo.Context) error {
+			web.SetFullAccessPermissionsForTest(c)
+			return fn(c)
+		})(c)
 	})
 
 	if err := handler(c); err != nil {
@@ -108,6 +111,22 @@ func (f fakeUserLoader) GetUserByID(ctx context.Context, id uuid.UUID) (*authmod
 		cp := u
 		return &cp, nil
 	}
+	return nil, nil
+}
+
+// fakeGroupPermissionLoader implements web.GroupPermissionLoader, returning
+// no group memberships - callHandlerWithParams overrides the computed
+// permissions afterward via web.SetFullAccessPermissionsForTest, so these
+// handler unit tests (which invoke fn directly, bypassing router.go's
+// ModuleRequired gating) get full access regardless of what this loader
+// returns.
+type fakeGroupPermissionLoader struct{}
+
+func (fakeGroupPermissionLoader) UserGroups(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error) {
+	return nil, nil
+}
+
+func (fakeGroupPermissionLoader) GroupApplicationIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
 	return nil, nil
 }
 
@@ -230,12 +249,22 @@ func (f *fakeApplicationStore) put(a configmodel.Application) configmodel.Applic
 	return a
 }
 
-func (f *fakeApplicationStore) ListAllApplications(ctx context.Context, q string) ([]configmodel.Application, error) {
+func (f *fakeApplicationStore) ListAllApplications(ctx context.Context, q string, allowedIDs []uuid.UUID) ([]configmodel.Application, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	var allowed map[uuid.UUID]bool
+	if len(allowedIDs) > 0 {
+		allowed = make(map[uuid.UUID]bool, len(allowedIDs))
+		for _, id := range allowedIDs {
+			allowed[id] = true
+		}
+	}
 	var out []configmodel.Application
 	for _, a := range f.apps {
 		if q != "" && !strings.Contains(strings.ToLower(a.Name), strings.ToLower(q)) {
+			continue
+		}
+		if allowed != nil && !allowed[a.ID] {
 			continue
 		}
 		out = append(out, a)
@@ -650,12 +679,20 @@ func (f *fakeNotificationStore) GetNotification(ctx context.Context, id uuid.UUI
 
 // fakeClientStore implements web.ClientStore in-memory.
 type fakeClientStore struct {
-	mu      sync.Mutex
-	clients map[uuid.UUID]authmodel.ServiceClient
+	mu            sync.Mutex
+	clients       map[uuid.UUID]authmodel.ServiceClient
+	applications  map[uuid.UUID][]uuid.UUID
+	redirectURIs  map[uuid.UUID][]string
+	allowedGroups map[uuid.UUID][]uuid.UUID
 }
 
 func newFakeClientStore() *fakeClientStore {
-	return &fakeClientStore{clients: map[uuid.UUID]authmodel.ServiceClient{}}
+	return &fakeClientStore{
+		clients:       map[uuid.UUID]authmodel.ServiceClient{},
+		applications:  map[uuid.UUID][]uuid.UUID{},
+		redirectURIs:  map[uuid.UUID][]string{},
+		allowedGroups: map[uuid.UUID][]uuid.UUID{},
+	}
 }
 
 func (f *fakeClientStore) put(c authmodel.ServiceClient) authmodel.ServiceClient {
@@ -742,14 +779,143 @@ func (f *fakeClientStore) RegenerateServiceClientKey(ctx context.Context, id uui
 	return &c, nil
 }
 
+func (f *fakeClientStore) ServiceClientApplicationIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.applications[id], nil
+}
+
+func (f *fakeClientStore) ServiceClientRedirectURIs(ctx context.Context, id uuid.UUID) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.redirectURIs[id], nil
+}
+
+func (f *fakeClientStore) ServiceClientAllowedGroupIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.allowedGroups[id], nil
+}
+
+func (f *fakeClientStore) UpdateServiceClientSettings(ctx context.Context, id uuid.UUID, in auth.UpdateServiceClientSettingsInput) (*authmodel.ServiceClient, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c, ok := f.clients[id]
+	if !ok {
+		return nil, nil
+	}
+	c.IsAuthApplication = in.IsAuthApplication
+	c.RequireConsent = in.RequireConsent
+	f.clients[id] = c
+	if f.applications == nil {
+		f.applications = map[uuid.UUID][]uuid.UUID{}
+	}
+	if f.redirectURIs == nil {
+		f.redirectURIs = map[uuid.UUID][]string{}
+	}
+	if f.allowedGroups == nil {
+		f.allowedGroups = map[uuid.UUID][]uuid.UUID{}
+	}
+	f.applications[id] = in.ApplicationIDs
+	f.redirectURIs[id] = in.RedirectURIs
+	f.allowedGroups[id] = in.AllowedGroupIDs
+	return &c, nil
+}
+
+// fakeGroupStore implements web.GroupStore in-memory.
+type fakeGroupStore struct {
+	mu           sync.Mutex
+	groups       map[uuid.UUID]authmodel.Group
+	applications map[uuid.UUID][]uuid.UUID
+}
+
+func newFakeGroupStore() *fakeGroupStore {
+	return &fakeGroupStore{groups: map[uuid.UUID]authmodel.Group{}, applications: map[uuid.UUID][]uuid.UUID{}}
+}
+
+func (f *fakeGroupStore) put(g authmodel.Group) authmodel.Group {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if g.ID == uuid.Nil {
+		g.ID = uuid.New()
+	}
+	f.groups[g.ID] = g
+	return g
+}
+
+func (f *fakeGroupStore) ListGroups(ctx context.Context, q string) ([]authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []authmodel.Group
+	for _, g := range f.groups {
+		if q != "" && !strings.Contains(strings.ToLower(g.Name), strings.ToLower(q)) {
+			continue
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+
+func (f *fakeGroupStore) GetGroupByID(ctx context.Context, id uuid.UUID) (*authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if g, ok := f.groups[id]; ok {
+		cp := g
+		return &cp, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeGroupStore) GroupApplicationIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.applications[groupID], nil
+}
+
+func (f *fakeGroupStore) CreateGroup(ctx context.Context, in auth.CreateGroupInput) (*authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g := authmodel.Group{ID: uuid.New(), Name: in.Name}
+	f.groups[g.ID] = g
+	f.applications[g.ID] = in.ApplicationIDs
+	return &g, nil
+}
+
+func (f *fakeGroupStore) UpdateGroup(ctx context.Context, id uuid.UUID, in auth.CreateGroupInput) (*authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g, ok := f.groups[id]
+	if !ok {
+		return nil, nil
+	}
+	g.Name = in.Name
+	f.groups[id] = g
+	f.applications[id] = in.ApplicationIDs
+	return &g, nil
+}
+
+func (f *fakeGroupStore) DeleteGroup(ctx context.Context, id uuid.UUID) (*authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	g, ok := f.groups[id]
+	if !ok {
+		return nil, nil
+	}
+	delete(f.groups, id)
+	delete(f.applications, id)
+	return &g, nil
+}
+
 // fakeUserStore implements web.UserStore in-memory.
 type fakeUserStore struct {
-	mu    sync.Mutex
-	users map[uuid.UUID]authmodel.User
+	mu         sync.Mutex
+	users      map[uuid.UUID]authmodel.User
+	groups     []authmodel.Group
+	userGroups map[uuid.UUID][]uuid.UUID
 }
 
 func newFakeUserStore() *fakeUserStore {
-	return &fakeUserStore{users: map[uuid.UUID]authmodel.User{}}
+	return &fakeUserStore{users: map[uuid.UUID]authmodel.User{}, userGroups: map[uuid.UUID][]uuid.UUID{}}
 }
 
 func (f *fakeUserStore) put(u authmodel.User) authmodel.User {
@@ -825,6 +991,35 @@ func (f *fakeUserStore) DeleteUser(ctx context.Context, id uuid.UUID) (*authmode
 	}
 	delete(f.users, id)
 	return &u, nil
+}
+
+func (f *fakeUserStore) ListGroups(ctx context.Context, q string) ([]authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.groups, nil
+}
+
+func (f *fakeUserStore) UserGroups(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	set := make(map[uuid.UUID]bool, len(f.userGroups[userID]))
+	for _, id := range f.userGroups[userID] {
+		set[id] = true
+	}
+	var out []authmodel.Group
+	for _, g := range f.groups {
+		if set[g.ID] {
+			out = append(out, g)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeUserStore) SetUserGroups(ctx context.Context, userID uuid.UUID, groupIDs []uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.userGroups[userID] = groupIDs
+	return nil
 }
 
 // fakeAuthStore implements web.AuthStore.

@@ -14,7 +14,14 @@ type NavUser struct {
 	LoggedIn  bool
 	Email     string
 	IsStaff   bool
+	Modules   map[string]bool
 	CSRFToken string
+}
+
+// HasModule reports whether the current user's effective group permissions
+// grant access to module (one of the auth.Module* keys).
+func (u NavUser) HasModule(module string) bool {
+	return u.Modules[module]
 }
 
 templ Base(title string, activeNav string, user NavUser, flashes []session.Flash) {
@@ -68,30 +75,60 @@ templ sidebar(activeNav string, user NavUser) {
 		<nav>
 			<ul>
 				@navLink(activeNav, "dashboard", "/dashboard/", "bi-speedometer2", "Dashboard")
-				@navLink(activeNav, "applications", "/applications/", "bi-grid-3x3-gap", "Applications")
-				@navLink(activeNav, "environments", "/environments/", "bi-layers", "Environments")
-				@navLink(activeNav, "configs", "/configs/", "bi-sliders", "Configs & Secrets")
-				@navLink(activeNav, "flags", "/flags/", "bi-toggle-on", "Feature Flags")
+				if user.HasModule("applications") {
+					@navLink(activeNav, "applications", "/applications/", "bi-grid-3x3-gap", "Applications")
+				}
+				if user.HasModule("environments") {
+					@navLink(activeNav, "environments", "/environments/", "bi-layers", "Environments")
+				}
+				if user.HasModule("configs") {
+					@navLink(activeNav, "configs", "/configs/", "bi-sliders", "Configs & Secrets")
+				}
+				if user.HasModule("flags") {
+					@navLink(activeNav, "flags", "/flags/", "bi-toggle-on", "Feature Flags")
+				}
 				if notification.Enabled {
 					@navLink(activeNav, "notifications", "/notifications/", "bi-bell", "Notifications")
 				}
 			</ul>
 		</nav>
-		if user.IsStaff {
+		if user.HasModule("users") || user.HasModule("groups") || user.HasModule("service_clients") || user.HasModule("oauth_providers") || user.HasModule("policies") {
 			<details class="sidebar-group" open>
-				<summary>Admin</summary>
+				<summary>Identity &amp; Access</summary>
 				<nav>
 					<ul>
-						@navLink(activeNav, "clients", "/clients/", "bi-hdd-network", "Service Clients")
-						@navLink(activeNav, "users", "/users/", "bi-people", "Users")
-						@navLink(activeNav, "oauth_providers", "/oauth/providers/", "bi-shield-lock", "OAuth Providers")
-						if notification.Enabled {
-							@navLink(activeNav, "notification_settings", "/notification-settings/", "bi-bell", "Notification Settings")
+						if user.HasModule("users") {
+							@navLink(activeNav, "users", "/users/", "bi-people", "Users")
 						}
-						@navLink(activeNav, "activity", "/activity/", "bi-clock-history", "Activity Log")
+						if user.HasModule("groups") {
+							@navLink(activeNav, "groups", "/groups/", "bi-diagram-3", "Groups")
+						}
+						if user.HasModule("service_clients") {
+							@navLink(activeNav, "clients", "/clients/", "bi-hdd-network", "Service Clients")
+						}
+						if user.HasModule("oauth_providers") {
+							@navLink(activeNav, "oauth_providers", "/oauth/providers/", "bi-shield-lock", "OAuth Providers")
+						}
+						if user.HasModule("policies") {
+							@navLink(activeNav, "policies", "/policies/", "bi-file-earmark-lock", "Policies")
+						}
 					</ul>
 				</nav>
 			</details>
+		}
+		if notification.Enabled && user.HasModule("notification_settings") {
+			<nav>
+				<ul>
+					@navLink(activeNav, "notification_settings", "/notification-settings/", "bi-bell", "Notification Settings")
+				</ul>
+			</nav>
+		}
+		if user.HasModule("activity_log") {
+			<nav>
+				<ul>
+					@navLink(activeNav, "activity", "/activity/", "bi-clock-history", "Activity Log")
+				</ul>
+			</nav>
 		}
 	</div>
 }

@@ -104,7 +104,8 @@ func (h *NotificationHandler) List(c echo.Context) error {
 		})
 	}
 
-	apps, err := listApplications(c.Request().Context(), h.apps)
+	allowedIDs, _ := AllowedApplicationIDs(c)
+	apps, err := listApplications(c.Request().Context(), h.apps, allowedIDs)
 	if err != nil {
 		return err
 	}

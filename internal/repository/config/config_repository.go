@@ -76,6 +76,9 @@ func (r *gormConfigRepository) List(ctx context.Context, filter model.ListConfig
 	if filter.ApplicationID != nil {
 		query = query.Where("config_entries.application_id = ?", *filter.ApplicationID)
 	}
+	if len(filter.ApplicationIDs) > 0 {
+		query = query.Where("config_entries.application_id IN ?", filter.ApplicationIDs)
+	}
 	if filter.EnvironmentID != nil {
 		query = query.Where("config_entries.environment_id = ?", *filter.EnvironmentID)
 	}

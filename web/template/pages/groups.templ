@@ -1,0 +1,143 @@
+package pages
+
+import authmodel "controlplane/internal/model/auth"
+import "controlplane/internal/auth"
+import "controlplane/internal/session"
+import "controlplane/web/template/layout"
+
+type GroupsListData struct {
+	Groups    []authmodel.Group
+	CurrentQ  string
+	Page      int
+	NumPages  int
+	HasPrev   bool
+	HasNext   bool
+	PrevNum   int
+	NextNum   int
+	Window    []int
+	CSRFToken string
+}
+
+templ GroupsList(flashes []session.Flash, user layout.NavUser, data GroupsListData) {
+	@layout.Base("Groups", "groups", user, flashes) {
+		<div class="toolbar">
+			<h2>Groups</h2>
+			<a role="button" href="/groups/create/"><i class="bi bi-plus-lg"></i> New Group</a>
+		</div>
+		<form method="get" class="filter-bar">
+			<div>
+				<label for="q">Search</label>
+				<input type="text" id="q" name="q" placeholder="Group name" value={ data.CurrentQ }/>
+			</div>
+			<button type="submit" class="btn-sm secondary">Filter</button>
+		</form>
+		<article class="card">
+			<table>
+				<thead><tr><th>Name</th><th>Type</th><th class="actions">Actions</th></tr></thead>
+				<tbody>
+					if len(data.Groups) == 0 {
+						<tr><td colspan="3">No groups found.</td></tr>
+					}
+					for _, g := range data.Groups {
+						<tr>
+							<td>{ g.Name }</td>
+							<td>
+								if g.IsSystem {
+									<span class="badge badge-secondary">Built-in</span>
+								} else {
+									<span class="badge badge-success">Custom</span>
+								}
+							</td>
+							<td class="actions">
+								if !g.IsSystem {
+									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/groups/" + g.ID.String() + "/edit/") }>Edit</a>
+									<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/groups/" + g.ID.String() + "/delete/") }>Delete</a>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</article>
+		@PaginationNav("/groups/", "", data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+	}
+}
+
+type GroupApplicationOption struct {
+	ID   string
+	Name string
+}
+
+type GroupFormData struct {
+	CSRFToken              string
+	Title                  string
+	Action                 string
+	Name                   string
+	Applications           []GroupApplicationOption
+	SelectedModules        map[string]bool
+	SelectedApplicationIDs map[string]bool
+	Error                  string
+	IsEdit                 bool
+}
+
+var moduleLabels = map[string]string{
+	auth.ModuleApplications:         "Applications",
+	auth.ModuleEnvironments:         "Environments",
+	auth.ModuleConfigs:              "Configs & Secrets",
+	auth.ModuleFlags:                "Feature Flags",
+	auth.ModuleServiceClients:       "Service Clients",
+	auth.ModuleUsers:                "Users",
+	auth.ModuleGroups:               "Groups",
+	auth.ModuleOAuthProviders:       "OAuth Providers",
+	auth.ModulePolicies:             "Policies",
+	auth.ModuleNotificationSettings: "Notification Settings",
+	auth.ModuleActivityLog:          "Activity Log",
+}
+
+templ GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData) {
+	@layout.Base(data.Title, "groups", user, flashes) {
+		<h2>{ data.Title }</h2>
+		<article class="form-card-lg">
+			if data.Error != "" {
+				<div class="alert alert-danger">{ data.Error }</div>
+			}
+			<form method="post" action={ templ.URL(data.Action) }>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<label for="name">
+					Name
+					<input type="text" id="name" name="name" placeholder="Engineers" value={ data.Name } required/>
+				</label>
+				<fieldset>
+					<legend>Module Permissions</legend>
+					for _, module := range auth.AllModules {
+						<label class="checkbox-inline">
+							if data.SelectedModules[module] {
+								<input type="checkbox" name={ "module_" + module } checked/>
+							} else {
+								<input type="checkbox" name={ "module_" + module }/>
+							}
+							{ moduleLabels[module] }
+						</label>
+					}
+				</fieldset>
+				<fieldset>
+					<legend>Application Access (none selected = unrestricted)</legend>
+					for _, app := range data.Applications {
+						<label class="checkbox-inline">
+							if data.SelectedApplicationIDs[app.ID] {
+								<input type="checkbox" name="application_ids" value={ app.ID } checked/>
+							} else {
+								<input type="checkbox" name="application_ids" value={ app.ID }/>
+							}
+							{ app.Name }
+						</label>
+					}
+				</fieldset>
+				<div class="form-actions">
+					<button type="submit">Save</button>
+					<a role="button" class="secondary outline" href="/groups/">Cancel</a>
+				</div>
+			</form>
+		</article>
+	}
+}

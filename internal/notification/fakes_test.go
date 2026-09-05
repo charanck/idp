@@ -28,7 +28,7 @@ func newFakeApplicationRepository() *fakeApplicationRepository {
 	return &fakeApplicationRepository{apps: make(map[string]configmodel.Application)}
 }
 
-func (f *fakeApplicationRepository) List(ctx context.Context, q string) ([]configmodel.Application, error) {
+func (f *fakeApplicationRepository) List(ctx context.Context, q string, allowedIDs []uuid.UUID) ([]configmodel.Application, error) {
 	return nil, nil
 }
 

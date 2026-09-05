@@ -36,7 +36,7 @@ func TestApplicationCreateHandler_PersistsAndRedirects(t *testing.T) {
 	if rec.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusFound, rec.Body.String())
 	}
-	all, _ := apps.ListAllApplications(context.Background(), "")
+	all, _ := apps.ListAllApplications(context.Background(), "", nil)
 	if len(all) != 1 || all[0].Name != "new-app" {
 		t.Fatalf("apps = %+v, want single new-app", all)
 	}

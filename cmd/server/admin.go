@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"controlplane/internal/appconfig"
@@ -46,6 +47,9 @@ func bootstrapAdmin(gdb *gorm.DB, cfg *appconfig.Config) error {
 		if createErr := gdb.Create(&newUser).Error; createErr != nil {
 			return createErr
 		}
+		if groupErr := ensureAdminGroupMembership(gdb, newUser.ID); groupErr != nil {
+			return groupErr
+		}
 		slog.Info("created admin user", "email", cfg.AdminEmail)
 		return nil
 	case err != nil:
@@ -63,7 +67,22 @@ func bootstrapAdmin(gdb *gorm.DB, cfg *appconfig.Config) error {
 		if saveErr := gdb.Save(&user).Error; saveErr != nil {
 			return saveErr
 		}
+		if groupErr := ensureAdminGroupMembership(gdb, user.ID); groupErr != nil {
+			return groupErr
+		}
 		slog.Info("synced admin user credentials", "email", cfg.AdminEmail)
 		return nil
 	}
+}
+
+// ensureAdminGroupMembership idempotently adds userID to the built-in Admin
+// group, so the admin bootstrapped here (still also given the legacy
+// IsSuperuser/IsStaff flags above) has real access under the group-based
+// permission model too.
+func ensureAdminGroupMembership(gdb *gorm.DB, userID uuid.UUID) error {
+	return gdb.Exec(`
+		INSERT INTO user_groups (user_id, group_id)
+		SELECT ?, g.id FROM groups g WHERE g.name = 'Admin' AND g.is_system
+		ON CONFLICT DO NOTHING
+	`, userID).Error
 }

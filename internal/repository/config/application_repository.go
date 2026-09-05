@@ -18,8 +18,11 @@ func NewApplicationRepository(db *gorm.DB) *gormApplicationRepository {
 	return &gormApplicationRepository{db: db}
 }
 
-func (r *gormApplicationRepository) List(ctx context.Context, q string) ([]model.Application, error) {
+func (r *gormApplicationRepository) List(ctx context.Context, q string, allowedIDs []uuid.UUID) ([]model.Application, error) {
 	query := r.db.WithContext(ctx).Order("name")
+	if len(allowedIDs) > 0 {
+		query = query.Where("id IN ?", allowedIDs)
+	}
 	if q != "" {
 		query = query.Where("name ILIKE ?", "%"+q+"%")
 	}

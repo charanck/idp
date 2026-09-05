@@ -30,18 +30,21 @@ type UserLoader interface {
 }
 
 // AuthMiddleware groups the session/user-aware middleware every route needs:
-// loading the current user, requiring login, and requiring staff.
+// loading the current user (plus their computed group permissions) and
+// requiring login.
 type AuthMiddleware struct {
-	users UserLoader
+	users  UserLoader
+	groups GroupPermissionLoader
 }
 
-func NewAuthMiddleware(users UserLoader) *AuthMiddleware {
-	return &AuthMiddleware{users: users}
+func NewAuthMiddleware(users UserLoader, groups GroupPermissionLoader) *AuthMiddleware {
+	return &AuthMiddleware{users: users, groups: groups}
 }
 
-// LoadUser attaches the logged-in user (if any) to the request context from
-// the session, without enforcing authentication, so every page - including
-// public ones like the login page - can render user-aware nav state.
+// LoadUser attaches the logged-in user (if any), and their computed
+// EffectivePermissions, to the request context from the session, without
+// enforcing authentication, so every page - including public ones like the
+// login page - can render user-aware nav state.
 func (m *AuthMiddleware) LoadUser() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -51,6 +54,7 @@ func (m *AuthMiddleware) LoadUser() echo.MiddlewareFunc {
 					if id, err := uuid.Parse(idStr); err == nil {
 						if user, err := m.users.GetUserByID(c.Request().Context(), id); err == nil && user != nil {
 							c.Set(contextKeyUser, user)
+							c.Set(contextKeyPermissions, m.computePermissions(c.Request().Context(), user.ID))
 						}
 					}
 				}
@@ -58,6 +62,26 @@ func (m *AuthMiddleware) LoadUser() echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+// computePermissions unions the user's groups' module permissions and
+// Application allow-lists. Errors loading groups degrade to "no
+// permissions" rather than failing the request - a transient lookup failure
+// should deny access, not grant it.
+func (m *AuthMiddleware) computePermissions(ctx context.Context, userID uuid.UUID) auth.EffectivePermissions {
+	groups, err := m.groups.UserGroups(ctx, userID)
+	if err != nil {
+		return auth.EffectivePermissions{}
+	}
+	appIDs := make(map[uuid.UUID][]uuid.UUID, len(groups))
+	for _, g := range groups {
+		ids, err := m.groups.GroupApplicationIDs(ctx, g.ID)
+		if err != nil {
+			return auth.EffectivePermissions{}
+		}
+		appIDs[g.ID] = ids
+	}
+	return auth.ComputeEffectivePermissions(groups, appIDs)
 }
 
 // LoginRequired redirects to /login/ (with ?next=) when there is no
@@ -71,22 +95,6 @@ func (m *AuthMiddleware) LoginRequired() echo.MiddlewareFunc {
 			}
 			return next(c)
 		}
-	}
-}
-
-// AdminRequired is LoginRequired plus an is_staff check, flashing an error
-// and redirecting to the dashboard when the logged-in user isn't staff.
-func (m *AuthMiddleware) AdminRequired() echo.MiddlewareFunc {
-	loginRequired := m.LoginRequired()
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return loginRequired(func(c echo.Context) error {
-			user := CurrentUser(c)
-			if !user.IsStaff {
-				AddFlash(c, "danger", "You do not have permission to access this page.")
-				return c.Redirect(http.StatusFound, "/dashboard/")
-			}
-			return next(c)
-		})
 	}
 }
 

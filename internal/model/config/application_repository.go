@@ -10,7 +10,10 @@ import (
 // Not-found lookups return gorm's raw error (including gorm.ErrRecordNotFound)
 // rather than swallowing it - callers decide how to translate that.
 type ApplicationRepository interface {
-	List(ctx context.Context, q string) ([]Application, error)
+	// List returns Applications matching q (name substring), scoped to
+	// allowedIDs if non-empty (a group-based Application allow-list; empty =
+	// unrestricted).
+	List(ctx context.Context, q string, allowedIDs []uuid.UUID) ([]Application, error)
 	FindByID(ctx context.Context, id uuid.UUID) (*Application, error)
 	FindByName(ctx context.Context, name string) (*Application, error)
 	Create(ctx context.Context, app *Application) error

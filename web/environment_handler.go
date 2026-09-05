@@ -43,7 +43,8 @@ func (h *EnvironmentHandler) List(c echo.Context) error {
 	appIDFilter := c.QueryParam("application_id")
 	q := strings.TrimSpace(c.QueryParam("q"))
 
-	filter := configmodel.ListEnvironmentsFilter{Query: q}
+	allowedIDs, _ := AllowedApplicationIDs(c)
+	filter := configmodel.ListEnvironmentsFilter{Query: q, ApplicationIDs: allowedIDs}
 	if appIDFilter != "" {
 		if id, err := uuid.Parse(appIDFilter); err == nil {
 			filter.ApplicationID = &id
@@ -75,7 +76,7 @@ func (h *EnvironmentHandler) List(c echo.Context) error {
 		groups = append(groups, *groupsByApp[id])
 	}
 
-	apps, err := listApplications(c.Request().Context(), h.apps)
+	apps, err := listApplications(c.Request().Context(), h.apps, allowedIDs)
 	if err != nil {
 		return err
 	}
@@ -100,7 +101,8 @@ func (h *EnvironmentHandler) List(c echo.Context) error {
 }
 
 func (h *EnvironmentHandler) Create(c echo.Context) error {
-	apps, err := listApplications(c.Request().Context(), h.apps)
+	allowedIDs, _ := AllowedApplicationIDs(c)
+	apps, err := listApplications(c.Request().Context(), h.apps, allowedIDs)
 	if err != nil {
 		return err
 	}
@@ -120,6 +122,9 @@ func (h *EnvironmentHandler) Create(c echo.Context) error {
 			CSRFToken: csrfToken(c), Applications: apps, Action: "/environments/create/",
 			ApplicationID: applicationID, Name: name, Error: "Application and name are required.",
 		}).Render(c.Request().Context(), c.Response())
+	}
+	if !ApplicationAllowed(c, appID) {
+		return echo.NewHTTPError(http.StatusNotFound)
 	}
 
 	env, err := h.envs.CreateEnvironment(c.Request().Context(), appID, name)
@@ -147,10 +152,11 @@ func (h *EnvironmentHandler) Edit(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if env == nil {
+	if env == nil || !ApplicationAllowed(c, env.ApplicationID) {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	apps, err := listApplications(c.Request().Context(), h.apps)
+	allowedIDs, _ := AllowedApplicationIDs(c)
+	apps, err := listApplications(c.Request().Context(), h.apps, allowedIDs)
 	if err != nil {
 		return err
 	}
@@ -173,6 +179,10 @@ func (h *EnvironmentHandler) Edit(c echo.Context) error {
 		}).Render(c.Request().Context(), c.Response())
 	}
 
+	if !ApplicationAllowed(c, appID) {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+
 	updated, err := h.envs.UpdateEnvironment(c.Request().Context(), id, appID, name)
 	if err != nil {
 		return err
@@ -191,7 +201,7 @@ func (h *EnvironmentHandler) Delete(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if env == nil {
+	if env == nil || !ApplicationAllowed(c, env.ApplicationID) {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 

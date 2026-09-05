@@ -6,11 +6,15 @@ import (
 	"github.com/google/uuid"
 )
 
-// ListFlagsFilter filters FeatureFlagRepository.List.
+// ListFlagsFilter filters FeatureFlagRepository.List. ApplicationIDs scopes
+// results to a group-based Application allow-list (nil/empty =
+// unrestricted); it composes with ApplicationID, which narrows to one
+// specific Application within that scope.
 type ListFlagsFilter struct {
-	ApplicationID *uuid.UUID
-	EnvironmentID *uuid.UUID
-	IsEnabled     *bool
+	ApplicationID  *uuid.UUID
+	ApplicationIDs []uuid.UUID
+	EnvironmentID  *uuid.UUID
+	IsEnabled      *bool
 }
 
 // FeatureFlagRepository is the persistence boundary for FeatureFlag rows.

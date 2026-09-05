@@ -12,10 +12,18 @@ a master key, then re-encrypted per-client on read. Built on [Echo](https://echo
 owns the schema via `internal/db/migrations/`), and [templ](https://templ.guide/) for
 server-rendered HTML. See the Architecture section below for package-by-package detail.
 
-There is no JWT-based user/service auth API and no generic admin framework — both were
-deliberately not carried over from an earlier implementation of this app. Service clients,
-users, configs, secrets, and feature flags are all managed through the session-authenticated web
-UI; the only programmatic API is S2S API-key auth for reading configs/flags.
+Access control is Group-based: every `User` belongs to one or more `Group`s (built-in **Admin**
+and **User**, plus admin-creatable custom groups), each granting a coarse set of module
+permissions and an optional Application allow-list; `User.IsStaff`/`IsSuperuser` remain as DB
+columns for legacy/back-compat but are no longer read for gating. Service clients, users, configs,
+secrets, and feature flags are all managed through the session-authenticated web UI.
+
+Beyond S2S API-key auth for reading configs/flags, this control-plane is also an OAuth2/OIDC
+**Identity Provider** for other applications: an "auth application" (a `ServiceClient` with
+`IsAuthApplication` set) redirects its users here to log in via a standard authorization-code
+flow and gets back RS256-signed ID/access tokens plus a JWKS endpoint. This is unrelated to the
+existing `OAuthProvider` feature below, which is the reverse direction (control-plane's own users
+logging in via an external IdP like Google).
 
 ## Commands
 
@@ -58,7 +66,7 @@ Package layout under `internal/`, each with a narrow role:
 |---|---|
 | `appconfig` | Loads runtime configuration from environment variables. |
 | `db` | Schema management. GORM is a query layer only; goose (`internal/db/migrations`) owns the schema. `Migrate` runs on every startup, guarded by a Postgres advisory lock. |
-| `auth` | `User` (custom, email-based login, UUID PK, `ForcePasswordReset` flag), `ServiceClient` (S2S API-key holder + per-client Fernet `EncryptionKey`), OAuth2/OIDC models, and `AuthService`/`OAuthService` (authlib-equivalent authorization-code flow). |
+| `auth` | `User` (custom, email-based login, UUID PK, `ForcePasswordReset` flag), `Group` (the access-control primitive — module permissions + Application allow-list, unioned across a user's groups via `ComputeEffectivePermissions`), `Policy` (singleton login policies, e.g. self-registration email-domain allow-list), `ServiceClient` (S2S API-key holder + per-client Fernet `EncryptionKey`; also doubles as an OIDC `client_id`/`client_secret` when `IsAuthApplication`), OAuth2/OIDC login models, and `AuthService`/`OAuthService`/`OIDCService`. `OAuthService` is control-plane-as-relying-party (logging control-plane's own users in via an external IdP); `OIDCService` is control-plane-as-Identity-Provider (RS256 JWKS, authorization codes, token issuance for other applications) — unrelated, independent flows. |
 | `config` | `Application` → `Environment` (unique per app) → `ConfigEntry` (unique per app+env+key; secrets are just `IsSecret=true` entries) and `FeatureFlag` (same app+env scoping, soft-deleted). `ConfigEntryVersion` is an immutable snapshot written on every create/update/delete/rollback of a `ConfigEntry`. `Activity` is an append-only audit log. `ConfigService`/`FeatureFlagService` both **get-or-create** the `Application`/`Environment` scope from `(service, environment)` string pairs rather than taking foreign keys directly — this is the shape both the API and the web UI call into. |
 | `crypto` | Fernet master-key encryption (`EncryptForStorage`/`DecryptFromStorage`) + per-client re-encryption (`ReEncryptForClient`). |
 | `security` | Password hashing. |
@@ -74,16 +82,22 @@ Package layout under `internal/`, each with a narrow role:
 are committed, so a plain `go build` never needs the templ CLI). `web/static/` is served at
 `/static`.
 
-### Two auth systems
+### Three auth systems
 
-1. **API** (`/api/v1/config/...`): stateless. `APIKeyAuth` reads `X-API-Key: <key_id>.<secret>` and
-   resolves a `ServiceClient` via `AuthService`'s API-key verification. This is the only
-   programmatic auth surface in the app.
+1. **S2S API** (`/api/v1/config/...`): stateless. `APIKeyAuth` reads `X-API-Key: <key_id>.<secret>`
+   and resolves a `ServiceClient` via `AuthService`'s API-key verification. A client's
+   `ServiceClientApplicationIDs` allow-list (empty = unrestricted), if non-empty, 404s config/flag
+   reads for services outside its scope.
 2. **Web UI** (`/...`): signed-cookie session auth (`internal/session`), gated by a login-required
-   check and an admin-only (`IsStaff`) check for privileged pages.
+   check and per-module `ModuleRequired(module)` checks driven by the logged-in user's effective
+   Group permissions (see `web/authz.go`).
+3. **OIDC Identity Provider** (`/.well-known/...`, `/oauth2/...`): a relying-party application
+   redirects its users to the session-authenticated `GET/POST /oauth2/authorize` (in `web`), then
+   exchanges the resulting code for tokens via the stateless `POST /oauth2/token` /
+   `GET /oauth2/userinfo` (in `api/http`), both backed by `OIDCService`.
 
-Both operate on the same `auth`/`config` models and services — when changing a service method,
-check both `api/http` and `web` for callers.
+All three operate on the same `auth`/`config` models and services — when changing a service
+method, check `api/http` and `web` for callers.
 
 ### Encryption flow
 

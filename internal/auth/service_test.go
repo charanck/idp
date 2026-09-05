@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/pbkdf2"
 
 	"controlplane/internal/auth"
@@ -18,7 +19,20 @@ import (
 func newTestAuthService() (*auth.AuthService, *fakeUserRepository, *fakeServiceClientRepository) {
 	users := newFakeUserRepository()
 	clients := newFakeServiceClientRepository()
-	return auth.NewAuthService(users, clients), users, clients
+	groups := newFakeGroupRepository()
+	policies := newFakePolicyRepository()
+	return auth.NewAuthService(users, clients, groups, policies), users, clients
+}
+
+// newTestAuthServiceWithGroups is newTestAuthService plus direct access to
+// the group/policy fakes, for tests exercising group- and policy-dependent
+// behavior (default group assignment, self-registration domain policy).
+func newTestAuthServiceWithGroups() (*auth.AuthService, *fakeGroupRepository, *fakePolicyRepository) {
+	users := newFakeUserRepository()
+	clients := newFakeServiceClientRepository()
+	groups := newFakeGroupRepository()
+	policies := newFakePolicyRepository()
+	return auth.NewAuthService(users, clients, groups, policies), groups, policies
 }
 
 // legacyPBKDF2Hash builds a hash in the pre-argon2id "pbkdf2_sha256"
@@ -45,6 +59,47 @@ func TestRegisterUser_CreatesInactiveUser(t *testing.T) {
 	}
 	if user.Username == "" {
 		t.Fatal("expected an auto-generated username")
+	}
+}
+
+func TestRegisterUser_DomainPolicyRejectsDisallowedDomain(t *testing.T) {
+	svc, _, _ := newTestAuthServiceWithGroups()
+	ctx := context.Background()
+
+	if _, err := svc.UpdatePolicy(ctx, "example.com, other.com"); err != nil {
+		t.Fatalf("UpdatePolicy: %v", err)
+	}
+
+	if _, err := svc.RegisterUser(ctx, "alice@example.com", "hunter22222", ""); err != nil {
+		t.Fatalf("RegisterUser with allowed domain: %v", err)
+	}
+
+	_, err := svc.RegisterUser(ctx, "mallory@evil.com", "hunter22222", "")
+	if !errors.Is(err, auth.ErrDomainNotAllowed) {
+		t.Fatalf("expected ErrDomainNotAllowed, got %v", err)
+	}
+}
+
+func TestRegisterUser_AssignsDefaultUserGroup(t *testing.T) {
+	svc, groups, _ := newTestAuthServiceWithGroups()
+	ctx := context.Background()
+
+	userGroup := authmodel.Group{ID: uuid.New(), Name: "User", IsSystem: true}
+	if err := groups.Create(ctx, &userGroup); err != nil {
+		t.Fatalf("seed User group: %v", err)
+	}
+
+	user, err := svc.RegisterUser(ctx, "alice@example.com", "hunter22222", "")
+	if err != nil {
+		t.Fatalf("RegisterUser: %v", err)
+	}
+
+	assigned, err := groups.ListByUserID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ListByUserID: %v", err)
+	}
+	if len(assigned) != 1 || assigned[0].ID != userGroup.ID {
+		t.Fatalf("expected new user assigned to built-in User group, got %+v", assigned)
 	}
 }
 

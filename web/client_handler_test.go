@@ -15,7 +15,7 @@ import (
 func newClientHandlerFixture() (*fakeClientStore, *fakeActivityRecorder, *web.ClientHandler) {
 	clients := newFakeClientStore()
 	activity := &fakeActivityRecorder{}
-	h := web.NewClientHandler(clients, activity)
+	h := web.NewClientHandler(clients, newFakeApplicationStore(), newFakeGroupStore(), activity)
 	return clients, activity, h
 }
 

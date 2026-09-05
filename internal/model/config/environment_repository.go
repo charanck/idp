@@ -6,10 +6,14 @@ import (
 	"github.com/google/uuid"
 )
 
-// ListEnvironmentsFilter filters EnvironmentRepository.List.
+// ListEnvironmentsFilter filters EnvironmentRepository.List. ApplicationIDs
+// scopes results to a group-based Application allow-list (nil/empty =
+// unrestricted); it composes with ApplicationID, which narrows to one
+// specific Application within that scope.
 type ListEnvironmentsFilter struct {
-	ApplicationID *uuid.UUID
-	Query         string
+	ApplicationID  *uuid.UUID
+	ApplicationIDs []uuid.UUID
+	Query          string
 }
 
 // EnvironmentRepository is the persistence boundary for Environment rows.

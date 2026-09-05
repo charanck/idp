@@ -22,6 +22,9 @@ func (r *gormEnvironmentRepository) List(ctx context.Context, filter model.ListE
 	if filter.ApplicationID != nil {
 		query = query.Where("application_id = ?", *filter.ApplicationID)
 	}
+	if len(filter.ApplicationIDs) > 0 {
+		query = query.Where("application_id IN ?", filter.ApplicationIDs)
+	}
 	if filter.Query != "" {
 		query = query.Where("name ILIKE ?", "%"+filter.Query+"%")
 	}

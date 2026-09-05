@@ -84,7 +84,7 @@ func TestUpsertConfig_ReusesExistingApplicationAndEnvironment(t *testing.T) {
 		t.Fatalf("UpsertConfig: %v", err)
 	}
 
-	appList, _ := apps.List(ctx, "")
+	appList, _ := apps.List(ctx, "", nil)
 	if len(appList) != 1 {
 		t.Fatalf("expected exactly 1 application, got %d", len(appList))
 	}

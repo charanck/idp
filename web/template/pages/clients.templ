@@ -65,6 +65,7 @@ templ ClientsList(flashes []session.Flash, user layout.NavUser, data ClientsList
 							</td>
 							<td class="actions">
 								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/clients/" + client.ID.String() + "/") }>View</a>
+								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/clients/" + client.ID.String() + "/edit/") }>Edit</a>
 							</td>
 						</tr>
 					}
@@ -129,14 +130,15 @@ templ ClientCreated(flashes []session.Flash, user layout.NavUser, data ClientCre
 }
 
 type ClientDetailData struct {
-	CSRFToken     string
-	ID            string
-	Name          string
-	APIKeyID      string
-	EncryptionKey string
-	IsActive      bool
-	CreatedAt     string
-	UpdatedAt     string
+	CSRFToken         string
+	ID                string
+	Name              string
+	APIKeyID          string
+	EncryptionKey     string
+	IsActive          bool
+	IsAuthApplication bool
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 templ ClientDetail(flashes []session.Flash, user layout.NavUser, data ClientDetailData) {
@@ -176,9 +178,24 @@ templ ClientDetail(flashes []session.Flash, user layout.NavUser, data ClientDeta
 					</tbody>
 				</table>
 			</div>
+			if data.IsAuthApplication {
+				<div class="table-scroll">
+					<h4>OIDC Identity Provider Endpoints</h4>
+					<table>
+						<tbody>
+							<tr><th>Client ID</th><td><code>{ data.APIKeyID }</code></td></tr>
+							<tr><th>Discovery</th><td><code>/.well-known/openid-configuration</code></td></tr>
+							<tr><th>Authorization</th><td><code>/oauth2/authorize</code></td></tr>
+							<tr><th>Token</th><td><code>/oauth2/token</code></td></tr>
+							<tr><th>Userinfo</th><td><code>/oauth2/userinfo</code></td></tr>
+						</tbody>
+					</table>
+				</div>
+			}
 			<div class="toolbar">
 				<a role="button" class="secondary outline" href="/clients/">Back to Clients</a>
 				<div class="actions">
+					<a role="button" class="outline secondary" href={ templ.URL("/clients/" + data.ID + "/edit/") }>Edit</a>
 					<form method="post" action={ templ.URL("/clients/" + data.ID + "/toggle/") }>
 						<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 						<button type="submit">Toggle Status</button>
@@ -186,6 +203,93 @@ templ ClientDetail(flashes []session.Flash, user layout.NavUser, data ClientDeta
 					<a role="button" class="btn-danger" href={ templ.URL("/clients/" + data.ID + "/delete/") }>Delete</a>
 				</div>
 			</div>
+		</article>
+	}
+}
+
+type ClientGroupOption struct {
+	ID   string
+	Name string
+}
+
+type ClientEditData struct {
+	CSRFToken              string
+	Action                 string
+	ID                     string
+	Name                   string
+	IsAuthApplication      bool
+	RequireConsent         bool
+	RedirectURIs           string
+	Applications           []GroupApplicationOption
+	SelectedApplicationIDs map[string]bool
+	Groups                 []ClientGroupOption
+	SelectedGroupIDs       map[string]bool
+	Error                  string
+}
+
+templ ClientEdit(flashes []session.Flash, user layout.NavUser, data ClientEditData) {
+	@layout.Base("Edit Service Client", "clients", user, flashes) {
+		<h2>Edit { data.Name }</h2>
+		<article class="form-card-lg">
+			if data.Error != "" {
+				<div class="alert alert-danger">{ data.Error }</div>
+			}
+			<form method="post" action={ templ.URL(data.Action) }>
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<fieldset>
+					<legend>Config/Flag Application Access (none selected = unrestricted)</legend>
+					for _, app := range data.Applications {
+						<label class="checkbox-inline">
+							if data.SelectedApplicationIDs[app.ID] {
+								<input type="checkbox" name="application_ids" value={ app.ID } checked/>
+							} else {
+								<input type="checkbox" name="application_ids" value={ app.ID }/>
+							}
+							{ app.Name }
+						</label>
+					}
+				</fieldset>
+				<fieldset>
+					<legend>Identity Provider (OIDC)</legend>
+					<label class="checkbox-inline">
+						if data.IsAuthApplication {
+							<input type="checkbox" name="is_auth_application" checked/>
+						} else {
+							<input type="checkbox" name="is_auth_application"/>
+						}
+						Enable as auth application
+					</label>
+					<label class="checkbox-inline">
+						if data.RequireConsent {
+							<input type="checkbox" name="require_consent" checked/>
+						} else {
+							<input type="checkbox" name="require_consent"/>
+						}
+						Require consent screen
+					</label>
+					<label for="redirect_uris">
+						Redirect URIs (one per line)
+						<textarea id="redirect_uris" name="redirect_uris" rows="4">{ data.RedirectURIs }</textarea>
+					</label>
+					<fieldset>
+						<legend>Allowed Groups (none selected = any directory user)</legend>
+						for _, g := range data.Groups {
+							<label class="checkbox-inline">
+								if data.SelectedGroupIDs[g.ID] {
+									<input type="checkbox" name="allowed_group_ids" value={ g.ID } checked/>
+								} else {
+									<input type="checkbox" name="allowed_group_ids" value={ g.ID }/>
+								}
+								{ g.Name }
+							</label>
+						}
+					</fieldset>
+				</fieldset>
+				<div class="form-actions">
+					<button type="submit">Save</button>
+					<a role="button" class="secondary outline" href={ templ.URL("/clients/" + data.ID + "/") }>Cancel</a>
+				</div>
+			</form>
 		</article>
 	}
 }

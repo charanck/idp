@@ -73,7 +73,8 @@ func (h *ConfigHandler) List(c echo.Context) error {
 	secretFilter := c.QueryParam("secret")
 	q := strings.TrimSpace(c.QueryParam("q"))
 
-	filter := configmodel.ListConfigEntriesFilter{Query: q}
+	allowedIDs, _ := AllowedApplicationIDs(c)
+	filter := configmodel.ListConfigEntriesFilter{Query: q, ApplicationIDs: allowedIDs}
 	if appIDFilter != "" {
 		if id, err := uuid.Parse(appIDFilter); err == nil {
 			filter.ApplicationID = &id
@@ -133,7 +134,7 @@ func (h *ConfigHandler) List(c echo.Context) error {
 		groups = append(groups, *groupsByKey[k])
 	}
 
-	apps, envJSON, err := h.loadConfigFormApps(c.Request().Context())
+	apps, envJSON, err := h.loadConfigFormApps(c)
 	if err != nil {
 		return err
 	}
@@ -163,8 +164,10 @@ func (h *ConfigHandler) List(c echo.Context) error {
 	}).Render(c.Request().Context(), c.Response())
 }
 
-func (h *ConfigHandler) loadConfigFormApps(ctx context.Context) ([]configmodel.Application, string, error) {
-	apps, err := listApplications(ctx, h.apps)
+func (h *ConfigHandler) loadConfigFormApps(c echo.Context) ([]configmodel.Application, string, error) {
+	ctx := c.Request().Context()
+	allowedIDs, _ := AllowedApplicationIDs(c)
+	apps, err := listApplications(ctx, h.apps, allowedIDs)
 	if err != nil {
 		return nil, "", err
 	}
@@ -187,7 +190,7 @@ func (h *ConfigHandler) upsertConfigFromForm(c echo.Context, historyAction strin
 	if err != nil {
 		return err
 	}
-	if app == nil {
+	if app == nil || !ApplicationAllowed(c, app.ID) {
 		return errors.New("application not found")
 	}
 
@@ -238,7 +241,7 @@ func (h *ConfigHandler) upsertConfigFromForm(c echo.Context, historyAction strin
 }
 
 func (h *ConfigHandler) Create(c echo.Context) error {
-	apps, envJSON, err := h.loadConfigFormApps(c.Request().Context())
+	apps, envJSON, err := h.loadConfigFormApps(c)
 	if err != nil {
 		return err
 	}
@@ -278,10 +281,10 @@ func (h *ConfigHandler) Clone(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if entry == nil {
+	if entry == nil || !ApplicationAllowed(c, entry.ApplicationID) {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	apps, envJSON, err := h.loadConfigFormApps(c.Request().Context())
+	apps, envJSON, err := h.loadConfigFormApps(c)
 	if err != nil {
 		return err
 	}
@@ -320,10 +323,10 @@ func (h *ConfigHandler) Edit(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if entry == nil {
+	if entry == nil || !ApplicationAllowed(c, entry.ApplicationID) {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	apps, envJSON, err := h.loadConfigFormApps(c.Request().Context())
+	apps, envJSON, err := h.loadConfigFormApps(c)
 	if err != nil {
 		return err
 	}
@@ -361,7 +364,7 @@ func (h *ConfigHandler) Edit(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if app == nil {
+	if app == nil || !ApplicationAllowed(c, app.ID) {
 		return h.rePopulateConfigEditForm(c, apps, envJSON, action, "application not found")
 	}
 
@@ -403,7 +406,7 @@ func (h *ConfigHandler) Delete(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if entry == nil {
+	if entry == nil || !ApplicationAllowed(c, entry.ApplicationID) {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 
@@ -439,7 +442,7 @@ func (h *ConfigHandler) History(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if entry == nil {
+	if entry == nil || !ApplicationAllowed(c, entry.ApplicationID) {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 	versions, err := h.configs.GetConfigHistory(c.Request().Context(), id)
@@ -469,6 +472,18 @@ func (h *ConfigHandler) Rollback(c echo.Context) error {
 	id := c.Param("id")
 	version, err := strconv.Atoi(c.Param("version"))
 	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+
+	parsedID, parseErr := uuid.Parse(id)
+	if parseErr != nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+	entry, err := h.configs.GetConfigByID(c.Request().Context(), parsedID)
+	if err != nil {
+		return err
+	}
+	if entry == nil || !ApplicationAllowed(c, entry.ApplicationID) {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 

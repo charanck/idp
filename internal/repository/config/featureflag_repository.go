@@ -75,6 +75,9 @@ func (r *gormFeatureFlagRepository) List(ctx context.Context, filter model.ListF
 	if filter.ApplicationID != nil {
 		query = query.Where("feature_flags.application_id = ?", *filter.ApplicationID)
 	}
+	if len(filter.ApplicationIDs) > 0 {
+		query = query.Where("feature_flags.application_id IN ?", filter.ApplicationIDs)
+	}
 	if filter.EnvironmentID != nil {
 		query = query.Where("feature_flags.environment_id = ?", *filter.EnvironmentID)
 	}

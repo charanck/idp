@@ -6,12 +6,16 @@ import (
 	"github.com/google/uuid"
 )
 
-// ListConfigEntriesFilter filters ConfigRepository.List.
+// ListConfigEntriesFilter filters ConfigRepository.List. ApplicationIDs
+// scopes results to a group-based Application allow-list (nil/empty =
+// unrestricted); it composes with ApplicationID, which narrows to one
+// specific Application within that scope.
 type ListConfigEntriesFilter struct {
-	ApplicationID *uuid.UUID
-	EnvironmentID *uuid.UUID
-	IsSecret      *bool
-	Query         string
+	ApplicationID  *uuid.UUID
+	ApplicationIDs []uuid.UUID
+	EnvironmentID  *uuid.UUID
+	IsSecret       *bool
+	Query          string
 }
 
 // UpsertEntryParams bundles ConfigRepository.UpsertEntryAndRecordVersion's inputs.

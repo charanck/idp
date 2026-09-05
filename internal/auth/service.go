@@ -20,17 +20,43 @@ import (
 
 var ErrAlreadyExists = errors.New("already exists")
 
+// ErrDomainNotAllowed is returned by RegisterUser when the policy's
+// self-registration domain allow-list rejects the email's domain.
+var ErrDomainNotAllowed = errors.New("email domain not allowed to self-register")
+
+// builtinUserGroupName is the built-in group new users are defaulted into
+// (seeded by migration 00007), mirroring today's non-staff access level.
+const builtinUserGroupName = "User"
+
 // AuthService is the user/service-client authentication and management service.
 type AuthService struct {
-	users   model.UserRepository
-	clients model.ServiceClientRepository
+	users    model.UserRepository
+	clients  model.ServiceClientRepository
+	groups   model.GroupRepository
+	policies model.PolicyRepository
 }
 
-func NewAuthService(users model.UserRepository, clients model.ServiceClientRepository) *AuthService {
-	return &AuthService{users: users, clients: clients}
+func NewAuthService(users model.UserRepository, clients model.ServiceClientRepository, groups model.GroupRepository, policies model.PolicyRepository) *AuthService {
+	return &AuthService{users: users, clients: clients, groups: groups, policies: policies}
 }
 
-// RegisterUser registers a new user, inactive until an admin activates the account.
+// assignDefaultGroup adds a newly created user to the built-in User group,
+// silently skipping if that group doesn't exist (e.g. in tests that don't
+// seed it) rather than failing user creation over it.
+func (s *AuthService) assignDefaultGroup(ctx context.Context, userID uuid.UUID) error {
+	group, err := s.defaultGroupByName(ctx, builtinUserGroupName)
+	if err != nil {
+		return err
+	}
+	if group == nil {
+		return nil
+	}
+	return s.groups.SetUserGroups(ctx, userID, []uuid.UUID{group.ID})
+}
+
+// RegisterUser registers a new user, inactive until an admin activates the
+// account, rejecting emails whose domain isn't allowed by the policy's
+// self-registration domain allow-list (empty allow-list = unrestricted).
 func (s *AuthService) RegisterUser(ctx context.Context, email, password, username string) (*model.User, error) {
 	_, err := s.users.FindByEmail(ctx, email)
 	if err == nil {
@@ -38,6 +64,14 @@ func (s *AuthService) RegisterUser(ctx context.Context, email, password, usernam
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
+	}
+
+	policy, err := s.policies.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !domainAllowed(policy.SelfRegistrationAllowedDomains, email) {
+		return nil, ErrDomainNotAllowed
 	}
 
 	if username == "" {
@@ -62,6 +96,9 @@ func (s *AuthService) RegisterUser(ctx context.Context, email, password, usernam
 		Password: hashed,
 	}
 	if err := s.users.Create(ctx, user); err != nil {
+		return nil, err
+	}
+	if err := s.assignDefaultGroup(ctx, user.ID); err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -240,6 +277,9 @@ func (s *AuthService) CreateUserAdmin(ctx context.Context, in CreateUserAdminInp
 	if err := s.users.Create(ctx, user); err != nil {
 		return nil, err
 	}
+	if err := s.assignDefaultGroup(ctx, user.ID); err != nil {
+		return nil, err
+	}
 	return user, nil
 }
 
@@ -336,6 +376,60 @@ func (s *AuthService) RegenerateServiceClientKey(ctx context.Context, id uuid.UU
 	}
 	client.EncryptionKey = newKey
 	if err := s.clients.Update(ctx, client); err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
+// ServiceClientApplicationIDs returns the Application IDs a service client's
+// S2S config/flag reads are scoped to (empty = unrestricted).
+func (s *AuthService) ServiceClientApplicationIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
+	return s.clients.ListApplicationIDs(ctx, id)
+}
+
+// ServiceClientRedirectURIs returns a service client's registered OIDC
+// redirect URIs.
+func (s *AuthService) ServiceClientRedirectURIs(ctx context.Context, id uuid.UUID) ([]string, error) {
+	return s.clients.ListRedirectURIs(ctx, id)
+}
+
+// ServiceClientAllowedGroupIDs returns the Groups allowed to log into a
+// service client acting as an OIDC auth application (empty = any user).
+func (s *AuthService) ServiceClientAllowedGroupIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
+	return s.clients.ListAllowedGroupIDs(ctx, id)
+}
+
+// UpdateServiceClientSettingsInput is the set of fields
+// UpdateServiceClientSettings can change beyond the plain name; every slice
+// field replaces its join table wholesale, same as SetUserGroups/SetApplications.
+type UpdateServiceClientSettingsInput struct {
+	ApplicationIDs    []uuid.UUID // config/flag S2S read scope; empty = unrestricted
+	IsAuthApplication bool
+	RequireConsent    bool
+	RedirectURIs      []string
+	AllowedGroupIDs   []uuid.UUID // empty = any directory user may log in
+}
+
+// UpdateServiceClientSettings updates a service client's config/flag
+// Application scope and OIDC identity-provider settings, returning nil if
+// not found.
+func (s *AuthService) UpdateServiceClientSettings(ctx context.Context, id uuid.UUID, in UpdateServiceClientSettingsInput) (*model.ServiceClient, error) {
+	client, err := s.GetServiceClientByIDAny(ctx, id)
+	if err != nil || client == nil {
+		return client, err
+	}
+	client.IsAuthApplication = in.IsAuthApplication
+	client.RequireConsent = in.RequireConsent
+	if err := s.clients.Update(ctx, client); err != nil {
+		return nil, err
+	}
+	if err := s.clients.SetApplications(ctx, client.ID, in.ApplicationIDs); err != nil {
+		return nil, err
+	}
+	if err := s.clients.SetRedirectURIs(ctx, client.ID, in.RedirectURIs); err != nil {
+		return nil, err
+	}
+	if err := s.clients.SetAllowedGroups(ctx, client.ID, in.AllowedGroupIDs); err != nil {
 		return nil, err
 	}
 	return client, nil

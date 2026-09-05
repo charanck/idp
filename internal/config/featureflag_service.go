@@ -281,6 +281,18 @@ func (s *FeatureFlagService) ToggleFlagByID(ctx context.Context, id uuid.UUID) (
 	return flag, nil
 }
 
+// GetApplicationByName returns an application by exact name, or nil if not found.
+func (s *FeatureFlagService) GetApplicationByName(ctx context.Context, name string) (*model.Application, error) {
+	app, err := s.apps.FindByName(ctx, name)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
+	}
+	if err != nil {
+		return nil, err
+	}
+	return app, nil
+}
+
 // SoftDeleteFlagByID soft-deletes (sets deleted_at) a feature flag by ID,
 // returning nil if not found.
 func (s *FeatureFlagService) SoftDeleteFlagByID(ctx context.Context, id uuid.UUID) (*model.FeatureFlag, error) {

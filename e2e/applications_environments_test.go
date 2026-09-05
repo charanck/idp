@@ -88,9 +88,10 @@ func TestApplicationsList_RequiresLogin(t *testing.T) {
 	}
 }
 
-// TestApplicationsList_RequiresAdmin proves the AdminRequired staff check,
-// not just LoginRequired: a logged-in but non-staff user must be bounced to
-// the dashboard rather than allowed through.
+// TestApplicationsList_RequiresAdmin proves the ModuleRequired("applications")
+// check, not just LoginRequired: a logged-in user whose groups don't grant the
+// applications module (the default built-in User group doesn't) must be
+// bounced to the dashboard rather than allowed through.
 func TestApplicationsList_RequiresAdmin(t *testing.T) {
 	base := e2eBaseURL(t)
 	admin := newAdminSession(t)

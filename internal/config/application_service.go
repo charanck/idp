@@ -15,10 +15,23 @@ import (
 // already taken.
 var ErrAlreadyExists = errors.New("already exists")
 
-// ListAllApplications lists every application, optionally filtered by a
-// case-insensitive name substring, ordered by name.
-func (s *ConfigService) ListAllApplications(ctx context.Context, q string) ([]model.Application, error) {
-	return s.apps.List(ctx, q)
+// ListAllApplications lists applications, optionally filtered by a
+// case-insensitive name substring, scoped to allowedIDs if non-empty (a
+// group-based Application allow-list; empty = unrestricted), ordered by name.
+func (s *ConfigService) ListAllApplications(ctx context.Context, q string, allowedIDs []uuid.UUID) ([]model.Application, error) {
+	return s.apps.List(ctx, q, allowedIDs)
+}
+
+// GetApplicationByName returns an application by exact name, or nil if not found.
+func (s *ConfigService) GetApplicationByName(ctx context.Context, name string) (*model.Application, error) {
+	app, err := s.apps.FindByName(ctx, name)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error.
+	}
+	if err != nil {
+		return nil, err
+	}
+	return app, nil
 }
 
 // GetApplicationByID returns an application by ID, or nil if not found.

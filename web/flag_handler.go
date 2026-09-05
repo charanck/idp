@@ -38,8 +38,10 @@ func NewFlagHandler(flags FlagStore, apps ApplicationStore, envs EnvironmentStor
 	return &FlagHandler{flags: flags, apps: apps, envs: envs, activity: activity}
 }
 
-func (h *FlagHandler) loadFlagFormApps(ctx context.Context) ([]configmodel.Application, string, error) {
-	apps, err := listApplications(ctx, h.apps)
+func (h *FlagHandler) loadFlagFormApps(c echo.Context) ([]configmodel.Application, string, error) {
+	ctx := c.Request().Context()
+	allowedIDs, _ := AllowedApplicationIDs(c)
+	apps, err := listApplications(ctx, h.apps, allowedIDs)
 	if err != nil {
 		return nil, "", err
 	}
@@ -64,7 +66,8 @@ func (h *FlagHandler) List(c echo.Context) error {
 	envIDFilter := c.QueryParam("environment_id")
 	statusFilter := c.QueryParam("status")
 
-	filter := configmodel.ListFlagsFilter{}
+	allowedIDs, _ := AllowedApplicationIDs(c)
+	filter := configmodel.ListFlagsFilter{ApplicationIDs: allowedIDs}
 	if appIDFilter != "" {
 		if id, err := uuid.Parse(appIDFilter); err == nil {
 			filter.ApplicationID = &id
@@ -122,7 +125,7 @@ func (h *FlagHandler) List(c echo.Context) error {
 		groups = append(groups, *groupsByKey[k])
 	}
 
-	apps, envJSON, err := h.loadFlagFormApps(c.Request().Context())
+	apps, envJSON, err := h.loadFlagFormApps(c)
 	if err != nil {
 		return err
 	}
@@ -151,7 +154,8 @@ func (h *FlagHandler) List(c echo.Context) error {
 }
 
 func (h *FlagHandler) Create(c echo.Context) error {
-	apps, err := listApplications(c.Request().Context(), h.apps)
+	allowedIDs, _ := AllowedApplicationIDs(c)
+	apps, err := listApplications(c.Request().Context(), h.apps, allowedIDs)
 	if err != nil {
 		return err
 	}
@@ -179,7 +183,7 @@ func (h *FlagHandler) Create(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if app == nil {
+	if app == nil || !ApplicationAllowed(c, app.ID) {
 		return reRender("Application not found.")
 	}
 
@@ -223,6 +227,13 @@ func (h *FlagHandler) Toggle(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
+	existing, err := h.flags.GetFlagByID(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+	if existing == nil || !ApplicationAllowed(c, existing.ApplicationID) {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
 	flag, err := h.flags.ToggleFlagByID(c.Request().Context(), id)
 	if err != nil {
 		return err
@@ -246,7 +257,7 @@ func (h *FlagHandler) Delete(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if flag == nil {
+	if flag == nil || !ApplicationAllowed(c, flag.ApplicationID) {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 

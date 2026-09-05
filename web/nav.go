@@ -19,6 +19,7 @@ func navUser(c echo.Context) layout.NavUser {
 		LoggedIn:  true,
 		Email:     user.Email,
 		IsStaff:   user.IsStaff,
+		Modules:   EffectivePermissionsFromContext(c).Modules,
 		CSRFToken: sess.CSRFToken(),
 	}
 }

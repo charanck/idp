@@ -1,0 +1,44 @@
+package pages
+
+import "controlplane/internal/session"
+import "controlplane/web/template/layout"
+
+type OIDCConsentData struct {
+	CSRFToken    string
+	ClientName   string
+	Scope        string
+	ClientID     string
+	RedirectURI  string
+	ResponseType string
+	State        string
+	Nonce        string
+}
+
+templ OIDCConsent(flashes []session.Flash, user layout.NavUser, data OIDCConsentData) {
+	@layout.Base("Authorize "+data.ClientName, "", user, flashes) {
+		<h2>Authorize { data.ClientName }</h2>
+		<article class="form-card-lg">
+			<p><strong>{ data.ClientName }</strong> wants to log you in and access: <code>{ data.Scope }</code></p>
+			<form method="post" action="/oauth2/authorize">
+				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<input type="hidden" name="client_id" value={ data.ClientID }/>
+				<input type="hidden" name="redirect_uri" value={ data.RedirectURI }/>
+				<input type="hidden" name="response_type" value={ data.ResponseType }/>
+				<input type="hidden" name="scope" value={ data.Scope }/>
+				<input type="hidden" name="state" value={ data.State }/>
+				<input type="hidden" name="nonce" value={ data.Nonce }/>
+				<div class="form-actions">
+					<button type="submit" name="decision" value="allow">Allow</button>
+					<button type="submit" name="decision" value="deny" class="secondary outline">Deny</button>
+				</div>
+			</form>
+		</article>
+	}
+}
+
+templ OIDCError(flashes []session.Flash, user layout.NavUser, message string) {
+	@layout.Base("Authorization Error", "", user, flashes) {
+		<h2>Authorization Error</h2>
+		<div class="alert alert-danger">{ message }</div>
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	apihttp "controlplane/api/http"
+	authmodel "controlplane/internal/model/auth"
 	configmodel "controlplane/internal/model/config"
 )
 
@@ -18,6 +19,7 @@ func newFeatureFlagListRequest(service, environment string) (echo.Context, *http
 	req := httptest.NewRequest(http.MethodGet, "/feature-flags?service="+service+"&environment="+environment, nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	c.Set("service_client", &authmodel.ServiceClient{Name: "billing-service"})
 	return c, rec
 }
 
@@ -33,7 +35,7 @@ func TestFeatureFlagList_ReturnsFlagsAsJSON(t *testing.T) {
 			Environment: configmodel.Environment{Name: "prod"},
 		},
 	}}
-	h := apihttp.NewFeatureFlagHandler(lister)
+	h := apihttp.NewFeatureFlagHandler(lister, &fakeApplicationFinder{}, &fakeClientApplicationScoper{})
 
 	c, rec := newFeatureFlagListRequest("payments", "prod")
 	if err := h.List(c); err != nil {
@@ -55,9 +57,29 @@ func TestFeatureFlagList_ReturnsFlagsAsJSON(t *testing.T) {
 	}
 }
 
+func TestFeatureFlagList_OutsideApplicationScopeReturns404(t *testing.T) {
+	paymentsID := uuid.New()
+	lister := &fakeFeatureFlagLister{flags: []configmodel.FeatureFlag{}}
+	apps := &fakeApplicationFinder{apps: map[string]*configmodel.Application{
+		"other-service": {ID: uuid.New()},
+	}}
+	scoper := &fakeClientApplicationScoper{allowedIDs: []uuid.UUID{paymentsID}}
+	h := apihttp.NewFeatureFlagHandler(lister, apps, scoper)
+
+	c, rec := newFeatureFlagListRequest("other-service", "prod")
+	if err := h.List(c); err != nil {
+		httpErr, ok := err.(*echo.HTTPError)
+		if !ok || httpErr.Code != http.StatusNotFound {
+			t.Fatalf("List: %v, want 404", err)
+		}
+	} else if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
 func TestFeatureFlagList_ServiceErrorReturns500(t *testing.T) {
 	lister := &fakeFeatureFlagLister{err: errFakeService}
-	h := apihttp.NewFeatureFlagHandler(lister)
+	h := apihttp.NewFeatureFlagHandler(lister, &fakeApplicationFinder{}, &fakeClientApplicationScoper{})
 
 	c, _ := newFeatureFlagListRequest("payments", "prod")
 	err := h.List(c)

@@ -29,17 +29,24 @@ type featureFlagResponse struct {
 
 // FeatureFlagHandler serves the read-only S2S feature-flag listing endpoint.
 type FeatureFlagHandler struct {
-	flags FeatureFlagLister
+	flags   FeatureFlagLister
+	apps    ApplicationFinder
+	clients ClientApplicationScoper
 }
 
-func NewFeatureFlagHandler(flags FeatureFlagLister) *FeatureFlagHandler {
-	return &FeatureFlagHandler{flags: flags}
+func NewFeatureFlagHandler(flags FeatureFlagLister, apps ApplicationFinder, clients ClientApplicationScoper) *FeatureFlagHandler {
+	return &FeatureFlagHandler{flags: flags, apps: apps, clients: clients}
 }
 
 // List serves GET /feature-flags.
 func (h *FeatureFlagHandler) List(c echo.Context) error {
 	service := c.QueryParam("service")
 	environment := c.QueryParam("environment")
+	client := ServiceClientFromContext(c)
+
+	if err := checkApplicationScope(c.Request().Context(), h.apps, h.clients, client.ID, service); err != nil {
+		return err
+	}
 
 	flags, err := h.flags.ListFlags(c.Request().Context(), service, environment)
 	if err != nil {

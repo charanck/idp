@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -135,12 +136,20 @@ func (f *fakeUserRepository) CountByUsername(ctx context.Context, username strin
 
 // fakeServiceClientRepository is an in-memory authmodel.ServiceClientRepository.
 type fakeServiceClientRepository struct {
-	mu      sync.Mutex
-	clients map[uuid.UUID]authmodel.ServiceClient
+	mu            sync.Mutex
+	clients       map[uuid.UUID]authmodel.ServiceClient
+	clientApps    map[uuid.UUID]map[uuid.UUID]struct{} // clientID -> applicationIDs
+	redirectURIs  map[uuid.UUID][]string               // clientID -> redirect URIs
+	allowedGroups map[uuid.UUID]map[uuid.UUID]struct{} // clientID -> groupIDs
 }
 
 func newFakeServiceClientRepository() *fakeServiceClientRepository {
-	return &fakeServiceClientRepository{clients: make(map[uuid.UUID]authmodel.ServiceClient)}
+	return &fakeServiceClientRepository{
+		clients:       make(map[uuid.UUID]authmodel.ServiceClient),
+		clientApps:    make(map[uuid.UUID]map[uuid.UUID]struct{}),
+		redirectURIs:  make(map[uuid.UUID][]string),
+		allowedGroups: make(map[uuid.UUID]map[uuid.UUID]struct{}),
+	}
 }
 
 func (f *fakeServiceClientRepository) FindByName(ctx context.Context, name string) (*authmodel.ServiceClient, error) {
@@ -225,6 +234,61 @@ func (f *fakeServiceClientRepository) List(ctx context.Context, q string, isActi
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+func (f *fakeServiceClientRepository) ListApplicationIDs(ctx context.Context, clientID uuid.UUID) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []uuid.UUID
+	for id := range f.clientApps[clientID] {
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func (f *fakeServiceClientRepository) SetApplications(ctx context.Context, clientID uuid.UUID, applicationIDs []uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	set := make(map[uuid.UUID]struct{}, len(applicationIDs))
+	for _, id := range applicationIDs {
+		set[id] = struct{}{}
+	}
+	f.clientApps[clientID] = set
+	return nil
+}
+
+func (f *fakeServiceClientRepository) ListRedirectURIs(ctx context.Context, clientID uuid.UUID) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.redirectURIs[clientID], nil
+}
+
+func (f *fakeServiceClientRepository) SetRedirectURIs(ctx context.Context, clientID uuid.UUID, redirectURIs []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.redirectURIs[clientID] = redirectURIs
+	return nil
+}
+
+func (f *fakeServiceClientRepository) ListAllowedGroupIDs(ctx context.Context, clientID uuid.UUID) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []uuid.UUID
+	for id := range f.allowedGroups[clientID] {
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func (f *fakeServiceClientRepository) SetAllowedGroups(ctx context.Context, clientID uuid.UUID, groupIDs []uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	set := make(map[uuid.UUID]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		set[id] = struct{}{}
+	}
+	f.allowedGroups[clientID] = set
+	return nil
 }
 
 // fakeOAuthProviderRepository is an in-memory authmodel.OAuthProviderRepository.
@@ -334,4 +398,205 @@ func (f *fakeOAuthUserTokenRepository) Update(ctx context.Context, t *authmodel.
 	defer f.mu.Unlock()
 	f.tokens[t.ID] = *t
 	return nil
+}
+
+// fakeGroupRepository is an in-memory authmodel.GroupRepository.
+type fakeGroupRepository struct {
+	mu           sync.Mutex
+	groups       map[uuid.UUID]authmodel.Group
+	userGroups   map[uuid.UUID]map[uuid.UUID]struct{} // userID -> groupIDs
+	groupApps    map[uuid.UUID]map[uuid.UUID]struct{} // groupID -> applicationIDs
+}
+
+func newFakeGroupRepository() *fakeGroupRepository {
+	return &fakeGroupRepository{
+		groups:     make(map[uuid.UUID]authmodel.Group),
+		userGroups: make(map[uuid.UUID]map[uuid.UUID]struct{}),
+		groupApps:  make(map[uuid.UUID]map[uuid.UUID]struct{}),
+	}
+}
+
+func (f *fakeGroupRepository) List(ctx context.Context, q string) ([]authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []authmodel.Group
+	for _, g := range f.groups {
+		if q != "" && !strings.Contains(strings.ToLower(g.Name), strings.ToLower(q)) {
+			continue
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+
+func (f *fakeGroupRepository) FindByID(ctx context.Context, id uuid.UUID) (*authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if g, ok := f.groups[id]; ok {
+		cp := g
+		return &cp, nil
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (f *fakeGroupRepository) Create(ctx context.Context, group *authmodel.Group) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if group.ID == uuid.Nil {
+		group.ID = uuid.New()
+	}
+	f.groups[group.ID] = *group
+	return nil
+}
+
+func (f *fakeGroupRepository) Update(ctx context.Context, group *authmodel.Group) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.groups[group.ID] = *group
+	return nil
+}
+
+func (f *fakeGroupRepository) Delete(ctx context.Context, group *authmodel.Group) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.groups, group.ID)
+	return nil
+}
+
+func (f *fakeGroupRepository) ListApplicationIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []uuid.UUID
+	for id := range f.groupApps[groupID] {
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+func (f *fakeGroupRepository) SetApplications(ctx context.Context, groupID uuid.UUID, applicationIDs []uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	set := make(map[uuid.UUID]struct{}, len(applicationIDs))
+	for _, id := range applicationIDs {
+		set[id] = struct{}{}
+	}
+	f.groupApps[groupID] = set
+	return nil
+}
+
+func (f *fakeGroupRepository) ListByUserID(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []authmodel.Group
+	for groupID := range f.userGroups[userID] {
+		if g, ok := f.groups[groupID]; ok {
+			out = append(out, g)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeGroupRepository) SetUserGroups(ctx context.Context, userID uuid.UUID, groupIDs []uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	set := make(map[uuid.UUID]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		set[id] = struct{}{}
+	}
+	f.userGroups[userID] = set
+	return nil
+}
+
+// fakePolicyRepository is an in-memory authmodel.PolicyRepository, mirroring
+// migration 00007's singleton policies row (id=1, unrestricted by default).
+type fakePolicyRepository struct {
+	mu     sync.Mutex
+	policy authmodel.Policy
+}
+
+func newFakePolicyRepository() *fakePolicyRepository {
+	return &fakePolicyRepository{policy: authmodel.Policy{ID: 1}}
+}
+
+func (f *fakePolicyRepository) Get(ctx context.Context) (*authmodel.Policy, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	cp := f.policy
+	return &cp, nil
+}
+
+func (f *fakePolicyRepository) Update(ctx context.Context, policy *authmodel.Policy) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	policy.ID = 1
+	f.policy = *policy
+	return nil
+}
+
+// fakeOIDCSigningKeyRepository is an in-memory authmodel.OIDCSigningKeyRepository.
+type fakeOIDCSigningKeyRepository struct {
+	mu  sync.Mutex
+	key *authmodel.OIDCSigningKey
+}
+
+func newFakeOIDCSigningKeyRepository() *fakeOIDCSigningKeyRepository {
+	return &fakeOIDCSigningKeyRepository{}
+}
+
+func (f *fakeOIDCSigningKeyRepository) Get(ctx context.Context) (*authmodel.OIDCSigningKey, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.key == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	cp := *f.key
+	return &cp, nil
+}
+
+func (f *fakeOIDCSigningKeyRepository) GetOrCreate(ctx context.Context, generate func() (*authmodel.OIDCSigningKey, error)) (*authmodel.OIDCSigningKey, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.key != nil {
+		cp := *f.key
+		return &cp, nil
+	}
+	generated, err := generate()
+	if err != nil {
+		return nil, err
+	}
+	generated.ID = 1
+	f.key = generated
+	cp := *f.key
+	return &cp, nil
+}
+
+// fakeOIDCAuthorizationCodeRepository is an in-memory
+// authmodel.OIDCAuthorizationCodeRepository.
+type fakeOIDCAuthorizationCodeRepository struct {
+	mu    sync.Mutex
+	codes map[string]authmodel.OIDCAuthorizationCode
+}
+
+func newFakeOIDCAuthorizationCodeRepository() *fakeOIDCAuthorizationCodeRepository {
+	return &fakeOIDCAuthorizationCodeRepository{codes: make(map[string]authmodel.OIDCAuthorizationCode)}
+}
+
+func (f *fakeOIDCAuthorizationCodeRepository) Create(ctx context.Context, code *authmodel.OIDCAuthorizationCode) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.codes[code.Code] = *code
+	return nil
+}
+
+func (f *fakeOIDCAuthorizationCodeRepository) FindAndConsume(ctx context.Context, code string) (*authmodel.OIDCAuthorizationCode, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	authCode, ok := f.codes[code]
+	if !ok || authCode.Used || time.Now().UTC().After(authCode.ExpiresAt) {
+		return nil, nil
+	}
+	authCode.Used = true
+	f.codes[code] = authCode
+	cp := authCode
+	return &cp, nil
 }
