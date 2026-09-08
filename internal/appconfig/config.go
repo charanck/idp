@@ -38,6 +38,10 @@ type Config struct {
 	AdminPassword string
 
 	SessionSecret string
+	// CookieDomain sets the session cookie's Domain attribute, letting the
+	// cookie be shared across subdomains a reverse proxy protects via
+	// forward-auth. Empty (the default) keeps today's exact-host behavior.
+	CookieDomain string
 
 	Port string
 }
@@ -91,16 +95,26 @@ func splitCSV(v string) []string {
 	return out
 }
 
+// LoadDotEnv reads .env into the process environment, if present. It is
+// idempotent (godotenv.Load never overwrites a var that's already set), so
+// it's safe to call more than once. Exported so main() can call it before
+// anything else - including observability.Setup, which reads OTEL_*/LOG_*
+// env vars directly via os.Getenv before Load() would otherwise get to it -
+// rather than only as a side effect of Load() being called later in
+// startup. .env is a local-dev convenience only; production supplies env
+// vars directly, so a missing file is expected and not an error.
+func LoadDotEnv() {
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		log.Printf("Error loading .env file: %v", err)
+	}
+}
+
 // Load reads configuration from the environment. It intentionally does not
 // generate a random dev-only MASTER_ENCRYPTION_KEY the way the Python
 // settings.py does - that behavior is dev-convenience, and a Go binary
 // running in production must always be given real secrets explicitly.
 func Load() (*Config, error) {
-	// .env is a local-dev convenience only; production supplies env vars
-	// directly, so a missing file here is expected and not an error.
-	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
-		log.Printf("Error loading .env file: %v", err)
-	}
+	LoadDotEnv()
 	cfg := &Config{
 		Debug: getenvBool("DEBUG", false),
 
@@ -128,6 +142,7 @@ func Load() (*Config, error) {
 		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
 
 		SessionSecret: getenv("SESSION_SECRET", "dev-insecure-session-secret"),
+		CookieDomain:  os.Getenv("COOKIE_DOMAIN"),
 
 		Port: getenv("PORT", "8000"),
 	}

@@ -56,7 +56,7 @@ func NotificationSettingsList(flashes []session.Flash, user layout.NavUser, data
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Notification Settings</h2><article class=\"card\"><table><thead><tr><th>Channel</th><th>Credentials</th><th>Status</th><th class=\"actions\">Actions</th></tr></thead> <tbody>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Notification Settings <span class=\"badge badge-alpha\">Alpha</span></h2><article class=\"card\"><table><thead><tr><th>Channel</th><th>Credentials</th><th>Status</th><th class=\"actions\">Actions</th></tr></thead> <tbody>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

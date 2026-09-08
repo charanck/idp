@@ -202,6 +202,9 @@ func (h *OAuthProviderHandler) Delete(c echo.Context) error {
 		return err
 	}
 	h.activity.LogDelete(requestContext(c), "oauth_provider", p.ID.String(), p.Name, nil)
+	if IsHXRequest(c) {
+		return c.NoContent(http.StatusOK)
+	}
 	AddFlash(c, "success", "OAuth provider \""+p.Name+"\" deleted successfully.")
 	return c.Redirect(http.StatusFound, "/oauth/providers/")
 }
@@ -220,6 +223,9 @@ func (h *OAuthProviderHandler) Toggle(c echo.Context) error {
 	status := "deactivated"
 	if p.IsActive {
 		status = "activated"
+	}
+	if IsHXRequest(c) {
+		return pages.OAuthProviderRow(csrfToken(c), *p).Render(c.Request().Context(), c.Response())
 	}
 	AddFlash(c, "success", "OAuth provider \""+p.Name+"\" "+status+".")
 	return c.Redirect(http.StatusFound, "/oauth/providers/")

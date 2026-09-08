@@ -1,0 +1,92 @@
+package pages
+
+import "controlplane/internal/session"
+import "controlplane/web/template/layout"
+
+type BrandingFormData struct {
+	CSRFToken string
+	Error     string
+
+	ProductName        string
+	LogoURL            string
+	AccentColor        string
+	BackgroundImageURL string
+}
+
+templ BrandingForm(flashes []session.Flash, user layout.NavUser, data BrandingFormData) {
+	@layout.Base("Branding", "branding", user, flashes) {
+		<h2>Branding <span class="badge badge-alpha">Alpha</span></h2>
+		if data.Error != "" {
+			<div class="alert alert-danger">{ data.Error }</div>
+		}
+		<form
+			method="post"
+			action="/branding/"
+			hx-post="/branding/"
+			hx-target="this"
+			hx-select="form.branding-form"
+			hx-swap="outerHTML"
+			class="branding-form"
+		>
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+
+			<article class="form-card-lg">
+				<h3>Login Screen</h3>
+				<label for="product_name">
+					Product Name
+					<input
+						type="text"
+						id="product_name"
+						name="product_name"
+						placeholder="Control Plane"
+						value={ data.ProductName }
+					/>
+					<small>Shown on the login screen, sidebar, and page titles. Leave blank to use "Control Plane".</small>
+				</label>
+				<label for="logo_url">
+					Logo URL
+					<input
+						type="url"
+						id="logo_url"
+						name="logo_url"
+						placeholder="https://example.com/logo.png"
+						value={ data.LogoURL }
+					/>
+					<small>Publicly reachable image URL. Leave blank to show no logo.</small>
+				</label>
+				if data.LogoURL != "" {
+					<img src={ data.LogoURL } alt="" class="brand-logo-preview"/>
+				}
+			</article>
+
+			<article class="form-card-lg">
+				<h3>Login Screen Theme</h3>
+				<label for="accent_color">
+					Accent Color
+					<input
+						type="color"
+						id="accent_color"
+						name="accent_color"
+						value={ accentColorOrDefault(data.AccentColor) }
+					/>
+					<small>Used for the login button and focus rings. Leave blank to use the default indigo.</small>
+				</label>
+				<label for="background_image_url">
+					Background Image URL
+					<input
+						type="url"
+						id="background_image_url"
+						name="background_image_url"
+						placeholder="https://example.com/background.jpg"
+						value={ data.BackgroundImageURL }
+					/>
+					<small>Publicly reachable image URL shown behind the login card. Leave blank for a plain background.</small>
+				</label>
+			</article>
+
+			<div class="form-actions">
+				<button type="submit">Save</button>
+			</div>
+		</form>
+	}
+}

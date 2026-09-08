@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -41,4 +42,8 @@ func (r *gormOIDCAuthorizationCodeRepository) FindAndConsume(ctx context.Context
 		return nil, nil
 	}
 	return &authCode, nil
+}
+
+func (r *gormOIDCAuthorizationCodeRepository) DeleteExpired(ctx context.Context, before time.Time) error {
+	return r.db.WithContext(ctx).Where("expires_at < ?", before).Delete(&model.OIDCAuthorizationCode{}).Error
 }

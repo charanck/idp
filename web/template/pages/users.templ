@@ -7,9 +7,11 @@ import "controlplane/web/template/layout"
 type UserRow struct {
 	authmodel.User
 	Groups []authmodel.Group
+	Locked bool
 }
 
 type UsersListData struct {
+	CSRFToken    string
 	Users        []UserRow
 	Groups       []authmodel.Group
 	CurrentQ     string
@@ -27,7 +29,7 @@ type UsersListData struct {
 templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData) {
 	@layout.Base("Users", "users", user, flashes) {
 		<div class="toolbar">
-			<h2>Users</h2>
+			<h2>Users <span class="badge badge-alpha">Alpha</span></h2>
 			<a role="button" href="/users/create/"><i class="bi bi-plus-lg"></i> New User</a>
 		</div>
 		<form method="get" class="filter-bar">
@@ -63,6 +65,9 @@ templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData
 								} else {
 									<span class="badge badge-secondary">Inactive</span>
 								}
+								if row.Locked {
+									<span class="badge badge-danger">Locked</span>
+								}
 							</td>
 							<td>
 								for _, g := range row.Groups {
@@ -71,6 +76,18 @@ templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData
 							</td>
 							<td class="actions">
 								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/users/" + row.ID.String() + "/edit/") }>Edit</a>
+								if row.Locked {
+									<a
+										role="button"
+										class="btn-sm outline"
+										href={ templ.URL("/users/" + row.ID.String() + "/edit/") }
+										hx-post={ "/users/" + row.ID.String() + "/unlock/" }
+										hx-vals={ `{"csrf_token": "` + data.CSRFToken + `"}` }
+										hx-confirm="Unlock this account?"
+										hx-target="closest tr"
+										hx-swap="none"
+									>Unlock</a>
+								}
 								<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/users/" + row.ID.String() + "/delete/") }>Delete</a>
 							</td>
 						</tr>

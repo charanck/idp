@@ -10,11 +10,28 @@ import templruntime "github.com/a-h/templ/runtime"
 
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
+import "strconv"
 
 type PoliciesFormData struct {
-	CSRFToken                      string
+	CSRFToken string
+	Error     string
+
 	SelfRegistrationAllowedDomains string
-	Error                          string
+
+	PasswordMinLength     int
+	PasswordRequireUpper  bool
+	PasswordRequireLower  bool
+	PasswordRequireDigit  bool
+	PasswordRequireSymbol bool
+	PasswordMaxAgeDays    int
+
+	MaxFailedLoginAttempts int
+	LockoutDurationMinutes int
+
+	SessionIdleTimeoutMinutes int
+
+	SSOOnly          bool
+	LoginIPAllowlist string
 }
 
 func PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFormData) templ.Component {
@@ -50,7 +67,7 @@ func PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFor
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Policies</h2><article class=\"form-card-lg\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Policies <span class=\"badge badge-alpha\">Alpha</span></h2>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -62,7 +79,7 @@ func PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFor
 				var templ_7745c5c3_Var3 string
 				templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(data.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 17, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 33, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 				if templ_7745c5c3_Err != nil {
@@ -73,33 +90,161 @@ func PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFor
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<form method=\"post\" action=\"/policies/\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, " <form method=\"post\" action=\"/policies/\" hx-post=\"/policies/\" hx-target=\"this\" hx-select=\"form.policies-form\" hx-swap=\"outerHTML\" class=\"policies-form\"><input type=\"hidden\" name=\"csrf_token\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.CSRFToken)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 20, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 44, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"> <label for=\"self_registration_allowed_domains\">Self-Registration Allowed Domains <input type=\"text\" id=\"self_registration_allowed_domains\" name=\"self_registration_allowed_domains\" placeholder=\"example.com, another.com\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"><article class=\"form-card-lg\"><h3>Registration</h3><label for=\"self_registration_allowed_domains\">Self-Registration Allowed Domains <input type=\"text\" id=\"self_registration_allowed_domains\" name=\"self_registration_allowed_domains\" placeholder=\"example.com, another.com\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.SelfRegistrationAllowedDomains)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 28, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 55, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\"> <small>Comma-separated list of email domains allowed to self-register. Leave blank to allow any domain.</small></label><div class=\"form-actions\"><button type=\"submit\">Save</button></div></form></article>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\"> <small>Comma-separated list of email domains allowed to self-register. Leave blank to allow any domain.</small></label></article><article class=\"form-card-lg\"><h3>Password Policy</h3><label for=\"password_min_length\">Minimum Length <input type=\"number\" min=\"0\" id=\"password_min_length\" name=\"password_min_length\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var6 string
+			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(data.PasswordMinLength))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 70, Col: 50}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "\"></label> <label class=\"form-check\"><input type=\"checkbox\" name=\"password_require_upper\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.PasswordRequireUpper {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, " checked")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "> Require an uppercase letter</label> <label class=\"form-check\"><input type=\"checkbox\" name=\"password_require_lower\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.PasswordRequireLower {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, " checked")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "> Require a lowercase letter</label> <label class=\"form-check\"><input type=\"checkbox\" name=\"password_require_digit\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.PasswordRequireDigit {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, " checked")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "> Require a digit</label> <label class=\"form-check\"><input type=\"checkbox\" name=\"password_require_symbol\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.PasswordRequireSymbol {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, " checked")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "> Require a symbol</label> <label for=\"password_max_age_days\">Password Expiry (days) <input type=\"number\" min=\"0\" id=\"password_max_age_days\" name=\"password_max_age_days\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var7 string
+			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(data.PasswordMaxAgeDays))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 96, Col: 51}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\"> <small>0 means passwords never expire.</small></label></article><article class=\"form-card-lg\"><h3>Account Lockout</h3><label for=\"max_failed_login_attempts\">Max Failed Login Attempts <input type=\"number\" min=\"0\" id=\"max_failed_login_attempts\" name=\"max_failed_login_attempts\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var8 string
+			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(data.MaxFailedLoginAttempts))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 111, Col: 55}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\"> <small>0 disables account lockout.</small></label> <label for=\"lockout_duration_minutes\">Lockout Duration (minutes) <input type=\"number\" min=\"0\" id=\"lockout_duration_minutes\" name=\"lockout_duration_minutes\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var9 string
+			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(data.LockoutDurationMinutes))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 122, Col: 55}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\"></label></article><article class=\"form-card-lg\"><h3>Session</h3><label for=\"session_idle_timeout_minutes\">Idle Timeout (minutes) <input type=\"number\" min=\"0\" id=\"session_idle_timeout_minutes\" name=\"session_idle_timeout_minutes\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var10 string
+			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(strconv.Itoa(data.SessionIdleTimeoutMinutes))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 136, Col: 58}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\"> <small>0 disables idle timeout; the session cookie's own expiry still applies.</small></label></article><article class=\"form-card-lg\"><h3>Login Restrictions</h3><label class=\"form-check\"><input type=\"checkbox\" name=\"sso_only\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if data.SSOOnly {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, " checked")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "> SSO-only (disable email/password login)</label> <label for=\"login_ip_allowlist\">Login IP Allow-list <input type=\"text\" id=\"login_ip_allowlist\" name=\"login_ip_allowlist\" placeholder=\"203.0.113.0/24, 198.51.100.7\" value=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var11 string
+			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.LoginIPAllowlist)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/policies.templ`, Line: 155, Col: 35}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "\"> <small>Comma-separated list of allowed IPs/CIDRs. Leave blank to allow any IP.</small></label></article><div class=\"form-actions\"><button type=\"submit\">Save</button></div></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

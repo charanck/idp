@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -49,4 +50,8 @@ type OIDCAuthorizationCodeRepository interface {
 	// if the code doesn't exist, is already used, or has expired - so a code
 	// can never be replayed even under concurrent requests.
 	FindAndConsume(ctx context.Context, code string) (*OIDCAuthorizationCode, error)
+	// DeleteExpired hard-deletes authorization codes past their expiry
+	// (used or not - once expired, a code is never valid again), for the
+	// monthly retention cleanup (internal/cleanup).
+	DeleteExpired(ctx context.Context, before time.Time) error
 }

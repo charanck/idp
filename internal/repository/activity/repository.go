@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -54,6 +55,10 @@ func (r *gormRepository) DistinctTypes(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return types, nil
+}
+
+func (r *gormRepository) DeleteOlderThan(ctx context.Context, before time.Time) error {
+	return r.db.WithContext(ctx).Where("timestamp < ?", before).Delete(&model.Activity{}).Error
 }
 
 var _ model.Repository = (*gormRepository)(nil)

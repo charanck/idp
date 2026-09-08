@@ -2,10 +2,11 @@ package auth_test
 
 import (
 	"context"
+	"encoding/base64"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
 	"controlplane/internal/auth"
@@ -289,18 +290,28 @@ func TestOIDCService_ValidateAccessToken_RejectsTamperedSignature(t *testing.T) 
 		t.Fatalf("ExchangeCode: %v", err)
 	}
 
-	tampered := idToken[:len(idToken)-1] + "x"
+	// Flipping the raw string's last character is not a reliable tamper: the
+	// final base64url character of an RS256 signature commonly encodes a
+	// byte's leftover bits plus unused zero-padding bits that Go's decoder
+	// doesn't validate, so some replacement characters decode to the exact
+	// same signature bytes and the token would still (correctly) verify.
+	// Decode the signature and flip an actual byte instead, which is
+	// guaranteed to change the bytes that get verified.
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		t.Fatalf("expected a 3-part JWT, got %d parts", len(parts))
+	}
+	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		t.Fatalf("decode signature: %v", err)
+	}
+	sig[0] ^= 0xFF
+	parts[2] = base64.RawURLEncoding.EncodeToString(sig)
+	tampered := strings.Join(parts, ".")
 	if tampered == idToken {
 		t.Fatal("test setup did not actually tamper the token")
 	}
 	if _, err := f.svc.ValidateAccessToken(ctx, tampered); err == nil {
 		t.Fatal("expected tampered token to fail validation")
-	}
-
-	// Sanity check jwt.Parse itself would have parsed the tampered token's
-	// structure fine were signature verification not enforced.
-	_, _, splitErr := jwt.NewParser().ParseUnverified(tampered, jwt.MapClaims{})
-	if splitErr != nil {
-		t.Skip("tampering happened to break token structure, not just the signature - inconclusive")
 	}
 }

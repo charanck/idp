@@ -39,6 +39,10 @@
   --color-secondary-bg: #f1f3f5;
   --color-secondary-text: #495057;
   --color-secondary-border: #dee2e6;
+
+  --color-alpha-bg: #f3ecfd;
+  --color-alpha-text: #6b21a8;
+  --color-alpha-border: #d9bdf5;
 }
 
 @layer base {
@@ -158,8 +162,17 @@
   }
 
   .sidebar .brand {
-    @apply block px-2 mb-6 text-[0.95rem] font-semibold text-slate-900 no-underline hover:no-underline;
+    @apply flex items-center gap-2 px-2 mb-6 text-[0.95rem] font-semibold text-slate-900 no-underline hover:no-underline;
     @apply dark:text-white;
+  }
+
+  .brand-logo {
+    @apply h-6 w-6 shrink-0 rounded object-contain;
+  }
+
+  .brand-logo-preview {
+    @apply mt-2 h-16 w-16 rounded border border-slate-200 object-contain;
+    @apply dark:border-slate-700;
   }
 
   .sidebar nav ul {
@@ -216,8 +229,73 @@
     @apply flex-1 p-6;
   }
 
+  /* Login screen ------------------------------------------------------------
+     Okta-style centered card. --accent is a CSS custom property set inline
+     on <html> from the deployment's branding (see layout/base.templ,
+     NavUser.AccentColorOrDefault) - the compiled Tailwind brand-* utilities
+     used elsewhere in the app chrome are fixed at build time, so runtime,
+     per-deployment theming is only wired up here, on the login page. */
+
   .auth-shell {
-    @apply mx-auto mt-24 max-w-sm px-4;
+    @apply flex min-h-screen items-center justify-center bg-slate-50 bg-cover bg-center px-4;
+    @apply dark:bg-slate-900;
+  }
+
+  .login-card {
+    @apply w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-xl;
+    @apply dark:bg-slate-800 dark:border-slate-700;
+  }
+
+  .login-brand {
+    @apply flex flex-col items-center gap-1 text-center mb-6;
+  }
+
+  .login-brand .brand-logo {
+    @apply h-10 w-10 mb-2 rounded object-contain;
+  }
+
+  .login-brand h4 {
+    @apply m-0 text-xl font-semibold text-slate-900 dark:text-white;
+  }
+
+  .login-subtitle {
+    @apply m-0 text-sm text-slate-500 dark:text-slate-400;
+  }
+
+  .login-form label {
+    @apply block text-sm font-medium text-slate-700 mb-4 dark:text-slate-300;
+  }
+
+  .login-form input {
+    @apply mt-1;
+  }
+
+  .login-form input:focus {
+    @apply outline-none border-transparent;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #4f46e5) 30%, transparent);
+    border-color: var(--accent, #4f46e5);
+  }
+
+  .login-submit {
+    @apply w-full rounded-md border-0 px-3.5 py-2.5 text-sm font-semibold text-white cursor-pointer transition-colors;
+    background-color: var(--accent, #4f46e5);
+  }
+
+  .login-submit:hover {
+    background-color: color-mix(in srgb, var(--accent, #4f46e5) 85%, black);
+  }
+
+  .login-divider {
+    @apply relative my-5 text-center text-xs uppercase tracking-wide text-slate-400;
+  }
+
+  .login-divider::before {
+    content: "";
+    @apply absolute left-0 top-1/2 w-full border-t border-slate-200 dark:border-slate-700;
+  }
+
+  .login-divider span {
+    @apply relative bg-white px-2 dark:bg-slate-800;
   }
 
   /* Toolbar / page header -------------------------------------------------- */
@@ -302,6 +380,14 @@
   .badge-warning { @apply bg-warning-bg text-warning-text dark:bg-warning-text/15 dark:text-warning-border; }
   .badge-info { @apply bg-info-bg text-info-text dark:bg-info-text/15 dark:text-info-border; }
   .badge-secondary { @apply bg-secondary-bg text-secondary-text dark:bg-slate-700 dark:text-slate-300; }
+  .badge-alpha { @apply bg-alpha-bg text-alpha-text dark:bg-alpha-text/15 dark:text-alpha-border; }
+
+  /* nav-alpha-badge is a smaller variant of badge-alpha sized for the
+     sidebar's compact nav links rather than page headers. */
+  .nav-alpha-badge {
+    @apply inline-block rounded-full ml-auto px-1.5 py-0 text-[0.62rem] font-semibold leading-normal;
+    @apply bg-alpha-bg text-alpha-text dark:bg-alpha-text/15 dark:text-alpha-border;
+  }
 
   /* Alerts ---------------------------------------------------------------------- */
 
@@ -318,6 +404,27 @@
   .alert .alert-close {
     @apply absolute right-2.5 top-2 border-0 bg-transparent text-base leading-none cursor-pointer opacity-50 hover:opacity-100 px-1;
   }
+
+  /* Toasts (transient, htmx/Alpine-driven feedback) ------------------------------ */
+
+  .toast-container {
+    @apply fixed top-4 right-4 z-50 flex flex-col gap-2 w-[22rem] max-w-[90vw];
+  }
+
+  .toast {
+    @apply rounded-md border-l-4 px-4 py-2.5 text-sm shadow-lg cursor-pointer bg-white border-brand-600 text-slate-800;
+    @apply dark:bg-slate-800 dark:text-slate-100;
+  }
+
+  .toast-success { @apply bg-success-bg border-success-text text-success-text dark:bg-success-text/10 dark:text-success-border; }
+  .toast-danger { @apply bg-danger-bg border-danger-text text-danger-text dark:bg-danger-text/10 dark:text-danger-border; }
+  .toast-warning { @apply bg-warning-bg border-warning-text text-warning-text dark:bg-warning-text/10 dark:text-warning-border; }
+  .toast-info { @apply bg-info-bg border-info-text text-info-text dark:bg-info-text/10 dark:text-info-border; }
+
+  /* htmx-driven loading state ------------------------------------------------ */
+
+  .htmx-indicator { @apply opacity-0 transition-opacity duration-150; }
+  .htmx-request.htmx-indicator, .htmx-request .htmx-indicator { @apply opacity-100; }
 
   /* Cards / grouped tables ------------------------------------------------------- */
 
@@ -386,6 +493,53 @@
 
   .stat-card .stat-label {
     @apply text-xs text-slate-500 mt-0.5 dark:text-slate-400;
+  }
+
+  /* Searchable multiselect (Applications access lists) ------------------------------- */
+
+  .multiselect {
+    @apply rounded-md border border-slate-300 bg-white p-2.5;
+    @apply dark:bg-slate-800 dark:border-slate-700;
+  }
+
+  .multiselect-chips {
+    @apply flex flex-wrap gap-1.5 mb-2 empty:hidden;
+  }
+
+  .multiselect-chip {
+    @apply inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 text-[0.75rem] font-medium pl-2.5 pr-1.5 py-0.5;
+    @apply dark:bg-brand-900/40 dark:text-brand-100;
+  }
+
+  .multiselect-chip button {
+    @apply inline-flex items-center justify-center rounded-full w-4 h-4 border-0 bg-transparent p-0 text-current opacity-60 cursor-pointer leading-none;
+    @apply hover:opacity-100 hover:bg-transparent;
+  }
+
+  .multiselect-empty {
+    @apply text-xs text-slate-400 mb-2 dark:text-slate-500;
+  }
+
+  .multiselect input[type="text"] {
+    @apply mb-2;
+  }
+
+  .multiselect-options {
+    @apply max-h-48 overflow-y-auto rounded-md border border-slate-200 divide-y divide-slate-100;
+    @apply dark:border-slate-700 dark:divide-slate-800;
+  }
+
+  .multiselect-option {
+    @apply flex items-center gap-2 px-2.5 py-1.5 text-sm text-slate-700 cursor-pointer m-0;
+    @apply hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700/60;
+  }
+
+  .multiselect-option.is-selected {
+    @apply bg-brand-50 dark:bg-brand-900/30;
+  }
+
+  .multiselect-option-empty {
+    @apply px-2.5 py-2 text-sm text-slate-400 dark:text-slate-500;
   }
 
   /* Dashboard analytics charts -------------------------------------------------------- */

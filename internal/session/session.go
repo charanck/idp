@@ -25,23 +25,29 @@ const (
 	contextKey = "webui_session"
 	defaultTTL = 14 * 24 * time.Hour
 
-	flashesKey = "_flashes"
-	csrfKey    = "_csrf"
-	userIDKey  = "_user_id"
+	flashesKey  = "_flashes"
+	csrfKey     = "_csrf"
+	userIDKey   = "_user_id"
+	lastSeenKey = "_last_seen"
 )
 
 // Store manages loading/persisting sessions against Redis.
 type Store struct {
-	rdb    *redis.Client
-	secret []byte
-	ttl    time.Duration
+	rdb          *redis.Client
+	secret       []byte
+	ttl          time.Duration
+	cookieDomain string
 }
 
-func NewStore(rdb *redis.Client, secret string, ttl time.Duration) *Store {
+// NewStore creates a session Store. cookieDomain is set on the session
+// cookie's Domain attribute so it can be shared across subdomains a reverse
+// proxy protects via forward-auth; leave it empty to keep today's
+// exact-host-only cookie behavior.
+func NewStore(rdb *redis.Client, secret string, ttl time.Duration, cookieDomain string) *Store {
 	if ttl <= 0 {
 		ttl = defaultTTL
 	}
-	return &Store{rdb: rdb, secret: []byte(secret), ttl: ttl}
+	return &Store{rdb: rdb, secret: []byte(secret), ttl: ttl, cookieDomain: cookieDomain}
 }
 
 // Flash is a one-time message queued for the next page render
@@ -136,7 +142,7 @@ func (st *Store) persist(c echo.Context, sess *Session) error {
 			}
 		}
 		c.SetCookie(&http.Cookie{
-			Name: CookieName, Value: "", Path: "/", MaxAge: -1,
+			Name: CookieName, Value: "", Path: "/", Domain: st.cookieDomain, MaxAge: -1,
 			HttpOnly: true, SameSite: http.SameSiteLaxMode,
 		})
 		return nil
@@ -163,6 +169,7 @@ func (st *Store) persist(c echo.Context, sess *Session) error {
 		Name:     CookieName,
 		Value:    st.sign(sess.id),
 		Path:     "/",
+		Domain:   st.cookieDomain,
 		MaxAge:   int(st.ttl.Seconds()),
 		HttpOnly: true,
 		Secure:   secure,
@@ -283,6 +290,29 @@ func (s *Session) SetUserID(id string) {
 
 func (s *Session) ClearUserID() {
 	s.Delete(userIDKey)
+}
+
+// Touch records the current time as this session's last-activity timestamp,
+// used by IdleTimedOut to enforce the policy's idle-timeout setting.
+func (s *Session) Touch() {
+	s.Set(lastSeenKey, time.Now().UTC().Unix())
+}
+
+// IdleTimedOut reports whether more than maxIdleMinutes has elapsed since
+// the last recorded activity (Touch). maxIdleMinutes <= 0 disables the
+// check. A session with no recorded activity yet (e.g. one predating this
+// feature) is treated as not timed out - the next Touch establishes a
+// baseline.
+func (s *Session) IdleTimedOut(maxIdleMinutes int) bool {
+	if maxIdleMinutes <= 0 {
+		return false
+	}
+	sec, ok := s.data[lastSeenKey].(float64)
+	if !ok {
+		return false
+	}
+	lastSeen := time.Unix(int64(sec), 0)
+	return time.Since(lastSeen) > time.Duration(maxIdleMinutes)*time.Minute
 }
 
 // AddFlash queues a one-time message for the next page render.

@@ -6,6 +6,7 @@ import "controlplane/web/template/layout"
 
 type ApplicationsListData struct {
 	Apps       []configmodel.Application
+	CSRFToken  string
 	CurrentQ   string
 	Page       int
 	NumPages   int
@@ -23,35 +24,57 @@ templ ApplicationsList(flashes []session.Flash, user layout.NavUser, data Applic
 			<h2>Applications</h2>
 			<a role="button" href="/applications/create/"><i class="bi bi-plus-lg"></i> New Application</a>
 		</div>
-		<form method="get" class="filter-bar">
+		<form
+			method="get"
+			class="filter-bar"
+			hx-get="/applications/"
+			hx-trigger="keyup[key=='Enter'] from:#q, keyup changed delay:400ms from:#q"
+			hx-target="#applications-results"
+			hx-select="#applications-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-indicator="#applications-loading"
+		>
 			<div>
 				<label for="q">Search</label>
-				<input type="text" id="q" name="q" placeholder="Application name" value={ data.CurrentQ }/>
+				<input type="text" id="q" name="q" placeholder="Application name" value={ data.CurrentQ } autocomplete="off"/>
 			</div>
 			<button type="submit" class="btn-sm secondary">Filter</button>
+			<span id="applications-loading" class="htmx-indicator"><i class="bi bi-arrow-repeat"></i> Loading…</span>
 		</form>
-		<article class="card">
-			<table>
-				<thead>
-					<tr><th>Name</th><th class="actions">Actions</th></tr>
-				</thead>
-				<tbody>
-					if len(data.Apps) == 0 {
-						<tr><td colspan="2">No applications found.</td></tr>
-					}
-					for _, app := range data.Apps {
-						<tr>
-							<td>{ app.Name }</td>
-							<td class="actions">
-								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/applications/" + app.ID.String() + "/edit/") }>Edit</a>
-								<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/applications/" + app.ID.String() + "/delete/") }>Delete</a>
-							</td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		</article>
-		@PaginationNav("/applications/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		<div id="applications-results">
+			<article class="card">
+				<table>
+					<thead>
+						<tr><th>Name</th><th class="actions">Actions</th></tr>
+					</thead>
+					<tbody>
+						if len(data.Apps) == 0 {
+							<tr><td colspan="2">No applications found.</td></tr>
+						}
+						for _, app := range data.Apps {
+							<tr id={ "application-row-" + app.ID.String() }>
+								<td>{ app.Name }</td>
+								<td class="actions">
+									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/applications/" + app.ID.String() + "/edit/") }>Edit</a>
+									<a
+										role="button"
+										class="btn-sm btn-danger outline"
+										href={ templ.URL("/applications/" + app.ID.String() + "/delete/") }
+										hx-post={ "/applications/" + app.ID.String() + "/delete/" }
+										hx-vals={ "{\"csrf_token\":\"" + data.CSRFToken + "\"}" }
+										hx-confirm="Delete this application? This will delete all of its environments, configs, secrets and feature flags."
+										hx-target={ "#application-row-" + app.ID.String() }
+										hx-swap="outerHTML swap:200ms"
+									>Delete</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</article>
+			@PaginationNav("/applications/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		</div>
 	}
 }
 
@@ -61,6 +84,7 @@ type ApplicationFormData struct {
 	Error     string
 	IsEdit    bool
 	Action    string
+	Domains   string
 }
 
 templ ApplicationForm(flashes []session.Flash, user layout.NavUser, data ApplicationFormData) {
@@ -82,6 +106,19 @@ templ ApplicationForm(flashes []session.Flash, user layout.NavUser, data Applica
 					Name
 					<input type="text" id="name" name="name" value={ data.Name } required autofocus/>
 				</label>
+				if data.IsEdit {
+					<label for="domains">
+						Forward-Auth Domains
+						<input
+							type="text"
+							id="domains"
+							name="domains"
+							placeholder="app.example.com, staging.example.com"
+							value={ data.Domains }
+						/>
+						<small>Comma-separated hostnames a reverse proxy forwards to /forward-auth/verify for this application. Leave blank to disable forward-auth for it.</small>
+					</label>
+				}
 				<div class="form-actions">
 					<button type="submit">Save</button>
 					<a role="button" class="secondary outline" href="/applications/">Cancel</a>

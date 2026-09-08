@@ -46,15 +46,15 @@ func newCoreServices(gdb *gorm.DB, rdb *redis.Client, cfg *appconfig.Config) *co
 
 	return &coreServices{
 		Encryption:  encryption,
-		Auth:        auth.NewAuthService(authrepo.NewUserRepository(gdb), authrepo.NewServiceClientRepository(gdb), authrepo.NewGroupRepository(gdb), authrepo.NewPolicyRepository(gdb)),
-		OAuth:       auth.NewOAuthService(authrepo.NewOAuthProviderRepository(gdb), authrepo.NewOAuthUserTokenRepository(gdb), authrepo.NewUserRepository(gdb)),
+		Auth:        auth.NewAuthService(authrepo.NewUserRepository(gdb), authrepo.NewServiceClientRepository(gdb), authrepo.NewGroupRepository(gdb), authrepo.NewPolicyRepository(gdb), authrepo.NewBrandingRepository(gdb), appCache, cacheTimeout),
+		OAuth:       auth.NewOAuthService(authrepo.NewOAuthProviderRepository(gdb), authrepo.NewOAuthUserTokenRepository(gdb), authrepo.NewUserRepository(gdb), appCache, cacheTimeout),
 		OIDC:        auth.NewOIDCService(authrepo.NewOIDCSigningKeyRepository(gdb), authrepo.NewOIDCAuthorizationCodeRepository(gdb), authrepo.NewServiceClientRepository(gdb), authrepo.NewGroupRepository(gdb), authrepo.NewUserRepository(gdb), encryption),
-		Config:      config.NewConfigService(configrepo.NewConfigRepository(gdb), configrepo.NewApplicationRepository(gdb), configrepo.NewEnvironmentRepository(gdb), encryption, appCache, cacheTimeout),
+		Config:      config.NewConfigService(configrepo.NewConfigRepository(gdb), configrepo.NewApplicationRepository(gdb), configrepo.NewEnvironmentRepository(gdb), configrepo.NewApplicationDomainRepository(gdb), encryption, appCache, cacheTimeout),
 		Flags:       config.NewFeatureFlagService(configrepo.NewFeatureFlagRepository(gdb), configrepo.NewApplicationRepository(gdb), configrepo.NewEnvironmentRepository(gdb), appCache, cacheTimeout),
 		Activity:    activity.NewLogger(activityrepo.NewRepository(gdb)),
 		Dashboard:   dashboard.NewService(dashboardrepo.NewRepository(gdb)),
 		Cache:       appCache,
 		RateLimiter: ratelimit.NewLimiter(rdb),
-		Sessions:    session.NewStore(rdb, cfg.SessionSecret, 0),
+		Sessions:    session.NewStore(rdb, cfg.SessionSecret, 0, cfg.CookieDomain),
 	}
 }

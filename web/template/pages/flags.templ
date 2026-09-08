@@ -43,7 +43,17 @@ templ FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData
 			<h2>Feature Flags</h2>
 			<a role="button" href="/flags/create/"><i class="bi bi-plus-lg"></i> New Feature Flag</a>
 		</div>
-		<form method="get" class="filter-bar">
+		<form
+			method="get"
+			class="filter-bar"
+			hx-get="/flags/"
+			hx-trigger="change"
+			hx-target="#flags-results"
+			hx-select="#flags-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-indicator="#flags-loading"
+		>
 			<div>
 				<label for="filter_application">Application</label>
 				<select id="filter_application" name="application_id">
@@ -72,44 +82,31 @@ templ FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData
 				</select>
 			</div>
 			<button type="submit" class="btn-sm secondary">Filter</button>
+			<span id="flags-loading" class="htmx-indicator"><i class="bi bi-arrow-repeat"></i> Loading…</span>
 		</form>
-		if len(data.Groups) == 0 {
-			<div class="alert alert-secondary">No feature flags found.</div>
-		}
-		for _, group := range data.Groups {
-			<article class="card">
-				<header>
-					<strong>{ group.ApplicationName }</strong> / { group.Name }
-					if group.Description != "" {
-						<div class="stat-label">{ group.Description }</div>
-					}
-				</header>
-				<table>
-					<tbody>
-						for _, entry := range group.Entries {
-							<tr>
-								<td class="col-env">{ entry.EnvironmentName }</td>
-								<td>
-									if entry.IsEnabled {
-										<span class="badge badge-success">Enabled</span>
-									} else {
-										<span class="badge badge-secondary">Disabled</span>
-									}
-								</td>
-								<td class="actions">
-									<form method="post" action={ templ.URL("/flags/" + entry.ID + "/toggle/") }>
-										<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-										<button class="btn-sm outline secondary" type="submit">Toggle</button>
-									</form>
-									<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/flags/" + entry.ID + "/delete/") }>Delete</a>
-								</td>
-							</tr>
+		<div id="flags-results">
+			if len(data.Groups) == 0 {
+				<div class="alert alert-secondary">No feature flags found.</div>
+			}
+			for _, group := range data.Groups {
+				<article class="card">
+					<header>
+						<strong>{ group.ApplicationName }</strong> / { group.Name }
+						if group.Description != "" {
+							<div class="stat-label">{ group.Description }</div>
 						}
-					</tbody>
-				</table>
-			</article>
-		}
-		@PaginationNav("/flags/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+					</header>
+					<table>
+						<tbody>
+							for _, entry := range group.Entries {
+								@FlagRow(data.CSRFToken, entry)
+							}
+						</tbody>
+					</table>
+				</article>
+			}
+			@PaginationNav("/flags/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		</div>
 		@templ.JSONScript("environments-by-application", json.RawMessage(data.EnvironmentsByAppJSON))
 		<script>
 			(function() {
@@ -134,6 +131,44 @@ templ FlagsList(flashes []session.Flash, user layout.NavUser, data FlagsListData
 			})();
 		</script>
 	}
+}
+
+// FlagRow is rendered both as part of the full list and, on its own, as the
+// htmx fragment a toggle action swaps back in (see FlagHandler.Toggle) -
+// keeping a single source of truth for the row markup.
+templ FlagRow(csrfToken string, entry FlagGroupEntry) {
+	<tr id={ "flag-row-" + entry.ID }>
+		<td class="col-env">{ entry.EnvironmentName }</td>
+		<td>
+			if entry.IsEnabled {
+				<span class="badge badge-success">Enabled</span>
+			} else {
+				<span class="badge badge-secondary">Disabled</span>
+			}
+		</td>
+		<td class="actions">
+			<form
+				method="post"
+				action={ templ.URL("/flags/" + entry.ID + "/toggle/") }
+				hx-post={ "/flags/" + entry.ID + "/toggle/" }
+				hx-target={ "#flag-row-" + entry.ID }
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<button class="btn-sm outline secondary" type="submit">Toggle</button>
+			</form>
+			<a
+				role="button"
+				class="btn-sm btn-danger outline"
+				href={ templ.URL("/flags/" + entry.ID + "/delete/") }
+				hx-post={ "/flags/" + entry.ID + "/delete/" }
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm="Delete this feature flag?"
+				hx-target={ "#flag-row-" + entry.ID }
+				hx-swap="outerHTML swap:200ms"
+			>Delete</a>
+		</td>
+	</tr>
 }
 
 // FlagFormData has no environment field: a feature flag is always created

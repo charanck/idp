@@ -80,9 +80,11 @@ func (m *APIKeyAuthMiddleware) Middleware() echo.MiddlewareFunc {
 				if id, _, ok := strings.Cut(apiKey, "."); ok {
 					keyID = id
 				}
-				slog.Warn("API key auth rejected", "key_id", keyID, "path", c.Path())
+				slog.WarnContext(c.Request().Context(), "API key auth rejected", "key_id", keyID, "path", c.Path())
 				return echo.NewHTTPError(http.StatusUnauthorized, "Unauthorized")
 			}
+
+			slog.DebugContext(c.Request().Context(), "API key auth succeeded", "client", client.Name, "client_id", client.ID, "path", c.Path())
 
 			if err := m.usage.Incr(c.Request().Context()); err != nil {
 				slog.Warn("failed to record S2S request usage", "err", err)

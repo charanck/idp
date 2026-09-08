@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -11,9 +12,24 @@ import (
 )
 
 // ListProviders lists OAuth providers, optionally filtered by a
-// case-insensitive name substring and active status.
+// case-insensitive name substring and active status. Read-through cached,
+// invalidated by any provider create/update/delete/toggle.
 func (s *OAuthService) ListProviders(ctx context.Context, q string, isActive *bool) ([]model.OAuthProvider, error) {
-	return s.providers.List(ctx, q, isActive)
+	version, err := s.cache.GetVersion(ctx, providersCacheVersionKey)
+	if err != nil {
+		return s.providers.List(ctx, q, isActive)
+	}
+	cacheKey := fmt.Sprintf("authcache:providers:q=%s:active=%s:v%d", q, boolFilterKey(isActive), version)
+	if cached, found := cacheGet[[]model.OAuthProvider](ctx, s.cache, cacheKey); found {
+		return cached, nil
+	}
+
+	providers, err := s.providers.List(ctx, q, isActive)
+	if err != nil {
+		return nil, err
+	}
+	cacheSet(ctx, s.cache, cacheKey, s.cacheTimeout, providers)
+	return providers, nil
 }
 
 // ListActiveProviders lists all active OAuth providers, for the login page's
@@ -54,6 +70,7 @@ func (s *OAuthService) CreateProvider(ctx context.Context, p model.OAuthProvider
 	if err := s.providers.Create(ctx, &p); err != nil {
 		return nil, err
 	}
+	s.invalidateProvidersCache(ctx)
 	return &p, nil
 }
 
@@ -62,6 +79,7 @@ func (s *OAuthService) UpdateProvider(ctx context.Context, p model.OAuthProvider
 	if err := s.providers.Update(ctx, &p); err != nil {
 		return nil, err
 	}
+	s.invalidateProvidersCache(ctx)
 	return &p, nil
 }
 
@@ -74,6 +92,7 @@ func (s *OAuthService) DeleteProvider(ctx context.Context, id uuid.UUID) (*model
 	if err := s.providers.Delete(ctx, p); err != nil {
 		return nil, err
 	}
+	s.invalidateProvidersCache(ctx)
 	return p, nil
 }
 
@@ -87,5 +106,6 @@ func (s *OAuthService) ToggleProvider(ctx context.Context, id uuid.UUID) (*model
 	if err := s.providers.Update(ctx, p); err != nil {
 		return nil, err
 	}
+	s.invalidateProvidersCache(ctx)
 	return p, nil
 }

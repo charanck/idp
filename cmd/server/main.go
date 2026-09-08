@@ -30,6 +30,13 @@ var version = "dev"
 func main() {
 	ctx := context.Background()
 
+	// Must run before setupObservability: it reads OTEL_EXPORTER_OTLP_ENDPOINT
+	// and LOG_LEVEL directly via os.Getenv, so if those are only set in .env
+	// (not the real process environment) and godotenv hasn't loaded it yet,
+	// OTEL silently never initializes. appconfig.Load() below calls this again
+	// (idempotent) for its own env reads.
+	appconfig.LoadDotEnv()
+
 	otelShutdown, err := setupObservability(ctx, version)
 	if err != nil {
 		log.Fatalf("setup observability: %v", err)
@@ -71,6 +78,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("setup analytics stack: %v", err)
 	}
+	if err := newCleanupStack(dbosCtx, gdb); err != nil {
+		log.Fatalf("setup cleanup stack: %v", err)
+	}
 
 	if err := bootstrapAdmin(gdb, cfg); err != nil {
 		log.Fatalf("bootstrap admin user: %v", err)
@@ -78,7 +88,7 @@ func main() {
 
 	e := newEchoServer(svc.Sessions)
 
-	webAuthMW := web.NewAuthMiddleware(svc.Auth, svc.Auth)
+	webAuthMW := web.NewAuthMiddleware(svc.Auth, svc.Auth, svc.Auth, svc.Auth)
 	// svc.Config satisfies web.ApplicationStore, web.EnvironmentStore, and web.ConfigStore
 	// all at once, so several constructors below take it more than once, positionally, for
 	// different parameters - the compiler can't catch a swapped argument order here since every
@@ -95,12 +105,14 @@ func main() {
 		User:                 web.NewUserHandler(svc.Auth, svc.Activity),
 		Group:                web.NewGroupHandler(svc.Auth, svc.Config, svc.Activity),
 		Policy:               web.NewPolicyHandler(svc.Auth, svc.Activity),
+		Branding:             web.NewBrandingHandler(svc.Auth, svc.Activity),
 		Auth:                 web.NewAuthHandler(svc.Auth, svc.OAuth, svc.RateLimiter, svc.Activity, cfg.AuthRateLimit, cfg.AuthRateLimitWindowSeconds),
 		OAuthLogin:           web.NewOAuthLoginHandler(svc.OAuth, svc.Activity),
 		OAuthProvider:        web.NewOAuthProviderHandler(svc.OAuth, svc.Activity),
 		OIDC:                 web.NewOIDCHandler(svc.OIDC, svc.Activity),
 		NotificationSettings: web.NewNotificationSettingsHandler(notif.Settings, svc.Activity),
 		Notification:         web.NewNotificationHandler(notif.Service, svc.Config),
+		ForwardAuth:          web.NewForwardAuthHandler(svc.Config, svc.Auth),
 	}
 	web.RegisterRoutes(e, webHandlers, webAuthMW)
 

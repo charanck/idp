@@ -22,13 +22,23 @@ type OAuthProvidersListData struct {
 templ OAuthProvidersList(flashes []session.Flash, user layout.NavUser, data OAuthProvidersListData) {
 	@layout.Base("OAuth Providers", "oauth_providers", user, flashes) {
 		<div class="toolbar">
-			<h2>OAuth Providers</h2>
+			<h2>OAuth Providers <span class="badge badge-alpha">Alpha</span></h2>
 			<a role="button" href="/oauth/providers/create/"><i class="bi bi-plus-lg"></i> New Provider</a>
 		</div>
-		<form method="get" class="filter-bar">
+		<form
+			method="get"
+			class="filter-bar"
+			hx-get="/oauth/providers/"
+			hx-trigger="change, keyup[key=='Enter'] from:#q, keyup changed delay:400ms from:#q"
+			hx-target="#oauth-providers-results"
+			hx-select="#oauth-providers-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-indicator="#oauth-providers-loading"
+		>
 			<div>
 				<label for="q">Search</label>
-				<input type="text" id="q" name="q" placeholder="Provider name" value={ data.CurrentQ }/>
+				<input type="text" id="q" name="q" placeholder="Provider name" value={ data.CurrentQ } autocomplete="off"/>
 			</div>
 			<div>
 				<label for="status">Status</label>
@@ -39,40 +49,66 @@ templ OAuthProvidersList(flashes []session.Flash, user layout.NavUser, data OAut
 				</select>
 			</div>
 			<button type="submit" class="btn-sm secondary">Filter</button>
+			<span id="oauth-providers-loading" class="htmx-indicator"><i class="bi bi-arrow-repeat"></i> Loading…</span>
 		</form>
-		<article class="card">
-			<table>
-				<thead><tr><th>Name</th><th>Client ID</th><th>Status</th><th class="actions">Actions</th></tr></thead>
-				<tbody>
-					if len(data.Providers) == 0 {
-						<tr><td colspan="4">No OAuth providers found.</td></tr>
-					}
-					for _, p := range data.Providers {
-						<tr>
-							<td>{ p.Name }</td>
-							<td class="truncate max-w-[16rem]" title={ p.ClientID }><code>{ p.ClientID }</code></td>
-							<td>
-								if p.IsActive {
-									<span class="badge badge-success">Active</span>
-								} else {
-									<span class="badge badge-secondary">Inactive</span>
-								}
-							</td>
-							<td class="actions">
-								<form method="post" action={ templ.URL("/oauth/providers/" + p.ID.String() + "/toggle/") }>
-									<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
-									<button class="btn-sm outline secondary" type="submit">Toggle</button>
-								</form>
-								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/oauth/providers/" + p.ID.String() + "/edit/") }>Edit</a>
-								<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/oauth/providers/" + p.ID.String() + "/delete/") }>Delete</a>
-							</td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		</article>
-		@PaginationNav("/oauth/providers/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		<div id="oauth-providers-results">
+			<article class="card">
+				<table>
+					<thead><tr><th>Name</th><th>Client ID</th><th>Status</th><th class="actions">Actions</th></tr></thead>
+					<tbody>
+						if len(data.Providers) == 0 {
+							<tr><td colspan="4">No OAuth providers found.</td></tr>
+						}
+						for _, p := range data.Providers {
+							@OAuthProviderRow(data.CSRFToken, p)
+						}
+					</tbody>
+				</table>
+			</article>
+			@PaginationNav("/oauth/providers/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		</div>
 	}
+}
+
+// OAuthProviderRow is rendered both as part of the full list and, on its
+// own, as the htmx fragment a toggle action swaps back in (see
+// OAuthProviderHandler.Toggle) - keeping a single source of truth for the
+// row markup.
+templ OAuthProviderRow(csrfToken string, p authmodel.OAuthProvider) {
+	<tr id={ "oauth-provider-row-" + p.ID.String() }>
+		<td>{ p.Name }</td>
+		<td class="truncate max-w-[16rem]" title={ p.ClientID }><code>{ p.ClientID }</code></td>
+		<td>
+			if p.IsActive {
+				<span class="badge badge-success">Active</span>
+			} else {
+				<span class="badge badge-secondary">Inactive</span>
+			}
+		</td>
+		<td class="actions">
+			<form
+				method="post"
+				action={ templ.URL("/oauth/providers/" + p.ID.String() + "/toggle/") }
+				hx-post={ "/oauth/providers/" + p.ID.String() + "/toggle/" }
+				hx-target={ "#oauth-provider-row-" + p.ID.String() }
+				hx-swap="outerHTML"
+			>
+				<input type="hidden" name="csrf_token" value={ csrfToken }/>
+				<button class="btn-sm outline secondary" type="submit">Toggle</button>
+			</form>
+			<a role="button" class="btn-sm outline secondary" href={ templ.URL("/oauth/providers/" + p.ID.String() + "/edit/") }>Edit</a>
+			<a
+				role="button"
+				class="btn-sm btn-danger outline"
+				href={ templ.URL("/oauth/providers/" + p.ID.String() + "/delete/") }
+				hx-post={ "/oauth/providers/" + p.ID.String() + "/delete/" }
+				hx-vals={ "{\"csrf_token\":\"" + csrfToken + "\"}" }
+				hx-confirm="Delete this OAuth provider?"
+				hx-target={ "#oauth-provider-row-" + p.ID.String() }
+				hx-swap="outerHTML swap:200ms"
+			>Delete</a>
+		</td>
+	</tr>
 }
 
 type OAuthProviderFormData struct {

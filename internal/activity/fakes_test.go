@@ -89,4 +89,17 @@ func (f *fakeActivityRepository) DistinctTypes(ctx context.Context) ([]string, e
 	return out, nil
 }
 
+func (f *fakeActivityRepository) DeleteOlderThan(ctx context.Context, before time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var kept []model.Activity
+	for _, a := range f.activities {
+		if !a.Timestamp.Before(before) {
+			kept = append(kept, a)
+		}
+	}
+	f.activities = kept
+	return nil
+}
+
 var _ model.Repository = (*fakeActivityRepository)(nil)

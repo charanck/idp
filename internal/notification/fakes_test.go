@@ -217,6 +217,17 @@ func (f *fakeNotificationRepository) MarkFailed(ctx context.Context, id uuid.UUI
 	return nil
 }
 
+func (f *fakeNotificationRepository) DeleteOlderThan(ctx context.Context, before time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for id, n := range f.notifications {
+		if n.CreatedAt.Before(before) {
+			delete(f.notifications, id)
+		}
+	}
+	return nil
+}
+
 var _ model.NotificationRepository = (*fakeNotificationRepository)(nil)
 
 type fakeProviderSettingRepository struct {

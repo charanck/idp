@@ -60,7 +60,7 @@ func Dashboard(flashes []session.Flash, user layout.NavUser, data DashboardData)
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Dashboard</h2><div class=\"stat-grid\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Dashboard <span class=\"badge badge-alpha\">Alpha</span></h2><div class=\"stat-grid\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

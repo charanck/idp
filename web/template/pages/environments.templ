@@ -10,18 +10,19 @@ type EnvironmentGroup struct {
 }
 
 type EnvironmentsListData struct {
-	Groups            []EnvironmentGroup
-	Applications      []configmodel.Application
-	CurrentAppID      string
-	CurrentQ          string
-	Page              int
-	NumPages          int
-	HasPrev           bool
-	HasNext           bool
-	PrevNum           int
-	NextNum           int
-	Window            []int
-	ExtraQuery        string
+	Groups       []EnvironmentGroup
+	Applications []configmodel.Application
+	CSRFToken    string
+	CurrentAppID string
+	CurrentQ     string
+	Page         int
+	NumPages     int
+	HasPrev      bool
+	HasNext      bool
+	PrevNum      int
+	NextNum      int
+	Window       []int
+	ExtraQuery   string
 }
 
 templ EnvironmentsList(flashes []session.Flash, user layout.NavUser, data EnvironmentsListData) {
@@ -30,7 +31,17 @@ templ EnvironmentsList(flashes []session.Flash, user layout.NavUser, data Enviro
 			<h2>Environments</h2>
 			<a role="button" href="/environments/create/"><i class="bi bi-plus-lg"></i> New Environment</a>
 		</div>
-		<form method="get" class="filter-bar">
+		<form
+			method="get"
+			class="filter-bar"
+			hx-get="/environments/"
+			hx-trigger="change, keyup[key=='Enter'] from:#q, keyup changed delay:400ms from:#q"
+			hx-target="#environments-results"
+			hx-select="#environments-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-indicator="#environments-loading"
+		>
 			<div>
 				<label for="application_id">Application</label>
 				<select id="application_id" name="application_id">
@@ -46,32 +57,44 @@ templ EnvironmentsList(flashes []session.Flash, user layout.NavUser, data Enviro
 			</div>
 			<div>
 				<label for="q">Search</label>
-				<input type="text" id="q" name="q" placeholder="Environment name" value={ data.CurrentQ }/>
+				<input type="text" id="q" name="q" placeholder="Environment name" value={ data.CurrentQ } autocomplete="off"/>
 			</div>
 			<button type="submit" class="btn-sm secondary">Filter</button>
+			<span id="environments-loading" class="htmx-indicator"><i class="bi bi-arrow-repeat"></i> Loading…</span>
 		</form>
-		if len(data.Groups) == 0 {
-			<div class="alert alert-secondary">No environments found.</div>
-		}
-		for _, group := range data.Groups {
-			<article class="card">
-				<header>{ group.Application.Name }</header>
-				<table>
-					<tbody>
-						for _, env := range group.Environments {
-							<tr>
-								<td>{ env.Name }</td>
-								<td class="actions">
-									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/environments/" + env.ID.String() + "/edit/") }>Edit</a>
-									<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/environments/" + env.ID.String() + "/delete/") }>Delete</a>
-								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</article>
-		}
-		@PaginationNav("/environments/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		<div id="environments-results">
+			if len(data.Groups) == 0 {
+				<div class="alert alert-secondary">No environments found.</div>
+			}
+			for _, group := range data.Groups {
+				<article class="card">
+					<header>{ group.Application.Name }</header>
+					<table>
+						<tbody>
+							for _, env := range group.Environments {
+								<tr id={ "environment-row-" + env.ID.String() }>
+									<td>{ env.Name }</td>
+									<td class="actions">
+										<a role="button" class="btn-sm outline secondary" href={ templ.URL("/environments/" + env.ID.String() + "/edit/") }>Edit</a>
+										<a
+											role="button"
+											class="btn-sm btn-danger outline"
+											href={ templ.URL("/environments/" + env.ID.String() + "/delete/") }
+											hx-post={ "/environments/" + env.ID.String() + "/delete/" }
+											hx-vals={ "{\"csrf_token\":\"" + data.CSRFToken + "\"}" }
+											hx-confirm="Delete this environment? This will delete all of its configs, secrets and feature flags."
+											hx-target={ "#environment-row-" + env.ID.String() }
+											hx-swap="outerHTML swap:200ms"
+										>Delete</a>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</article>
+			}
+			@PaginationNav("/environments/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		</div>
 	}
 }
 

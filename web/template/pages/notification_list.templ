@@ -36,7 +36,7 @@ type NotificationListData struct {
 
 templ NotificationList(flashes []session.Flash, user layout.NavUser, data NotificationListData) {
 	@layout.Base("Notifications", "notifications", user, flashes) {
-		<h2>Notifications</h2>
+		<h2>Notifications <span class="badge badge-alpha">Alpha</span></h2>
 		<form method="get" class="filter-bar">
 			<div>
 				<label for="application_id">Application</label>

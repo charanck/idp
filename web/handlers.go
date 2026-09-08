@@ -15,10 +15,12 @@ type Handlers struct {
 	User                 *UserHandler
 	Group                *GroupHandler
 	Policy               *PolicyHandler
+	Branding             *BrandingHandler
 	Auth                 *AuthHandler
 	OAuthLogin           *OAuthLoginHandler
 	OAuthProvider        *OAuthProviderHandler
 	OIDC                 *OIDCHandler
 	NotificationSettings *NotificationSettingsHandler
 	Notification         *NotificationHandler
+	ForwardAuth          *ForwardAuthHandler
 }

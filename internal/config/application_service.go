@@ -89,3 +89,31 @@ func (s *ConfigService) DeleteApplication(ctx context.Context, id uuid.UUID) (*m
 	}
 	return app, nil
 }
+
+// ListApplicationDomains returns the hostnames a reverse proxy may forward
+// (X-Forwarded-Host) that map to an Application, for the forward-auth verify
+// endpoint.
+func (s *ConfigService) ListApplicationDomains(ctx context.Context, applicationID uuid.UUID) ([]string, error) {
+	return s.domains.ListHosts(ctx, applicationID)
+}
+
+// SetApplicationDomains replaces the set of hostnames mapped to an
+// Application wholesale, mirroring SetApplications/SetUserGroups' replace
+// semantics.
+func (s *ConfigService) SetApplicationDomains(ctx context.Context, applicationID uuid.UUID, hosts []string) error {
+	return s.domains.SetHosts(ctx, applicationID, hosts)
+}
+
+// ApplicationByHost resolves the Application mapped to host (as forwarded by
+// a reverse proxy via X-Forwarded-Host), or nil if no Application claims
+// that host.
+func (s *ConfigService) ApplicationByHost(ctx context.Context, host string) (*model.Application, error) {
+	id, err := s.domains.FindApplicationIDByHost(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	if id == uuid.Nil {
+		return nil, nil
+	}
+	return s.GetApplicationByID(ctx, id)
+}

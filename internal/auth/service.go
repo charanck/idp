@@ -5,14 +5,18 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"controlplane/internal/cache"
 	"controlplane/internal/crypto"
 	model "controlplane/internal/model/auth"
 	"controlplane/internal/security"
@@ -24,6 +28,15 @@ var ErrAlreadyExists = errors.New("already exists")
 // self-registration domain allow-list rejects the email's domain.
 var ErrDomainNotAllowed = errors.New("email domain not allowed to self-register")
 
+// ErrAccountLocked is returned by AuthenticateUser when the account is
+// currently locked out from too many failed login attempts (see
+// Policy.MaxFailedLoginAttempts/LockoutDurationMinutes).
+var ErrAccountLocked = errors.New("account is locked")
+
+// ErrPasswordAuthDisabled is returned by AuthenticateUser when the policy's
+// SSOOnly flag rejects password-based login outright.
+var ErrPasswordAuthDisabled = errors.New("password login is disabled, use SSO")
+
 // builtinUserGroupName is the built-in group new users are defaulted into
 // (seeded by migration 00007), mirroring today's non-staff access level.
 const builtinUserGroupName = "User"
@@ -34,10 +47,77 @@ type AuthService struct {
 	clients  model.ServiceClientRepository
 	groups   model.GroupRepository
 	policies model.PolicyRepository
+	branding model.BrandingRepository
+
+	// cache/cacheTimeout back the read-through, version-counter-invalidated
+	// caching of ListUsers/ListGroups/ListServiceClients/GetPolicy, mirroring
+	// ConfigService's scope-version cache pattern. GetPolicy in particular is
+	// read on every authenticated request via web.AuthMiddleware, so caching
+	// it has outsized impact.
+	cache        cache.Cache
+	cacheTimeout time.Duration
 }
 
-func NewAuthService(users model.UserRepository, clients model.ServiceClientRepository, groups model.GroupRepository, policies model.PolicyRepository) *AuthService {
-	return &AuthService{users: users, clients: clients, groups: groups, policies: policies}
+func NewAuthService(users model.UserRepository, clients model.ServiceClientRepository, groups model.GroupRepository, policies model.PolicyRepository, branding model.BrandingRepository, c cache.Cache, cacheTimeout time.Duration) *AuthService {
+	return &AuthService{users: users, clients: clients, groups: groups, policies: policies, branding: branding, cache: c, cacheTimeout: cacheTimeout}
+}
+
+const (
+	usersCacheVersionKey    = "authcache:users-version"
+	groupsCacheVersionKey   = "authcache:groups-version"
+	clientsCacheVersionKey  = "authcache:clients-version"
+	policyCacheVersionKey   = "authcache:policy-version"
+)
+
+// invalidateUsers/Groups/Clients/Policy bump their respective version
+// counter, invalidating every previously cached list/singleton payload for
+// that entity without needing to delete individual keys.
+func (s *AuthService) invalidateUsersCache(ctx context.Context) {
+	if err := s.cache.BumpVersion(ctx, usersCacheVersionKey); err != nil {
+		slog.WarnContext(ctx, "failed to invalidate users cache", "error", err)
+	}
+}
+
+func (s *AuthService) invalidateGroupsCache(ctx context.Context) {
+	if err := s.cache.BumpVersion(ctx, groupsCacheVersionKey); err != nil {
+		slog.WarnContext(ctx, "failed to invalidate groups cache", "error", err)
+	}
+}
+
+func (s *AuthService) invalidateClientsCache(ctx context.Context) {
+	if err := s.cache.BumpVersion(ctx, clientsCacheVersionKey); err != nil {
+		slog.WarnContext(ctx, "failed to invalidate service clients cache", "error", err)
+	}
+}
+
+func (s *AuthService) invalidatePolicyCache(ctx context.Context) {
+	if err := s.cache.BumpVersion(ctx, policyCacheVersionKey); err != nil {
+		slog.WarnContext(ctx, "failed to invalidate policy cache", "error", err)
+	}
+}
+
+// cacheGet/cacheSet are small JSON read-through helpers shared by the list
+// caches below; a marshal/unmarshal failure is treated as a cache miss
+// rather than an error, matching ConfigService.ListConfigsForClient.
+func cacheGet[T any](ctx context.Context, c cache.Cache, key string) (T, bool) {
+	var zero T
+	cached, found, err := c.Get(ctx, key)
+	if err != nil || !found {
+		return zero, false
+	}
+	var out T
+	if err := json.Unmarshal([]byte(cached), &out); err != nil {
+		return zero, false
+	}
+	return out, true
+}
+
+func cacheSet[T any](ctx context.Context, c cache.Cache, key string, ttl time.Duration, value T) {
+	serialized, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	_ = c.Set(ctx, key, string(serialized), ttl)
 }
 
 // assignDefaultGroup adds a newly created user to the built-in User group,
@@ -101,18 +181,53 @@ func (s *AuthService) RegisterUser(ctx context.Context, email, password, usernam
 	if err := s.assignDefaultGroup(ctx, user.ID); err != nil {
 		return nil, err
 	}
+	s.invalidateUsersCache(ctx)
 	return user, nil
 }
 
-// AuthenticateUser authenticates a user by email and password.
+// AuthenticateUser authenticates a user by email and password, enforcing the
+// policy's SSO-only restriction and account-lockout threshold. A nil
+// user+error means "invalid credentials" (matching the Python service);
+// ErrAccountLocked and ErrPasswordAuthDisabled are returned so callers can
+// show a more specific message.
 func (s *AuthService) AuthenticateUser(ctx context.Context, email, password string) (*model.User, error) {
+	policy, err := s.policies.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if policy.SSOOnly {
+		slog.DebugContext(ctx, "login rejected: password auth disabled by policy (sso_only)", "email", email)
+		return nil, ErrPasswordAuthDisabled
+	}
+
 	user, err := s.users.FindActiveByEmail(ctx, email)
 	if err != nil {
+		slog.DebugContext(ctx, "login rejected: no active user for email", "email", email)
 		return nil, nil //nolint:nilnil // "not found" is a valid outcome, not an error, matching the Python service.
 	}
+
+	now := time.Now().UTC()
+	if user.IsLocked(now) {
+		slog.DebugContext(ctx, "login rejected: account locked", "user_id", user.ID, "locked_until", user.LockedUntil)
+		return nil, ErrAccountLocked
+	}
+
 	if !security.VerifyPassword(password, user.Password) {
+		slog.DebugContext(ctx, "login rejected: bad password", "user_id", user.ID, "failed_login_count", user.FailedLoginCount+1)
+		s.recordFailedLogin(ctx, user, policy, now)
 		return nil, nil
 	}
+
+	slog.DebugContext(ctx, "login succeeded", "user_id", user.ID, "email", user.Email)
+
+	if user.FailedLoginCount != 0 || user.LockedUntil != nil {
+		user.FailedLoginCount = 0
+		user.LockedUntil = nil
+		if err := s.users.Update(ctx, user); err != nil {
+			slog.Warn("reset failed login count failed", "user_id", user.ID, "err", err)
+		}
+	}
+
 	if security.IsLegacyHash(user.Password) {
 		if newHash, err := security.HashPassword(password); err != nil {
 			slog.Warn("rehash legacy password failed", "user_id", user.ID, "err", err)
@@ -121,6 +236,21 @@ func (s *AuthService) AuthenticateUser(ctx context.Context, email, password stri
 		}
 	}
 	return user, nil
+}
+
+// recordFailedLogin increments the user's failed-login counter and, once it
+// reaches the policy's threshold (0 = lockout disabled), locks the account
+// for LockoutDurationMinutes.
+func (s *AuthService) recordFailedLogin(ctx context.Context, user *model.User, policy *model.Policy, now time.Time) {
+	user.FailedLoginCount++
+	if policy.MaxFailedLoginAttempts > 0 && user.FailedLoginCount >= policy.MaxFailedLoginAttempts {
+		lockedUntil := now.Add(time.Duration(policy.LockoutDurationMinutes) * time.Minute)
+		user.LockedUntil = &lockedUntil
+		slog.DebugContext(ctx, "account locked out after too many failed logins", "user_id", user.ID, "failed_login_count", user.FailedLoginCount, "locked_until", lockedUntil)
+	}
+	if err := s.users.Update(ctx, user); err != nil {
+		slog.Warn("persist failed login count failed", "user_id", user.ID, "err", err)
+	}
 }
 
 // SetPassword updates a user's password hash and clears any pending forced
@@ -189,6 +319,7 @@ func (s *AuthService) CreateServiceClient(ctx context.Context, name string) (*Se
 	if err := s.clients.Create(ctx, client); err != nil {
 		return nil, err
 	}
+	s.invalidateClientsCache(ctx)
 
 	return &ServiceClientCredentials{Client: client, APIKey: rawAPIKey}, nil
 }
@@ -226,9 +357,31 @@ func (s *AuthService) AuthenticateServiceAPIKey(ctx context.Context, apiKey stri
 }
 
 // ListUsers lists users, optionally filtered by a case-insensitive email
-// substring and staff status, ordered newest-first.
+// substring and staff status, ordered newest-first. Read-through cached,
+// invalidated by any user create/update/delete/unlock.
 func (s *AuthService) ListUsers(ctx context.Context, q string, isStaff *bool) ([]model.User, error) {
-	return s.users.List(ctx, q, isStaff)
+	version, err := s.cache.GetVersion(ctx, usersCacheVersionKey)
+	if err != nil {
+		return s.users.List(ctx, q, isStaff)
+	}
+	cacheKey := fmt.Sprintf("authcache:users:q=%s:staff=%s:v%d", q, boolFilterKey(isStaff), version)
+	if cached, found := cacheGet[[]model.User](ctx, s.cache, cacheKey); found {
+		return cached, nil
+	}
+
+	users, err := s.users.List(ctx, q, isStaff)
+	if err != nil {
+		return nil, err
+	}
+	cacheSet(ctx, s.cache, cacheKey, s.cacheTimeout, users)
+	return users, nil
+}
+
+func boolFilterKey(b *bool) string {
+	if b == nil {
+		return "any"
+	}
+	return strconv.FormatBool(*b)
 }
 
 // GetUserByIDAny returns a user by ID regardless of active status, or nil if not found.
@@ -280,6 +433,7 @@ func (s *AuthService) CreateUserAdmin(ctx context.Context, in CreateUserAdminInp
 	if err := s.assignDefaultGroup(ctx, user.ID); err != nil {
 		return nil, err
 	}
+	s.invalidateUsersCache(ctx)
 	return user, nil
 }
 
@@ -304,6 +458,24 @@ func (s *AuthService) UpdateUserAdmin(ctx context.Context, id uuid.UUID, in Upda
 	if err := s.users.Update(ctx, user); err != nil {
 		return nil, err
 	}
+	s.invalidateUsersCache(ctx)
+	return user, nil
+}
+
+// UnlockUser clears a user's failed-login count and lockout, returning nil
+// if not found. Used by admins from the Users page to reverse an
+// automatic lockout early.
+func (s *AuthService) UnlockUser(ctx context.Context, id uuid.UUID) (*model.User, error) {
+	user, err := s.GetUserByIDAny(ctx, id)
+	if err != nil || user == nil {
+		return user, err
+	}
+	user.FailedLoginCount = 0
+	user.LockedUntil = nil
+	if err := s.users.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	s.invalidateUsersCache(ctx)
 	return user, nil
 }
 
@@ -316,13 +488,30 @@ func (s *AuthService) DeleteUser(ctx context.Context, id uuid.UUID) (*model.User
 	if err := s.users.Delete(ctx, user); err != nil {
 		return nil, err
 	}
+	s.invalidateUsersCache(ctx)
 	return user, nil
 }
 
 // ListServiceClients lists service clients, optionally filtered by a
 // case-insensitive name substring and active status, ordered newest-first.
+// Read-through cached, invalidated by any service client
+// create/update/toggle/delete/regenerate-key.
 func (s *AuthService) ListServiceClients(ctx context.Context, q string, isActive *bool) ([]model.ServiceClient, error) {
-	return s.clients.List(ctx, q, isActive)
+	version, err := s.cache.GetVersion(ctx, clientsCacheVersionKey)
+	if err != nil {
+		return s.clients.List(ctx, q, isActive)
+	}
+	cacheKey := fmt.Sprintf("authcache:clients:q=%s:active=%s:v%d", q, boolFilterKey(isActive), version)
+	if cached, found := cacheGet[[]model.ServiceClient](ctx, s.cache, cacheKey); found {
+		return cached, nil
+	}
+
+	clients, err := s.clients.List(ctx, q, isActive)
+	if err != nil {
+		return nil, err
+	}
+	cacheSet(ctx, s.cache, cacheKey, s.cacheTimeout, clients)
+	return clients, nil
 }
 
 // GetServiceClientByIDAny returns a service client by ID regardless of
@@ -348,6 +537,7 @@ func (s *AuthService) ToggleServiceClient(ctx context.Context, id uuid.UUID) (*m
 	if err := s.clients.Update(ctx, client); err != nil {
 		return nil, err
 	}
+	s.invalidateClientsCache(ctx)
 	return client, nil
 }
 
@@ -360,6 +550,7 @@ func (s *AuthService) DeleteServiceClient(ctx context.Context, id uuid.UUID) (*m
 	if err := s.clients.Delete(ctx, client); err != nil {
 		return nil, err
 	}
+	s.invalidateClientsCache(ctx)
 	return client, nil
 }
 
@@ -378,6 +569,7 @@ func (s *AuthService) RegenerateServiceClientKey(ctx context.Context, id uuid.UU
 	if err := s.clients.Update(ctx, client); err != nil {
 		return nil, err
 	}
+	s.invalidateClientsCache(ctx)
 	return client, nil
 }
 
@@ -432,6 +624,7 @@ func (s *AuthService) UpdateServiceClientSettings(ctx context.Context, id uuid.U
 	if err := s.clients.SetAllowedGroups(ctx, client.ID, in.AllowedGroupIDs); err != nil {
 		return nil, err
 	}
+	s.invalidateClientsCache(ctx)
 	return client, nil
 }
 

@@ -24,6 +24,8 @@ type ApplicationStore interface {
 	CreateApplication(ctx context.Context, name string) (*configmodel.Application, error)
 	UpdateApplication(ctx context.Context, id uuid.UUID, name string) (*configmodel.Application, error)
 	DeleteApplication(ctx context.Context, id uuid.UUID) (*configmodel.Application, error)
+	ListApplicationDomains(ctx context.Context, applicationID uuid.UUID) ([]string, error)
+	SetApplicationDomains(ctx context.Context, applicationID uuid.UUID, hosts []string) error
 }
 
 type ApplicationHandler struct {
@@ -52,7 +54,7 @@ func (h *ApplicationHandler) List(c echo.Context) error {
 	}
 
 	return pages.ApplicationsList(flashes(c), navUser(c), pages.ApplicationsListData{
-		Apps: page.Items, CurrentQ: q, Page: page.Number, NumPages: page.NumPages,
+		Apps: page.Items, CSRFToken: csrfToken(c), CurrentQ: q, Page: page.Number, NumPages: page.NumPages,
 		HasPrev: page.HasPrevious, HasNext: page.HasNext,
 		PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
 		Window: page.PageRange(), ExtraQuery: extra.Encode(),
@@ -103,17 +105,22 @@ func (h *ApplicationHandler) Edit(c echo.Context) error {
 	}
 
 	if c.Request().Method == http.MethodGet {
+		hosts, err := h.apps.ListApplicationDomains(c.Request().Context(), app.ID)
+		if err != nil {
+			return err
+		}
 		return pages.ApplicationForm(flashes(c), navUser(c), pages.ApplicationFormData{
 			CSRFToken: csrfToken(c), Action: "/applications/" + app.ID.String() + "/edit/",
-			Name: app.Name, IsEdit: true,
+			Name: app.Name, IsEdit: true, Domains: strings.Join(hosts, ", "),
 		}).Render(c.Request().Context(), c.Response())
 	}
 
 	name := strings.TrimSpace(c.FormValue("name"))
+	domains := strings.TrimSpace(c.FormValue("domains"))
 	if name == "" {
 		return pages.ApplicationForm(flashes(c), navUser(c), pages.ApplicationFormData{
 			CSRFToken: csrfToken(c), Action: "/applications/" + app.ID.String() + "/edit/",
-			IsEdit: true, Error: "Name is required.",
+			IsEdit: true, Domains: domains, Error: "Name is required.",
 		}).Render(c.Request().Context(), c.Response())
 	}
 
@@ -121,9 +128,25 @@ func (h *ApplicationHandler) Edit(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := h.apps.SetApplicationDomains(c.Request().Context(), id, parseDomains(domains)); err != nil {
+		return err
+	}
 	h.activity.LogUpdate(requestContext(c), "application", updated.ID.String(), updated.Name, nil)
 	AddFlash(c, "success", "Application updated.")
 	return c.Redirect(http.StatusFound, "/applications/")
+}
+
+// parseDomains splits a comma-separated hostname list into a cleaned slice,
+// dropping empty entries left by trailing/duplicate commas or whitespace.
+func parseDomains(raw string) []string {
+	parts := strings.Split(raw, ",")
+	hosts := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if h := strings.TrimSpace(p); h != "" {
+			hosts = append(hosts, h)
+		}
+	}
+	return hosts
 }
 
 func (h *ApplicationHandler) Delete(c echo.Context) error {
@@ -153,6 +176,9 @@ func (h *ApplicationHandler) Delete(c echo.Context) error {
 		return err
 	}
 	h.activity.LogDelete(requestContext(c), "application", app.ID.String(), app.Name, nil)
+	if IsHXRequest(c) {
+		return c.NoContent(http.StatusOK)
+	}
 	AddFlash(c, "success", "Application deleted.")
 	return c.Redirect(http.StatusFound, "/applications/")
 }

@@ -31,8 +31,18 @@ type ActivityLogData struct {
 
 templ ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogData) {
 	@layout.Base("Activity Log", "activity", user, flashes) {
-		<h2>Activity Log</h2>
-		<form method="get" class="filter-bar">
+		<h2>Activity Log <span class="badge badge-alpha">Alpha</span></h2>
+		<form
+			method="get"
+			class="filter-bar"
+			hx-get="/activity/"
+			hx-trigger="change, keyup[key=='Enter'] from:#user, keyup changed delay:400ms from:#user"
+			hx-target="#activity-results"
+			hx-select="#activity-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-indicator="#activity-loading"
+		>
 			<div>
 				<label for="resource">Resource</label>
 				<select id="resource" name="resource">
@@ -61,30 +71,33 @@ templ ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLog
 			</div>
 			<div>
 				<label for="user">User</label>
-				<input type="text" id="user" name="user" placeholder="User email" value={ data.CurrentUser }/>
+				<input type="text" id="user" name="user" placeholder="User email" value={ data.CurrentUser } autocomplete="off"/>
 			</div>
 			<button class="btn-sm secondary" type="submit">Filter</button>
+			<span id="activity-loading" class="htmx-indicator"><i class="bi bi-arrow-repeat"></i> Loading…</span>
 		</form>
-		<article class="card">
-			<table>
-				<thead><tr><th>When</th><th>Type</th><th>Resource</th><th>Name</th><th>User</th><th>IP</th></tr></thead>
-				<tbody>
-					if len(data.Activities) == 0 {
-						<tr><td colspan="6">No activity recorded.</td></tr>
-					}
-					for _, a := range data.Activities {
-						<tr>
-							<td>{ a.Timestamp }</td>
-							<td>{ a.Type }</td>
-							<td>{ a.Resource }</td>
-							<td>{ a.ResourceName }</td>
-							<td>{ a.UserEmail }</td>
-							<td>{ a.IPAddress }</td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		</article>
-		@PaginationNav("/activity/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		<div id="activity-results">
+			<article class="card">
+				<table>
+					<thead><tr><th>When</th><th>Type</th><th>Resource</th><th>Name</th><th>User</th><th>IP</th></tr></thead>
+					<tbody>
+						if len(data.Activities) == 0 {
+							<tr><td colspan="6">No activity recorded.</td></tr>
+						}
+						for _, a := range data.Activities {
+							<tr>
+								<td>{ a.Timestamp }</td>
+								<td>{ a.Type }</td>
+								<td>{ a.Resource }</td>
+								<td>{ a.ResourceName }</td>
+								<td>{ a.UserEmail }</td>
+								<td>{ a.IPAddress }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</article>
+			@PaginationNav("/activity/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		</div>
 	}
 }

@@ -77,6 +77,7 @@ func RegisterRoutes(e *echo.Echo, h *Handlers, authMW *AuthMiddleware) {
 	users.POST("/users/:id/edit/", h.User.Edit)
 	users.GET("/users/:id/delete/", h.User.Delete)
 	users.POST("/users/:id/delete/", h.User.Delete)
+	users.POST("/users/:id/unlock/", h.User.Unlock)
 
 	groups := e.Group("", authMW.ModuleRequired(auth.ModuleGroups))
 	groups.GET("/groups/", h.Group.List)
@@ -114,6 +115,10 @@ func RegisterRoutes(e *echo.Echo, h *Handlers, authMW *AuthMiddleware) {
 	policies.GET("/policies/", h.Policy.Show)
 	policies.POST("/policies/", h.Policy.Show)
 
+	branding := e.Group("", authMW.ModuleRequired(auth.ModuleBranding))
+	branding.GET("/branding/", h.Branding.Show)
+	branding.POST("/branding/", h.Branding.Show)
+
 	if notification.Enabled {
 		notificationSettings := e.Group("", authMW.ModuleRequired(auth.ModuleNotificationSettings))
 		notificationSettings.GET("/notification-settings/", h.NotificationSettings.List)
@@ -123,6 +128,12 @@ func RegisterRoutes(e *echo.Echo, h *Handlers, authMW *AuthMiddleware) {
 
 	activityLog := e.Group("", authMW.ModuleRequired(auth.ModuleActivityLog))
 	activityLog.GET("/activity/", h.Activity.List)
+
+	// Authenticates via the session cookie directly (set by the global
+	// authMW.LoadUser() above) rather than LoginRequired()'s redirect-based
+	// flow, since a reverse proxy calling this per-request needs a plain
+	// 401/302, not a bounce through the web UI.
+	e.GET("/forward-auth/verify", h.ForwardAuth.Verify)
 
 	e.GET("/oauth/login/:id/", h.OAuthLogin.Login)
 	e.GET("/oauth/callback/:id/", h.OAuthLogin.Callback)

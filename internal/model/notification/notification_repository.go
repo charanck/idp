@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -33,4 +34,7 @@ type NotificationRepository interface {
 	MarkSent(ctx context.Context, id uuid.UUID, provider, providerMessageID string) error
 	MarkRetrying(ctx context.Context, id uuid.UUID, attempt int, sendErr error) error
 	MarkFailed(ctx context.Context, id uuid.UUID, attempt int, sendErr error) error
+	// DeleteOlderThan hard-deletes notifications created before the given
+	// time, for the monthly retention cleanup (internal/cleanup).
+	DeleteOlderThan(ctx context.Context, before time.Time) error
 }

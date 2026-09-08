@@ -92,7 +92,7 @@ func (h *EnvironmentHandler) List(c echo.Context) error {
 	}
 
 	return pages.EnvironmentsList(flashes(c), navUser(c), pages.EnvironmentsListData{
-		Applications: apps, CurrentAppID: appIDFilter, CurrentQ: q, ExtraQuery: extra.Encode(),
+		Applications: apps, CSRFToken: csrfToken(c), CurrentAppID: appIDFilter, CurrentQ: q, ExtraQuery: extra.Encode(),
 		Groups: page.Items, Page: page.Number, NumPages: page.NumPages,
 		HasPrev: page.HasPrevious, HasNext: page.HasNext,
 		PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
@@ -219,6 +219,9 @@ func (h *EnvironmentHandler) Delete(c echo.Context) error {
 		return err
 	}
 	h.activity.LogDelete(requestContext(c), "environment", env.ID.String(), env.Name, nil)
+	if IsHXRequest(c) {
+		return c.NoContent(http.StatusOK)
+	}
 	AddFlash(c, "success", "Environment deleted.")
 	return c.Redirect(http.StatusFound, "/environments/")
 }

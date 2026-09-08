@@ -242,6 +242,9 @@ func (h *GroupHandler) Delete(c echo.Context) error {
 		return err
 	}
 	h.activity.LogDelete(requestContext(c), "group", existing.ID.String(), existing.Name, nil)
+	if IsHXRequest(c) {
+		return c.NoContent(http.StatusOK)
+	}
 	AddFlash(c, "success", "Group \""+existing.Name+"\" deleted.")
 	return c.Redirect(http.StatusFound, "/groups/")
 }

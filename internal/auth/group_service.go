@@ -17,9 +17,24 @@ import (
 // built-in, non-deletable Admin/User groups.
 var ErrSystemGroup = errors.New("built-in group cannot be modified")
 
-// ListGroups lists groups, optionally filtered by a case-insensitive name substring.
+// ListGroups lists groups, optionally filtered by a case-insensitive name
+// substring. Read-through cached, invalidated by any group create/update/delete.
 func (s *AuthService) ListGroups(ctx context.Context, q string) ([]model.Group, error) {
-	return s.groups.List(ctx, q)
+	version, err := s.cache.GetVersion(ctx, groupsCacheVersionKey)
+	if err != nil {
+		return s.groups.List(ctx, q)
+	}
+	cacheKey := fmt.Sprintf("authcache:groups:q=%s:v%d", q, version)
+	if cached, found := cacheGet[[]model.Group](ctx, s.cache, cacheKey); found {
+		return cached, nil
+	}
+
+	groups, err := s.groups.List(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	cacheSet(ctx, s.cache, cacheKey, s.cacheTimeout, groups)
+	return groups, nil
 }
 
 // GetGroupByID returns a group by ID, or nil if not found.
@@ -65,6 +80,7 @@ func (s *AuthService) CreateGroup(ctx context.Context, in CreateGroupInput) (*mo
 	if err := s.groups.SetApplications(ctx, group.ID, in.ApplicationIDs); err != nil {
 		return nil, err
 	}
+	s.invalidateGroupsCache(ctx)
 	return group, nil
 }
 
@@ -91,6 +107,7 @@ func (s *AuthService) UpdateGroup(ctx context.Context, id uuid.UUID, in CreateGr
 	if err := s.groups.SetApplications(ctx, group.ID, in.ApplicationIDs); err != nil {
 		return nil, err
 	}
+	s.invalidateGroupsCache(ctx)
 	return group, nil
 }
 
@@ -106,6 +123,7 @@ func (s *AuthService) DeleteGroup(ctx context.Context, id uuid.UUID) (*model.Gro
 	if err := s.groups.Delete(ctx, group); err != nil {
 		return nil, err
 	}
+	s.invalidateGroupsCache(ctx)
 	return group, nil
 }
 

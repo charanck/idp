@@ -6,10 +6,14 @@ import "controlplane/web/template/layout"
 // LoginData carries the login form's submitted values + CSRF token; there is
 // no logged-in NavUser yet, so the layout renders its unauthenticated shell.
 type LoginData struct {
-	CSRFToken     string
-	Email         string
-	Error         string
-	OAuthProviders []LoginOAuthProvider
+	CSRFToken          string
+	Email              string
+	Error              string
+	OAuthProviders     []LoginOAuthProvider
+	ProductName        string
+	LogoURL            string
+	AccentColor        string
+	BackgroundImageURL string
 }
 
 type LoginOAuthProvider struct {
@@ -18,27 +22,39 @@ type LoginOAuthProvider struct {
 }
 
 templ Login(flashes []session.Flash, data LoginData) {
-	@layout.Base("Log in", "", layout.NavUser{}, flashes) {
-		<article>
-			<h4>Control Plane</h4>
+	@layout.Base("Log in", "", layout.NavUser{ProductName: data.ProductName, LogoURL: data.LogoURL, AccentColor: data.AccentColor, BackgroundImageURL: data.BackgroundImageURL}, flashes) {
+		<article class="login-card">
+			<div class="login-brand">
+				if data.LogoURL != "" {
+					<img src={ data.LogoURL } alt="" class="brand-logo"/>
+				}
+				<h4>
+					if data.ProductName != "" {
+						{ data.ProductName }
+					} else {
+						Control Plane
+					}
+				</h4>
+				<p class="login-subtitle">Sign in to continue</p>
+			</div>
 			if data.Error != "" {
 				<div class="alert alert-danger">{ data.Error }</div>
 			}
-			<form method="post" action="/login/">
+			<form method="post" action="/login/" class="login-form">
 				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 				<label for="email">
-					Email
+					Username or email
 					<input type="email" id="email" name="username" value={ data.Email } required autofocus/>
 				</label>
 				<label for="password">
 					Password
 					<input type="password" id="password" name="password" required/>
 				</label>
-				<button type="submit">Log in</button>
+				<button type="submit" class="login-submit">Sign in</button>
 			</form>
 			if len(data.OAuthProviders) > 0 {
-				<div class="mt-6">
-					<div class="stat-label mb-2">Or continue with an OAuth provider</div>
+				<div class="login-divider"><span>or</span></div>
+				<div class="login-oauth-list">
 					for _, p := range data.OAuthProviders {
 						<a role="button" class="secondary outline block mb-2" href={ templ.URL("/oauth/login/" + p.ID + "/") }>
 							<i class="bi bi-box-arrow-in-right"></i> Continue with { p.Name }

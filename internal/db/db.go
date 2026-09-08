@@ -5,10 +5,17 @@ package db
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/pressly/goose/v3"
 	"gorm.io/driver/postgres"
@@ -86,6 +93,108 @@ func Migrate(sqlDB *sql.DB) error {
 	}
 	if err := goose.Up(sqlDB, "migrations"); err != nil {
 		return fmt.Errorf("run goose migrations: %w", err)
+	}
+
+	// goose only tracks which version numbers have been applied
+	// (goose_db_version), never the content of the migration files
+	// themselves - so silently editing a migration file after it has already
+	// been applied to a given database (e.g. mid-development, before it's
+	// committed) produces no error from goose, just a database whose real
+	// schema has quietly diverged from what's on disk. verifyMigrationChecksums
+	// closes that gap: it's what actually caught the "branding.accent_color
+	// column does not exist" incident this guards against.
+	if err := verifyMigrationChecksums(ctx, conn); err != nil {
+		return err
+	}
+	return nil
+}
+
+// verifyMigrationChecksums detects drift between the migration files
+// embedded in this binary and what was actually applied to the database in
+// the past: for every migration version goose considers applied, it compares
+// the file's current sha256 against the checksum recorded the first time
+// that version was seen. A mismatch means the file was edited after being
+// applied - e.g. a column was added to an already-run CREATE TABLE - and
+// fails startup with a clear, specific error rather than continuing against
+// a schema that no longer matches the code (see Migrate's doc comment).
+//
+// The tracking table is bootstrapped lazily: the first time a given version
+// is observed (including every already-applied version, the first time this
+// check itself is deployed) its current checksum is simply recorded, since
+// there is nothing yet to compare it against.
+func verifyMigrationChecksums(ctx context.Context, conn *sql.Conn) error {
+	if _, err := conn.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS goose_migration_checksums (
+			version     bigint PRIMARY KEY,
+			filename    text NOT NULL,
+			checksum    text NOT NULL,
+			recorded_at timestamptz NOT NULL DEFAULT now()
+		)
+	`); err != nil {
+		return fmt.Errorf("create goose_migration_checksums table: %w", err)
+	}
+
+	var currentVersion int64
+	if err := conn.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version WHERE is_applied`,
+	).Scan(&currentVersion); err != nil {
+		return fmt.Errorf("determine current goose version: %w", err)
+	}
+
+	entries, err := fs.ReadDir(embeddedMigrations, "migrations")
+	if err != nil {
+		return fmt.Errorf("read embedded migrations: %w", err)
+	}
+
+	var drifted []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".sql") {
+			continue
+		}
+		versionStr, _, ok := strings.Cut(name, "_")
+		if !ok {
+			continue
+		}
+		version, err := strconv.ParseInt(versionStr, 10, 64)
+		if err != nil || version > currentVersion {
+			continue
+		}
+
+		content, err := fs.ReadFile(embeddedMigrations, "migrations/"+name)
+		if err != nil {
+			return fmt.Errorf("read migration %s: %w", name, err)
+		}
+		sum := sha256.Sum256(content)
+		checksum := hex.EncodeToString(sum[:])
+
+		var recorded string
+		err = conn.QueryRowContext(ctx,
+			`SELECT checksum FROM goose_migration_checksums WHERE version = $1`, version,
+		).Scan(&recorded)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			if _, err := conn.ExecContext(ctx,
+				`INSERT INTO goose_migration_checksums (version, filename, checksum) VALUES ($1, $2, $3)`,
+				version, name, checksum,
+			); err != nil {
+				return fmt.Errorf("record checksum for %s: %w", name, err)
+			}
+		case err != nil:
+			return fmt.Errorf("look up checksum for %s: %w", name, err)
+		case recorded != checksum:
+			drifted = append(drifted, name)
+		}
+	}
+
+	if len(drifted) > 0 {
+		sort.Strings(drifted)
+		return fmt.Errorf(
+			"schema drift detected: already-applied migration(s) %s were modified on disk after being applied - "+
+				"add a new migration instead of editing one that's already been run, or if this environment's "+
+				"database is disposable, reset it and let migrations re-apply from scratch",
+			strings.Join(drifted, ", "),
+		)
 	}
 	return nil
 }

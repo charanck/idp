@@ -1,6 +1,9 @@
 package model
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // ListFilter filters Repository.List.
 type ListFilter struct {
@@ -15,4 +18,7 @@ type Repository interface {
 	List(ctx context.Context, filter ListFilter) ([]Activity, error)
 	DistinctResources(ctx context.Context) ([]string, error)
 	DistinctTypes(ctx context.Context) ([]string, error)
+	// DeleteOlderThan hard-deletes activity entries recorded before the
+	// given time, for the monthly retention cleanup (internal/cleanup).
+	DeleteOlderThan(ctx context.Context, before time.Time) error
 }

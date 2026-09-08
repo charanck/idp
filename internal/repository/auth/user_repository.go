@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -63,6 +64,7 @@ func (r *gormUserRepository) UpdatePassword(ctx context.Context, id uuid.UUID, h
 	return r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Updates(map[string]any{
 		"password":             hashedPassword,
 		"force_password_reset": false,
+		"password_changed_at":  time.Now().UTC(),
 	}).Error
 }
 

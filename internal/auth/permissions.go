@@ -19,6 +19,7 @@ const (
 	ModuleGroups               = "groups"
 	ModuleOAuthProviders       = "oauth_providers"
 	ModulePolicies             = "policies"
+	ModuleBranding             = "branding"
 	ModuleNotificationSettings = "notification_settings"
 	ModuleActivityLog          = "activity_log"
 )
@@ -35,6 +36,7 @@ var AllModules = []string{
 	ModuleGroups,
 	ModuleOAuthProviders,
 	ModulePolicies,
+	ModuleBranding,
 	ModuleNotificationSettings,
 	ModuleActivityLog,
 }

@@ -533,6 +533,32 @@ func (f *fakePolicyRepository) Update(ctx context.Context, policy *authmodel.Pol
 	return nil
 }
 
+// fakeBrandingRepository is an in-memory authmodel.BrandingRepository,
+// mirroring migration 00009's singleton branding row (id=1, empty defaults).
+type fakeBrandingRepository struct {
+	mu       sync.Mutex
+	branding authmodel.Branding
+}
+
+func newFakeBrandingRepository() *fakeBrandingRepository {
+	return &fakeBrandingRepository{branding: authmodel.Branding{ID: 1}}
+}
+
+func (f *fakeBrandingRepository) Get(ctx context.Context) (*authmodel.Branding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	cp := f.branding
+	return &cp, nil
+}
+
+func (f *fakeBrandingRepository) Update(ctx context.Context, branding *authmodel.Branding) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	branding.ID = 1
+	f.branding = *branding
+	return nil
+}
+
 // fakeOIDCSigningKeyRepository is an in-memory authmodel.OIDCSigningKeyRepository.
 type fakeOIDCSigningKeyRepository struct {
 	mu  sync.Mutex
@@ -599,4 +625,15 @@ func (f *fakeOIDCAuthorizationCodeRepository) FindAndConsume(ctx context.Context
 	f.codes[code] = authCode
 	cp := authCode
 	return &cp, nil
+}
+
+func (f *fakeOIDCAuthorizationCodeRepository) DeleteExpired(ctx context.Context, before time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for code, authCode := range f.codes {
+		if authCode.ExpiresAt.Before(before) {
+			delete(f.codes, code)
+		}
+	}
+	return nil
 }

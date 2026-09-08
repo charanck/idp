@@ -2,22 +2,49 @@ package pages
 
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
+import "strconv"
 
 type PoliciesFormData struct {
-	CSRFToken                      string
+	CSRFToken string
+	Error     string
+
 	SelfRegistrationAllowedDomains string
-	Error                          string
+
+	PasswordMinLength     int
+	PasswordRequireUpper  bool
+	PasswordRequireLower  bool
+	PasswordRequireDigit  bool
+	PasswordRequireSymbol bool
+	PasswordMaxAgeDays    int
+
+	MaxFailedLoginAttempts int
+	LockoutDurationMinutes int
+
+	SessionIdleTimeoutMinutes int
+
+	SSOOnly          bool
+	LoginIPAllowlist string
 }
 
 templ PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFormData) {
 	@layout.Base("Policies", "policies", user, flashes) {
-		<h2>Policies</h2>
-		<article class="form-card-lg">
-			if data.Error != "" {
-				<div class="alert alert-danger">{ data.Error }</div>
-			}
-			<form method="post" action="/policies/">
-				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+		<h2>Policies <span class="badge badge-alpha">Alpha</span></h2>
+		if data.Error != "" {
+			<div class="alert alert-danger">{ data.Error }</div>
+		}
+		<form
+			method="post"
+			action="/policies/"
+			hx-post="/policies/"
+			hx-target="this"
+			hx-select="form.policies-form"
+			hx-swap="outerHTML"
+			class="policies-form"
+		>
+			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+
+			<article class="form-card-lg">
+				<h3>Registration</h3>
 				<label for="self_registration_allowed_domains">
 					Self-Registration Allowed Domains
 					<input
@@ -29,10 +56,111 @@ templ PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFo
 					/>
 					<small>Comma-separated list of email domains allowed to self-register. Leave blank to allow any domain.</small>
 				</label>
-				<div class="form-actions">
-					<button type="submit">Save</button>
-				</div>
-			</form>
-		</article>
+			</article>
+
+			<article class="form-card-lg">
+				<h3>Password Policy</h3>
+				<label for="password_min_length">
+					Minimum Length
+					<input
+						type="number"
+						min="0"
+						id="password_min_length"
+						name="password_min_length"
+						value={ strconv.Itoa(data.PasswordMinLength) }
+					/>
+				</label>
+				<label class="form-check">
+					<input type="checkbox" name="password_require_upper" checked?={ data.PasswordRequireUpper }/>
+					Require an uppercase letter
+				</label>
+				<label class="form-check">
+					<input type="checkbox" name="password_require_lower" checked?={ data.PasswordRequireLower }/>
+					Require a lowercase letter
+				</label>
+				<label class="form-check">
+					<input type="checkbox" name="password_require_digit" checked?={ data.PasswordRequireDigit }/>
+					Require a digit
+				</label>
+				<label class="form-check">
+					<input type="checkbox" name="password_require_symbol" checked?={ data.PasswordRequireSymbol }/>
+					Require a symbol
+				</label>
+				<label for="password_max_age_days">
+					Password Expiry (days)
+					<input
+						type="number"
+						min="0"
+						id="password_max_age_days"
+						name="password_max_age_days"
+						value={ strconv.Itoa(data.PasswordMaxAgeDays) }
+					/>
+					<small>0 means passwords never expire.</small>
+				</label>
+			</article>
+
+			<article class="form-card-lg">
+				<h3>Account Lockout</h3>
+				<label for="max_failed_login_attempts">
+					Max Failed Login Attempts
+					<input
+						type="number"
+						min="0"
+						id="max_failed_login_attempts"
+						name="max_failed_login_attempts"
+						value={ strconv.Itoa(data.MaxFailedLoginAttempts) }
+					/>
+					<small>0 disables account lockout.</small>
+				</label>
+				<label for="lockout_duration_minutes">
+					Lockout Duration (minutes)
+					<input
+						type="number"
+						min="0"
+						id="lockout_duration_minutes"
+						name="lockout_duration_minutes"
+						value={ strconv.Itoa(data.LockoutDurationMinutes) }
+					/>
+				</label>
+			</article>
+
+			<article class="form-card-lg">
+				<h3>Session</h3>
+				<label for="session_idle_timeout_minutes">
+					Idle Timeout (minutes)
+					<input
+						type="number"
+						min="0"
+						id="session_idle_timeout_minutes"
+						name="session_idle_timeout_minutes"
+						value={ strconv.Itoa(data.SessionIdleTimeoutMinutes) }
+					/>
+					<small>0 disables idle timeout; the session cookie's own expiry still applies.</small>
+				</label>
+			</article>
+
+			<article class="form-card-lg">
+				<h3>Login Restrictions</h3>
+				<label class="form-check">
+					<input type="checkbox" name="sso_only" checked?={ data.SSOOnly }/>
+					SSO-only (disable email/password login)
+				</label>
+				<label for="login_ip_allowlist">
+					Login IP Allow-list
+					<input
+						type="text"
+						id="login_ip_allowlist"
+						name="login_ip_allowlist"
+						placeholder="203.0.113.0/24, 198.51.100.7"
+						value={ data.LoginIPAllowlist }
+					/>
+					<small>Comma-separated list of allowed IPs/CIDRs. Leave blank to allow any IP.</small>
+				</label>
+			</article>
+
+			<div class="form-actions">
+				<button type="submit">Save</button>
+			</div>
+		</form>
 	}
 }

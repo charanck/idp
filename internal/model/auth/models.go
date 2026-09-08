@@ -27,8 +27,17 @@ type User struct {
 	IsActive           bool       `gorm:"column:is_active"`
 	DateJoined         time.Time  `gorm:"column:date_joined"`
 	ForcePasswordReset bool       `gorm:"column:force_password_reset"`
+	FailedLoginCount   int        `gorm:"column:failed_login_count"`
+	LockedUntil        *time.Time `gorm:"column:locked_until"`
+	PasswordChangedAt  *time.Time `gorm:"column:password_changed_at"`
 	CreatedAt          time.Time  `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt          time.Time  `gorm:"column:updated_at;autoUpdateTime"`
+}
+
+// IsLocked reports whether the account is currently locked out from failed
+// login attempts (see Policy.MaxFailedLoginAttempts/LockoutDurationMinutes).
+func (u *User) IsLocked(now time.Time) bool {
+	return u.LockedUntil != nil && u.LockedUntil.After(now)
 }
 
 func (User) TableName() string { return "users" }

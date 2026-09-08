@@ -156,7 +156,7 @@ func (h *ConfigHandler) List(c echo.Context) error {
 	}
 
 	return pages.ConfigsList(flashes(c), navUser(c), pages.ConfigsListData{
-		Groups: page.Items, Applications: apps, EnvironmentsByAppJSON: envJSON,
+		Groups: page.Items, CSRFToken: csrfToken(c), Applications: apps, EnvironmentsByAppJSON: envJSON,
 		CurrentAppID: appIDFilter, CurrentEnvID: envIDFilter, CurrentQ: q, CurrentSecret: secretFilter,
 		Page: page.Number, NumPages: page.NumPages, HasPrev: page.HasPrevious, HasNext: page.HasNext,
 		PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
@@ -428,6 +428,9 @@ func (h *ConfigHandler) Delete(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 	h.activity.LogDelete(requestContext(c), "config", id, entry.Key, nil)
+	if IsHXRequest(c) {
+		return c.NoContent(http.StatusOK)
+	}
 	AddFlash(c, "success", "Config deleted.")
 	return c.Redirect(http.StatusFound, "/configs/")
 }

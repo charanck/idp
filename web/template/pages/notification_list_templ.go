@@ -75,7 +75,7 @@ func NotificationList(flashes []session.Flash, user layout.NavUser, data Notific
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Notifications</h2><form method=\"get\" class=\"filter-bar\"><div><label for=\"application_id\">Application</label> <select id=\"application_id\" name=\"application_id\"><option value=\"\">All applications</option> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Notifications <span class=\"badge badge-alpha\">Alpha</span></h2><form method=\"get\" class=\"filter-bar\"><div><label for=\"application_id\">Application</label> <select id=\"application_id\" name=\"application_id\"><option value=\"\">All applications</option> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -24,10 +24,20 @@ templ ClientsList(flashes []session.Flash, user layout.NavUser, data ClientsList
 			<h2>Service Clients</h2>
 			<a role="button" href="/clients/create/"><i class="bi bi-plus-lg"></i> New Client</a>
 		</div>
-		<form method="get" class="filter-bar">
+		<form
+			method="get"
+			class="filter-bar"
+			hx-get="/clients/"
+			hx-trigger="change, keyup[key=='Enter'] from:#q, keyup changed delay:400ms from:#q"
+			hx-target="#clients-results"
+			hx-select="#clients-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-indicator="#clients-loading"
+		>
 			<div>
 				<label for="q">Search</label>
-				<input type="text" id="q" name="q" placeholder="Client name" value={ data.CurrentQ }/>
+				<input type="text" id="q" name="q" placeholder="Client name" value={ data.CurrentQ } autocomplete="off"/>
 			</div>
 			<div>
 				<label for="status">Status</label>
@@ -38,41 +48,44 @@ templ ClientsList(flashes []session.Flash, user layout.NavUser, data ClientsList
 				</select>
 			</div>
 			<button type="submit" class="btn-sm secondary">Filter</button>
+			<span id="clients-loading" class="htmx-indicator"><i class="bi bi-arrow-repeat"></i> Loading…</span>
 		</form>
-		<article class="card">
-			<table>
-				<thead><tr><th>Name</th><th>API Key ID</th><th>Status</th><th class="actions">Actions</th></tr></thead>
-				<tbody>
-					if len(data.Clients) == 0 {
-						<tr><td colspan="4">No service clients found.</td></tr>
-					}
-					for _, client := range data.Clients {
-						<tr>
-							<td>{ client.Name }</td>
-							<td><code>
-								if client.APIKeyID != nil {
-									{ *client.APIKeyID }
-								} else {
-									-
-								}
-							</code></td>
-							<td>
-								if client.IsActive {
-									<span class="badge badge-success">Active</span>
-								} else {
-									<span class="badge badge-secondary">Inactive</span>
-								}
-							</td>
-							<td class="actions">
-								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/clients/" + client.ID.String() + "/") }>View</a>
-								<a role="button" class="btn-sm outline secondary" href={ templ.URL("/clients/" + client.ID.String() + "/edit/") }>Edit</a>
-							</td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		</article>
-		@PaginationNav("/clients/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		<div id="clients-results">
+			<article class="card">
+				<table>
+					<thead><tr><th>Name</th><th>API Key ID</th><th>Status</th><th class="actions">Actions</th></tr></thead>
+					<tbody>
+						if len(data.Clients) == 0 {
+							<tr><td colspan="4">No service clients found.</td></tr>
+						}
+						for _, client := range data.Clients {
+							<tr>
+								<td>{ client.Name }</td>
+								<td><code>
+									if client.APIKeyID != nil {
+										{ *client.APIKeyID }
+									} else {
+										-
+									}
+								</code></td>
+								<td>
+									if client.IsActive {
+										<span class="badge badge-success">Active</span>
+									} else {
+										<span class="badge badge-secondary">Inactive</span>
+									}
+								</td>
+								<td class="actions">
+									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/clients/" + client.ID.String() + "/") }>View</a>
+									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/clients/" + client.ID.String() + "/edit/") }>Edit</a>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</article>
+			@PaginationNav("/clients/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		</div>
 	}
 }
 
@@ -180,7 +193,7 @@ templ ClientDetail(flashes []session.Flash, user layout.NavUser, data ClientDeta
 			</div>
 			if data.IsAuthApplication {
 				<div class="table-scroll">
-					<h4>OIDC Identity Provider Endpoints</h4>
+					<h4>OIDC Identity Provider Endpoints <span class="badge badge-alpha">Alpha</span></h4>
 					<table>
 						<tbody>
 							<tr><th>Client ID</th><td><code>{ data.APIKeyID }</code></td></tr>
@@ -236,21 +249,9 @@ templ ClientEdit(flashes []session.Flash, user layout.NavUser, data ClientEditDa
 			}
 			<form method="post" action={ templ.URL(data.Action) }>
 				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				@ApplicationMultiselect("client-apps", "application_ids", "Config/Flag Application Access", data.Applications, data.SelectedApplicationIDs)
 				<fieldset>
-					<legend>Config/Flag Application Access (none selected = unrestricted)</legend>
-					for _, app := range data.Applications {
-						<label class="checkbox-inline">
-							if data.SelectedApplicationIDs[app.ID] {
-								<input type="checkbox" name="application_ids" value={ app.ID } checked/>
-							} else {
-								<input type="checkbox" name="application_ids" value={ app.ID }/>
-							}
-							{ app.Name }
-						</label>
-					}
-				</fieldset>
-				<fieldset>
-					<legend>Identity Provider (OIDC)</legend>
+					<legend>Identity Provider (OIDC) <span class="badge badge-alpha">Alpha</span></legend>
 					<label class="checkbox-inline">
 						if data.IsAuthApplication {
 							<input type="checkbox" name="is_auth_application" checked/>

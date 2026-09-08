@@ -11,16 +11,25 @@ import (
 // how base.html's context processors expose request.user everywhere.
 func navUser(c echo.Context) layout.NavUser {
 	sess := session.FromContext(c)
+	branding := BrandingFromContext(c)
 	user := CurrentUser(c)
 	if user == nil {
-		return layout.NavUser{CSRFToken: sess.CSRFToken()}
+		return layout.NavUser{
+			CSRFToken:   sess.CSRFToken(),
+			ProductName: branding.ProductName,
+			LogoURL:     branding.LogoURL,
+			AccentColor: branding.AccentColor,
+		}
 	}
 	return layout.NavUser{
-		LoggedIn:  true,
-		Email:     user.Email,
-		IsStaff:   user.IsStaff,
-		Modules:   EffectivePermissionsFromContext(c).Modules,
-		CSRFToken: sess.CSRFToken(),
+		LoggedIn:    true,
+		Email:       user.Email,
+		IsStaff:     user.IsStaff,
+		Modules:     EffectivePermissionsFromContext(c).Modules,
+		CSRFToken:   sess.CSRFToken(),
+		ProductName: branding.ProductName,
+		LogoURL:     branding.LogoURL,
+		AccentColor: branding.AccentColor,
 	}
 }
 

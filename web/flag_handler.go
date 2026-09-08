@@ -243,6 +243,11 @@ func (h *FlagHandler) Toggle(c echo.Context) error {
 	}
 
 	h.activity.LogToggle(requestContext(c), "feature_flag", flag.ID.String(), flag.Name, map[string]any{"is_enabled": flag.IsEnabled})
+	if IsHXRequest(c) {
+		return pages.FlagRow(csrfToken(c), pages.FlagGroupEntry{
+			ID: flag.ID.String(), EnvironmentName: existing.Environment.Name, IsEnabled: flag.IsEnabled,
+		}).Render(c.Request().Context(), c.Response())
+	}
 	AddFlash(c, "success", "Feature flag toggled.")
 	return c.Redirect(http.StatusFound, "/flags/")
 }
@@ -275,6 +280,9 @@ func (h *FlagHandler) Delete(c echo.Context) error {
 		return err
 	}
 	h.activity.LogDelete(requestContext(c), "feature_flag", flag.ID.String(), flag.Name, nil)
+	if IsHXRequest(c) {
+		return c.NoContent(http.StatusOK)
+	}
 	AddFlash(c, "success", "Feature flag deleted.")
 	return c.Redirect(http.StatusFound, "/flags/")
 }

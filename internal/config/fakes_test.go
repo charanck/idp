@@ -170,6 +170,49 @@ func (f *fakeApplicationRepository) ListDistinctNames(ctx context.Context) ([]st
 	return names, nil
 }
 
+// fakeApplicationDomainRepository is an in-memory configmodel.ApplicationDomainRepository.
+type fakeApplicationDomainRepository struct {
+	mu    sync.Mutex
+	hosts map[string]uuid.UUID // host -> applicationID
+}
+
+func newFakeApplicationDomainRepository() *fakeApplicationDomainRepository {
+	return &fakeApplicationDomainRepository{hosts: make(map[string]uuid.UUID)}
+}
+
+func (f *fakeApplicationDomainRepository) ListHosts(ctx context.Context, applicationID uuid.UUID) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for host, id := range f.hosts {
+		if id == applicationID {
+			out = append(out, host)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func (f *fakeApplicationDomainRepository) SetHosts(ctx context.Context, applicationID uuid.UUID, hosts []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for host, id := range f.hosts {
+		if id == applicationID {
+			delete(f.hosts, host)
+		}
+	}
+	for _, host := range hosts {
+		f.hosts[host] = applicationID
+	}
+	return nil
+}
+
+func (f *fakeApplicationDomainRepository) FindApplicationIDByHost(ctx context.Context, host string) (uuid.UUID, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.hosts[host], nil
+}
+
 // fakeEnvironmentRepository is an in-memory configmodel.EnvironmentRepository.
 type fakeEnvironmentRepository struct {
 	mu   sync.Mutex

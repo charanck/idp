@@ -70,7 +70,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Activity Log</h2><form method=\"get\" class=\"filter-bar\"><div><label for=\"resource\">Resource</label> <select id=\"resource\" name=\"resource\"><option value=\"\">All resources</option> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<h2>Activity Log <span class=\"badge badge-alpha\">Alpha</span></h2><form method=\"get\" class=\"filter-bar\" hx-get=\"/activity/\" hx-trigger=\"change, keyup[key=='Enter'] from:#user, keyup changed delay:400ms from:#user\" hx-target=\"#activity-results\" hx-select=\"#activity-results\" hx-swap=\"outerHTML\" hx-push-url=\"true\" hx-indicator=\"#activity-loading\"><div><label for=\"resource\">Resource</label> <select id=\"resource\" name=\"resource\"><option value=\"\">All resources</option> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -83,7 +83,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 					var templ_7745c5c3_Var3 string
 					templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(r)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 42, Col: 24}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 52, Col: 24}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 					if templ_7745c5c3_Err != nil {
@@ -96,7 +96,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 					var templ_7745c5c3_Var4 string
 					templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(r)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 42, Col: 39}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 52, Col: 39}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 					if templ_7745c5c3_Err != nil {
@@ -114,7 +114,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 					var templ_7745c5c3_Var5 string
 					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(r)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 44, Col: 24}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 54, Col: 24}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 					if templ_7745c5c3_Err != nil {
@@ -127,7 +127,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 					var templ_7745c5c3_Var6 string
 					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(r)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 44, Col: 30}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 54, Col: 30}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 					if templ_7745c5c3_Err != nil {
@@ -152,7 +152,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 					var templ_7745c5c3_Var7 string
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(t)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 55, Col: 24}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 65, Col: 24}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 					if templ_7745c5c3_Err != nil {
@@ -165,7 +165,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(t)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 55, Col: 39}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 65, Col: 39}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
@@ -183,7 +183,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 					var templ_7745c5c3_Var9 string
 					templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(t)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 57, Col: 24}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 67, Col: 24}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 					if templ_7745c5c3_Err != nil {
@@ -196,7 +196,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 					var templ_7745c5c3_Var10 string
 					templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(t)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 57, Col: 30}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 67, Col: 30}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 					if templ_7745c5c3_Err != nil {
@@ -215,13 +215,13 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.CurrentUser)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 64, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 74, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var11)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\"></div><button class=\"btn-sm secondary\" type=\"submit\">Filter</button></form><article class=\"card\"><table><thead><tr><th>When</th><th>Type</th><th>Resource</th><th>Name</th><th>User</th><th>IP</th></tr></thead> <tbody>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "\" autocomplete=\"off\"></div><button class=\"btn-sm secondary\" type=\"submit\">Filter</button> <span id=\"activity-loading\" class=\"htmx-indicator\"><i class=\"bi bi-arrow-repeat\"></i> Loading…</span></form><div id=\"activity-results\"><article class=\"card\"><table><thead><tr><th>When</th><th>Type</th><th>Resource</th><th>Name</th><th>User</th><th>IP</th></tr></thead> <tbody>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -239,7 +239,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(a.Timestamp)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 77, Col: 24}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 89, Col: 25}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -252,7 +252,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(a.Type)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 78, Col: 19}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 90, Col: 20}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {
@@ -265,7 +265,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(a.Resource)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 79, Col: 23}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 91, Col: 24}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -278,7 +278,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(a.ResourceName)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 80, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 92, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -291,7 +291,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 				var templ_7745c5c3_Var16 string
 				templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(a.UserEmail)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 81, Col: 24}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 93, Col: 25}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 				if templ_7745c5c3_Err != nil {
@@ -304,7 +304,7 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 				var templ_7745c5c3_Var17 string
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(a.IPAddress)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 82, Col: 24}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/activity_log.templ`, Line: 94, Col: 25}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
@@ -320,6 +320,10 @@ func ActivityLog(flashes []session.Flash, user layout.NavUser, data ActivityLogD
 				return templ_7745c5c3_Err
 			}
 			templ_7745c5c3_Err = PaginationNav("/activity/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

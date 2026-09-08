@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"golang.org/x/oauth2"
 	"gorm.io/gorm"
 
+	"controlplane/internal/cache"
 	model "controlplane/internal/model/auth"
 )
 
@@ -26,10 +28,25 @@ type OAuthService struct {
 	tokens     model.OAuthUserTokenRepository
 	users      model.UserRepository
 	httpClient *http.Client
+
+	// cache/cacheTimeout back the read-through, version-counter-invalidated
+	// caching of ListProviders, mirroring AuthService's cache pattern.
+	cache        cache.Cache
+	cacheTimeout time.Duration
 }
 
-func NewOAuthService(providers model.OAuthProviderRepository, tokens model.OAuthUserTokenRepository, users model.UserRepository) *OAuthService {
-	return &OAuthService{providers: providers, tokens: tokens, users: users, httpClient: http.DefaultClient}
+func NewOAuthService(providers model.OAuthProviderRepository, tokens model.OAuthUserTokenRepository, users model.UserRepository, c cache.Cache, cacheTimeout time.Duration) *OAuthService {
+	return &OAuthService{providers: providers, tokens: tokens, users: users, httpClient: http.DefaultClient, cache: c, cacheTimeout: cacheTimeout}
+}
+
+const providersCacheVersionKey = "authcache:providers-version"
+
+// invalidateProvidersCache bumps the providers version counter, invalidating
+// every previously cached ListProviders payload.
+func (s *OAuthService) invalidateProvidersCache(ctx context.Context) {
+	if err := s.cache.BumpVersion(ctx, providersCacheVersionKey); err != nil {
+		slog.WarnContext(ctx, "failed to invalidate oauth providers cache", "error", err)
+	}
 }
 
 func (s *OAuthService) oauth2Config(provider *model.OAuthProvider, redirectURI string) *oauth2.Config {

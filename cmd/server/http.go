@@ -25,9 +25,24 @@ func newEchoServer(sessions *session.Store) *echo.Echo {
 		e.Use(otelecho.Middleware(observability.ServiceName))
 	}
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogStatus: true, LogURI: true, LogMethod: true, LogLatency: true,
+		LogStatus: true, LogURI: true, LogMethod: true, LogLatency: true, LogRemoteIP: true, LogError: true,
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			slog.Info("request", "method", v.Method, "uri", v.URI, "status", v.Status, "latency", v.Latency)
+			// Uses the request's own context (not context.Background()) so a
+			// span started by otelecho.Middleware above is still attached,
+			// letting OTEL correlate this log line with its trace/span ID.
+			ctx := c.Request().Context()
+			attrs := []any{"method", v.Method, "uri", v.URI, "status", v.Status, "latency", v.Latency, "remote_ip", v.RemoteIP}
+			if v.Error != nil {
+				attrs = append(attrs, "err", v.Error)
+			}
+			switch {
+			case v.Status >= 500 || v.Error != nil:
+				slog.ErrorContext(ctx, "request", attrs...)
+			case v.Status >= 400:
+				slog.WarnContext(ctx, "request", attrs...)
+			default:
+				slog.InfoContext(ctx, "request", attrs...)
+			}
 			return nil
 		},
 	}))

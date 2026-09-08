@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -24,6 +25,7 @@ type UserStore interface {
 	GetUserByIDAny(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
 	UpdateUserAdmin(ctx context.Context, id uuid.UUID, in auth.UpdateUserAdminInput) (*authmodel.User, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
+	UnlockUser(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
 	ListGroups(ctx context.Context, q string) ([]authmodel.Group, error)
 	UserGroups(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error)
 	SetUserGroups(ctx context.Context, userID uuid.UUID, groupIDs []uuid.UUID) error
@@ -61,7 +63,7 @@ func (h *UserHandler) List(c echo.Context) error {
 		if groupFilter != "" && !containsGroupID(userGroups, groupFilter) {
 			continue
 		}
-		rows = append(rows, pages.UserRow{User: u, Groups: userGroups})
+		rows = append(rows, pages.UserRow{User: u, Groups: userGroups, Locked: u.IsLocked(time.Now())})
 	}
 
 	extra := url.Values{}
@@ -74,7 +76,8 @@ func (h *UserHandler) List(c echo.Context) error {
 
 	page := Paginate(rows, usersPageSize, PageParam(c))
 	return pages.UsersList(flashes(c), navUser(c), pages.UsersListData{
-		Users: page.Items, Groups: groups, CurrentQ: q, CurrentGroup: groupFilter, ExtraQuery: extra.Encode(),
+		CSRFToken: csrfToken(c),
+		Users:     page.Items, Groups: groups, CurrentQ: q, CurrentGroup: groupFilter, ExtraQuery: extra.Encode(),
 		Page: page.Number, NumPages: page.NumPages,
 		HasPrev: page.HasPrevious, HasNext: page.HasNext,
 		PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
@@ -226,7 +229,7 @@ func (h *UserHandler) Edit(c echo.Context) error {
 			CSRFToken: csrfToken(c), Action: "/users/" + target.ID.String() + "/edit/", Title: "Edit User",
 			Email: c.FormValue("email"), Username: c.FormValue("username"),
 			IsActive: c.FormValue("is_active") != "",
-			IsEdit: true, EditingSelf: editingSelf, Error: errMsg,
+			IsEdit:   true, EditingSelf: editingSelf, Error: errMsg,
 			Groups: groups, SelectedGroupIDs: selectedSet(groupIDs),
 		}).Render(ctx, c.Response())
 	}
@@ -313,6 +316,29 @@ func (h *UserHandler) Delete(c echo.Context) error {
 
 	h.activity.LogDelete(requestContext(c), "user", target.ID.String(), target.Email, nil)
 	AddFlash(c, "success", "User "+target.Email+" deleted successfully.")
+	return c.Redirect(http.StatusFound, "/users/")
+}
+
+// Unlock clears a user's account lockout, returning nil if not found.
+func (h *UserHandler) Unlock(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+	target, err := h.users.UnlockUser(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+	if target == nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+
+	h.activity.LogUpdate(requestContext(c), "user", target.ID.String(), target.Email, nil)
+	if IsHXRequest(c) {
+		TriggerToast(c, "success", "User "+target.Email+" unlocked.")
+		return c.NoContent(http.StatusOK)
+	}
+	AddFlash(c, "success", "User "+target.Email+" unlocked.")
 	return c.Redirect(http.StatusFound, "/users/")
 }
 

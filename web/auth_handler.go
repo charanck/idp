@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 type AuthStore interface {
 	AuthenticateUser(ctx context.Context, email, password string) (*authmodel.User, error)
 	SetPassword(ctx context.Context, userID uuid.UUID, hashedPassword string) error
+	GetPolicy(ctx context.Context) (*authmodel.Policy, error)
 }
 
 // OAuthActiveLister feeds the "log in with..." buttons on the login page.
@@ -47,6 +49,18 @@ func NewAuthHandler(auth AuthStore, oauthProviders OAuthActiveLister, limiter Ra
 		auth: auth, oauthProviders: oauthProviders, limiter: limiter, activity: activity,
 		rateLimit: rateLimit, rateLimitWindowSeconds: rateLimitWindowSeconds,
 	}
+}
+
+// loginData fills in the deployment's branding (product name/logo/theme)
+// onto a LoginData value, so every Login re-render (initial GET, validation
+// errors, rate-limit/lockout/SSO rejections) shows the branded login screen.
+func (h *AuthHandler) loginData(c echo.Context, in pages.LoginData) pages.LoginData {
+	branding := BrandingFromContext(c)
+	in.ProductName = branding.ProductName
+	in.LogoURL = branding.LogoURL
+	in.AccentColor = branding.AccentColor
+	in.BackgroundImageURL = branding.BackgroundImageURL
+	return in
 }
 
 func (h *AuthHandler) activeOAuthProviders(ctx context.Context) ([]pages.LoginOAuthProvider, error) {
@@ -80,35 +94,61 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	}
 
 	if c.Request().Method == http.MethodGet {
-		return pages.Login(flashes(c), pages.LoginData{CSRFToken: csrfToken(c), OAuthProviders: providers}).Render(c.Request().Context(), c.Response())
+		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{CSRFToken: csrfToken(c), OAuthProviders: providers})).Render(c.Request().Context(), c.Response())
 	}
 
 	email := c.FormValue("username")
 	password := c.FormValue("password")
 
 	clientIP := ratelimit.ClientIP(c.Request().Header.Get("X-Forwarded-For"), c.RealIP())
+
+	policy, err := h.auth.GetPolicy(c.Request().Context())
+	if err != nil {
+		return err
+	}
+	if !auth.IPAllowed(policy.LoginIPAllowlist, clientIP) {
+		h.activity.LogLoginFailed(requestContext(c), email, "Login rejected: IP not allow-listed")
+		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
+			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
+			Error: "Login is not permitted from this network.",
+		})).Render(c.Request().Context(), c.Response())
+	}
+
 	window := time.Duration(h.rateLimitWindowSeconds) * time.Second
 	limited, err := h.limiter.IsRateLimited(c.Request().Context(), "web-login", clientIP, h.rateLimit, window)
 	if err != nil {
 		return err
 	}
 	if limited {
-		return pages.Login(flashes(c), pages.LoginData{
+		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
 			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
 			Error: "Too many login attempts. Please try again later.",
-		}).Render(c.Request().Context(), c.Response())
+		})).Render(c.Request().Context(), c.Response())
 	}
 
 	user, err := h.auth.AuthenticateUser(c.Request().Context(), email, password)
-	if err != nil {
+	switch {
+	case errors.Is(err, auth.ErrAccountLocked):
+		h.activity.LogLoginFailed(requestContext(c), email, "Login rejected: account locked")
+		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
+			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
+			Error: "This account is temporarily locked due to too many failed login attempts. Try again later.",
+		})).Render(c.Request().Context(), c.Response())
+	case errors.Is(err, auth.ErrPasswordAuthDisabled):
+		h.activity.LogLoginFailed(requestContext(c), email, "Login rejected: SSO-only policy")
+		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
+			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
+			Error: "Password login is disabled. Please sign in with SSO.",
+		})).Render(c.Request().Context(), c.Response())
+	case err != nil:
 		return err
 	}
 	if user == nil {
 		h.activity.LogLoginFailed(requestContext(c), email, "Invalid web login attempt")
-		return pages.Login(flashes(c), pages.LoginData{
+		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
 			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
 			Error: "Invalid email or password.",
-		}).Render(c.Request().Context(), c.Response())
+		})).Render(c.Request().Context(), c.Response())
 	}
 
 	sess := session.FromContext(c)
@@ -118,6 +158,10 @@ func (h *AuthHandler) Login(c echo.Context) error {
 
 	if user.ForcePasswordReset {
 		AddFlash(c, "warning", "You must change your password before continuing.")
+		return c.Redirect(http.StatusFound, "/password/change/")
+	}
+	if auth.IsPasswordExpired(policy, user.PasswordChangedAt, time.Now().UTC()) {
+		AddFlash(c, "warning", "Your password has expired. Please choose a new one.")
 		return c.Redirect(http.StatusFound, "/password/change/")
 	}
 
@@ -157,6 +201,11 @@ func (h *AuthHandler) PasswordChange(c echo.Context) error {
 	newPassword1 := c.FormValue("new_password1")
 	newPassword2 := c.FormValue("new_password2")
 
+	policy, err := h.auth.GetPolicy(c.Request().Context())
+	if err != nil {
+		return err
+	}
+
 	var errs []string
 	if !forceReset && !security.VerifyPassword(oldPassword, user.Password) {
 		errs = append(errs, "Current password is incorrect.")
@@ -164,8 +213,8 @@ func (h *AuthHandler) PasswordChange(c echo.Context) error {
 	if newPassword1 != newPassword2 {
 		errs = append(errs, "New passwords do not match.")
 	}
-	if len(newPassword1) < 8 {
-		errs = append(errs, "New password must be at least 8 characters.")
+	if err := auth.ValidatePasswordAgainstPolicy(policy, newPassword1); err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	if len(errs) > 0 {

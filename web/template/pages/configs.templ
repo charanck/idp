@@ -25,6 +25,7 @@ type ConfigGroupEntry struct {
 
 type ConfigsListData struct {
 	Groups                []ConfigGroup
+	CSRFToken             string
 	Applications          []configmodel.Application
 	EnvironmentsByAppJSON string
 	CurrentAppID          string
@@ -47,7 +48,17 @@ templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsList
 			<h2>Configs &amp; Secrets</h2>
 			<a role="button" href="/configs/create/"><i class="bi bi-plus-lg"></i> New Config</a>
 		</div>
-		<form method="get" class="filter-bar">
+		<form
+			method="get"
+			class="filter-bar"
+			hx-get="/configs/"
+			hx-trigger="change, keyup[key=='Enter'] from:#q, keyup changed delay:400ms from:#q"
+			hx-target="#configs-results"
+			hx-select="#configs-results"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+			hx-indicator="#configs-loading"
+		>
 			<div>
 				<label for="filter_application">Application</label>
 				<select id="filter_application" name="application_id">
@@ -77,49 +88,61 @@ templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsList
 			</div>
 			<div>
 				<label for="q">Key</label>
-				<input type="text" id="q" name="q" placeholder="Key" value={ data.CurrentQ }/>
+				<input type="text" id="q" name="q" placeholder="Key" value={ data.CurrentQ } autocomplete="off"/>
 			</div>
 			<button type="submit" class="btn-sm secondary">Filter</button>
+			<span id="configs-loading" class="htmx-indicator"><i class="bi bi-arrow-repeat"></i> Loading…</span>
 		</form>
-		if len(data.Groups) == 0 {
-			<div class="alert alert-secondary">No configs found.</div>
-		}
-		for _, group := range data.Groups {
-			<article class="card">
-				<header>
-					<strong>{ group.ApplicationName }</strong> / { group.Key }
-					if group.IsSecret {
-						<span class="badge badge-warning">Secret</span>
-					} else {
-						<span class="badge badge-secondary">Config</span>
-					}
-					<span class="badge badge-info">{ group.Type }</span>
-				</header>
-				<table>
-					<tbody>
-						for _, entry := range group.Entries {
-							<tr>
-								<td class="col-env">{ entry.EnvironmentName }</td>
-								<td class="truncate max-w-xs">
-									if group.IsSecret {
-										<code>••••••••</code>
-									} else {
-										<code>{ entry.DisplayValue }</code>
-									}
-								</td>
-								<td class="actions">
-									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/history/") }>History</a>
-									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/clone/") }>Clone</a>
-									<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/edit/") }>Edit</a>
-									<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/configs/" + entry.ID + "/delete/") }>Delete</a>
-								</td>
-							</tr>
+		<div id="configs-results">
+			if len(data.Groups) == 0 {
+				<div class="alert alert-secondary">No configs found.</div>
+			}
+			for _, group := range data.Groups {
+				<article class="card">
+					<header>
+						<strong>{ group.ApplicationName }</strong> / { group.Key }
+						if group.IsSecret {
+							<span class="badge badge-warning">Secret</span>
+						} else {
+							<span class="badge badge-secondary">Config</span>
 						}
-					</tbody>
-				</table>
-			</article>
-		}
-		@PaginationNav("/configs/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+						<span class="badge badge-info">{ group.Type }</span>
+					</header>
+					<table>
+						<tbody>
+							for _, entry := range group.Entries {
+								<tr id={ "config-row-" + entry.ID }>
+									<td class="col-env">{ entry.EnvironmentName }</td>
+									<td class="truncate max-w-xs">
+										if group.IsSecret {
+											<code>••••••••</code>
+										} else {
+											<code>{ entry.DisplayValue }</code>
+										}
+									</td>
+									<td class="actions">
+										<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/history/") }>History</a>
+										<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/clone/") }>Clone</a>
+										<a role="button" class="btn-sm outline secondary" href={ templ.URL("/configs/" + entry.ID + "/edit/") }>Edit</a>
+										<a
+											role="button"
+											class="btn-sm btn-danger outline"
+											href={ templ.URL("/configs/" + entry.ID + "/delete/") }
+											hx-post={ "/configs/" + entry.ID + "/delete/" }
+											hx-vals={ "{\"csrf_token\":\"" + data.CSRFToken + "\"}" }
+											hx-confirm="Delete this config? Its version history will be deleted too."
+											hx-target={ "#config-row-" + entry.ID }
+											hx-swap="outerHTML swap:200ms"
+										>Delete</a>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</article>
+			}
+			@PaginationNav("/configs/", data.ExtraQuery, data.Page, data.NumPages, data.HasPrev, data.HasNext, data.PrevNum, data.NextNum, data.Window)
+		</div>
 		@templ.JSONScript("environments-by-application", json.RawMessage(data.EnvironmentsByAppJSON))
 		<script>
 			(function() {

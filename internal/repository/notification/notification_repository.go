@@ -131,4 +131,8 @@ func (r *gormNotificationRepository) MarkFailed(ctx context.Context, id uuid.UUI
 		}).Error
 }
 
+func (r *gormNotificationRepository) DeleteOlderThan(ctx context.Context, before time.Time) error {
+	return r.db.WithContext(ctx).Where("created_at < ?", before).Delete(&model.Notification{}).Error
+}
+
 var _ model.NotificationRepository = (*gormNotificationRepository)(nil)

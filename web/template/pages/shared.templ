@@ -26,6 +26,45 @@ templ ConfirmDelete(flashes []session.Flash, user layout.NavUser, activeNav stri
 	}
 }
 
+// ApplicationMultiselect renders a searchable, chip-style multiselect for
+// picking Applications, used by both the Group form's "Application Access"
+// fieldset and the Service Client edit form's "Config/Flag Application
+// Access" fieldset. It's backed by real `<input type="checkbox" name={name}>`
+// elements - the source of truth for form submission, so it still works as a
+// plain checkbox list with JS disabled - progressively enhanced by the
+// `multiselect` Alpine component (see /static/app.js) for search-filtering
+// and a "selected as chips" summary. id must be unique on the page (used as
+// the DOM id prefix for the JSON islands the Alpine component reads its
+// initial data from).
+templ ApplicationMultiselect(id string, name string, legend string, options []GroupApplicationOption, selectedIDs map[string]bool) {
+	<fieldset>
+		<legend>{ legend } (none selected = unrestricted)</legend>
+		@templ.JSONScript(id+"-options", multiselectOptions(options))
+		@templ.JSONScript(id+"-selected", multiselectSelected(options, selectedIDs))
+		<div class="multiselect" x-data={ "multiselect('" + id + "-options', '" + id + "-selected')" }>
+			<div class="multiselect-chips">
+				<template x-for="appID in selected" x-bind:key="appID">
+					<span class="multiselect-chip">
+						<span x-text="label(appID)"></span>
+						<button type="button" x-on:click="remove(appID)" aria-label="Remove">&times;</button>
+					</span>
+				</template>
+			</div>
+			<div class="multiselect-empty" x-show="selected.length === 0">None selected.</div>
+			<input type="text" x-model="query" placeholder="Search applications…" autocomplete="off"/>
+			<div class="multiselect-options">
+				<template x-for="opt in filtered()" x-bind:key="opt.id">
+					<label class="multiselect-option" x-bind:class="{ 'is-selected': selected.includes(opt.id) }">
+						<input type="checkbox" name={ name } x-bind:value="opt.id" x-model="selected"/>
+						<span x-text="opt.name"></span>
+					</label>
+				</template>
+				<div class="multiselect-option-empty" x-show="filtered().length === 0">No matching applications.</div>
+			</div>
+		</div>
+	</fieldset>
+}
+
 // PaginationNav renders page links for a Page[T], preserving any existing
 // filter query string (extraQuery, e.g. "resource=foo&type=bar") alongside
 // the "page" param.

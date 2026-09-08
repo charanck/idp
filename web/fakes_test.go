@@ -41,7 +41,7 @@ func newSessionStore(t *testing.T) *session.Store {
 	t.Cleanup(mr.Close)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { rdb.Close() })
-	return session.NewStore(rdb, "unit-test-secret", 0)
+	return session.NewStore(rdb, "unit-test-secret", 0, "")
 }
 
 // callHandler drives fn through the same session-loading (and, if user is
@@ -85,7 +85,7 @@ func callHandlerWithParams(t *testing.T, store *session.Store, method, target st
 	if user != nil {
 		loader[user.ID] = *user
 	}
-	authMW := web.NewAuthMiddleware(loader, fakeGroupPermissionLoader{})
+	authMW := web.NewAuthMiddleware(loader, fakeGroupPermissionLoader{}, fakePolicyLoader{}, fakeBrandingLoader{})
 
 	handler := store.Middleware()(func(c echo.Context) error {
 		if user != nil {
@@ -124,6 +124,22 @@ type fakeGroupPermissionLoader struct{}
 
 func (fakeGroupPermissionLoader) UserGroups(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error) {
 	return nil, nil
+}
+
+// fakePolicyLoader implements web.PolicyLoader, returning a zero-value
+// Policy (idle timeout disabled) for handler unit tests.
+type fakePolicyLoader struct{}
+
+func (fakePolicyLoader) GetPolicy(ctx context.Context) (*authmodel.Policy, error) {
+	return &authmodel.Policy{}, nil
+}
+
+// fakeBrandingLoader implements web.BrandingLoader, returning a zero-value
+// Branding (default product name/no logo) for handler unit tests.
+type fakeBrandingLoader struct{}
+
+func (fakeBrandingLoader) GetBranding(ctx context.Context) (*authmodel.Branding, error) {
+	return &authmodel.Branding{}, nil
 }
 
 func (fakeGroupPermissionLoader) GroupApplicationIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
@@ -231,12 +247,13 @@ func (f *fakeAnalyticsReader) RecentSnapshots(ctx context.Context) ([]analyticsm
 
 // fakeApplicationStore implements web.ApplicationStore in-memory.
 type fakeApplicationStore struct {
-	mu   sync.Mutex
-	apps map[uuid.UUID]configmodel.Application
+	mu      sync.Mutex
+	apps    map[uuid.UUID]configmodel.Application
+	domains map[uuid.UUID][]string
 }
 
 func newFakeApplicationStore() *fakeApplicationStore {
-	return &fakeApplicationStore{apps: map[uuid.UUID]configmodel.Application{}}
+	return &fakeApplicationStore{apps: map[uuid.UUID]configmodel.Application{}, domains: map[uuid.UUID][]string{}}
 }
 
 func (f *fakeApplicationStore) put(a configmodel.Application) configmodel.Application {
@@ -315,7 +332,21 @@ func (f *fakeApplicationStore) DeleteApplication(ctx context.Context, id uuid.UU
 		return nil, nil
 	}
 	delete(f.apps, id)
+	delete(f.domains, id)
 	return &a, nil
+}
+
+func (f *fakeApplicationStore) ListApplicationDomains(ctx context.Context, applicationID uuid.UUID) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.domains[applicationID]...), nil
+}
+
+func (f *fakeApplicationStore) SetApplicationDomains(ctx context.Context, applicationID uuid.UUID, hosts []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.domains[applicationID] = append([]string(nil), hosts...)
+	return nil
 }
 
 // fakeEnvironmentStore implements web.EnvironmentStore in-memory.
@@ -993,6 +1024,19 @@ func (f *fakeUserStore) DeleteUser(ctx context.Context, id uuid.UUID) (*authmode
 	return &u, nil
 }
 
+func (f *fakeUserStore) UnlockUser(ctx context.Context, id uuid.UUID) (*authmodel.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	u, ok := f.users[id]
+	if !ok {
+		return nil, nil
+	}
+	u.FailedLoginCount = 0
+	u.LockedUntil = nil
+	f.users[id] = u
+	return &u, nil
+}
+
 func (f *fakeUserStore) ListGroups(ctx context.Context, q string) ([]authmodel.Group, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1057,6 +1101,10 @@ func (f *fakeAuthStore) AuthenticateUser(ctx context.Context, email, password st
 
 func (f *fakeAuthStore) SetPassword(ctx context.Context, userID uuid.UUID, hashedPassword string) error {
 	return nil
+}
+
+func (f *fakeAuthStore) GetPolicy(ctx context.Context) (*authmodel.Policy, error) {
+	return &authmodel.Policy{}, nil
 }
 
 // fakeOAuthActiveLister implements web.OAuthActiveLister.

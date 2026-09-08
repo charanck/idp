@@ -11,6 +11,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"controlplane/internal/auth"
+	"controlplane/internal/cache"
 	authmodel "controlplane/internal/model/auth"
 )
 
@@ -18,7 +19,7 @@ func newTestOAuthService() (*auth.OAuthService, *fakeOAuthProviderRepository, *f
 	providers := newFakeOAuthProviderRepository()
 	tokens := newFakeOAuthUserTokenRepository()
 	users := newFakeUserRepository()
-	return auth.NewOAuthService(providers, tokens, users), providers, tokens, users
+	return auth.NewOAuthService(providers, tokens, users, cache.NewNoopCache(), time.Minute), providers, tokens, users
 }
 
 func TestExchangeCodeForToken_TranslatesProviderRejection(t *testing.T) {

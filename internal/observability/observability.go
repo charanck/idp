@@ -1,19 +1,32 @@
 // Package observability wires up OpenTelemetry traces, metrics, and logs for
 // the server, all exported via OTLP/gRPC to a collector.
 //
-// It is opt-in and controlled by the standard OTEL_EXPORTER_OTLP_ENDPOINT
-// env var: if it's unset, Setup does nothing and leaves the otel SDK's own
-// no-op global providers in place, so running the server (and every existing
-// test) without a collector configured behaves exactly as it did before this
-// package existed. "Off by default, on when a collector is configured" is
-// the safest choice rather than making a collector a hard startup dependency
+// OTLP export is opt-in and controlled by the standard
+// OTEL_EXPORTER_OTLP_ENDPOINT env var: if it's unset, Setup skips the OTLP
+// SDK providers and leaves the otel SDK's own no-op global providers in
+// place, so running the server (and every existing test) without a
+// collector configured behaves exactly as it did before this package
+// existed. "Off by default, on when a collector is configured" is the
+// safest choice rather than making a collector a hard startup dependency
 // the way Postgres and Redis are.
 //
-// Once enabled, per-request/query/command spans, RED-style metrics, and the
-// server's existing log/slog output are all exported over OTLP/gRPC using
-// the standard OTEL_EXPORTER_OTLP_* env vars (endpoint, headers, TLS, etc.)
-// read directly by the exporter constructors - see
+// Structured JSON logging to stdout, however, is always on (this is a dev
+// tool - operators shouldn't need a collector configured just to get
+// leveled, greppable logs). Its minimum level is controlled by LOG_LEVEL
+// (debug/info/warn/error, default debug), independently of whether OTLP
+// export is enabled.
+//
+// Once OTLP export is enabled, per-request/query/command spans, RED-style
+// metrics, and the server's existing log/slog output (still honoring
+// LOG_LEVEL) are additionally exported over OTLP/gRPC using the standard
+// OTEL_EXPORTER_OTLP_* env vars (endpoint, headers, TLS, etc.) read directly
+// by the exporter constructors - see
 // https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/.
+//
+// IMPORTANT: both OTEL_EXPORTER_OTLP_ENDPOINT and LOG_LEVEL are read via
+// os.Getenv at Setup() time, so whatever calls Setup must ensure .env (if
+// used) has already been loaded into the process environment first - see
+// appconfig.LoadDotEnv's doc comment.
 package observability
 
 import (
@@ -21,6 +34,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
@@ -49,17 +63,42 @@ func Enabled() bool {
 	return os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != ""
 }
 
-// Setup initializes the global TracerProvider, MeterProvider, and
-// LoggerProvider and points them at an OTLP/gRPC collector, then bridges
-// log/slog's default logger through the OTEL log pipeline (in addition to,
-// not instead of, its existing stdout output - see newSlogHandler) so
-// existing slog.Info/Warn/Error call sites throughout the codebase are
-// exported as OTEL logs without every call site needing to change.
+// logLevel parses LOG_LEVEL (debug/info/warn/error, case-insensitive).
+// Defaults to Debug: this is a dev tool, and verbose-by-default logging is
+// far more useful for debugging than the Info default Go's slog otherwise
+// picks - operators who want quieter production logs can set
+// LOG_LEVEL=info (or warn) explicitly.
+func logLevel() slog.Level {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
+	case "debug", "":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelDebug
+	}
+}
+
+// Setup always installs a JSON stdout slog handler honoring LOG_LEVEL as the
+// global default logger. If OTEL is enabled (see Enabled), it additionally
+// initializes the global TracerProvider, MeterProvider, and LoggerProvider,
+// points them at an OTLP/gRPC collector, and fans every log record out to
+// the OTEL log pipeline too (in addition to, not instead of, stdout - see
+// newFanoutHandler) so existing slog.Debug/Info/Warn/Error call sites
+// throughout the codebase are exported as OTEL logs without every call site
+// needing to change.
 //
-// If OTEL isn't enabled (see Enabled), Setup is a no-op and returns a no-op
-// shutdown.
+// If OTEL isn't enabled, Setup returns a no-op shutdown once the stdout
+// handler is installed.
 func Setup(ctx context.Context, version string) (Shutdown, error) {
+	stdout := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel()})
+
 	if !Enabled() {
+		slog.SetDefault(slog.New(stdout))
 		return func(context.Context) error { return nil }, nil
 	}
 
@@ -107,7 +146,7 @@ func Setup(ctx context.Context, version string) (Shutdown, error) {
 	logglobal.SetLoggerProvider(loggerProvider)
 
 	slog.SetDefault(slog.New(newFanoutHandler(
-		slog.NewJSONHandler(os.Stdout, nil),
+		stdout,
 		otelslog.NewHandler(ServiceName, otelslog.WithLoggerProvider(loggerProvider)),
 	)))
 

@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/pbkdf2"
 
 	"controlplane/internal/auth"
+	"controlplane/internal/cache"
 	authmodel "controlplane/internal/model/auth"
 	"controlplane/internal/security"
 )
@@ -21,7 +23,8 @@ func newTestAuthService() (*auth.AuthService, *fakeUserRepository, *fakeServiceC
 	clients := newFakeServiceClientRepository()
 	groups := newFakeGroupRepository()
 	policies := newFakePolicyRepository()
-	return auth.NewAuthService(users, clients, groups, policies), users, clients
+	branding := newFakeBrandingRepository()
+	return auth.NewAuthService(users, clients, groups, policies, branding, cache.NewNoopCache(), time.Minute), users, clients
 }
 
 // newTestAuthServiceWithGroups is newTestAuthService plus direct access to
@@ -32,7 +35,8 @@ func newTestAuthServiceWithGroups() (*auth.AuthService, *fakeGroupRepository, *f
 	clients := newFakeServiceClientRepository()
 	groups := newFakeGroupRepository()
 	policies := newFakePolicyRepository()
-	return auth.NewAuthService(users, clients, groups, policies), groups, policies
+	branding := newFakeBrandingRepository()
+	return auth.NewAuthService(users, clients, groups, policies, branding, cache.NewNoopCache(), time.Minute), groups, policies
 }
 
 // legacyPBKDF2Hash builds a hash in the pre-argon2id "pbkdf2_sha256"
@@ -66,7 +70,7 @@ func TestRegisterUser_DomainPolicyRejectsDisallowedDomain(t *testing.T) {
 	svc, _, _ := newTestAuthServiceWithGroups()
 	ctx := context.Background()
 
-	if _, err := svc.UpdatePolicy(ctx, "example.com, other.com"); err != nil {
+	if _, err := svc.UpdatePolicy(ctx, auth.UpdatePolicyInput{SelfRegistrationAllowedDomains: "example.com, other.com"}); err != nil {
 		t.Fatalf("UpdatePolicy: %v", err)
 	}
 
