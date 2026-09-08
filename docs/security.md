@@ -16,12 +16,21 @@ issue. Include reproduction steps and impact; you'll get a response before any p
   through the app (the encryption key can be rotated from the client's detail page if lost).
 - **No public self-registration** — the `/register/` route always redirects to login; new user
   accounts can only be created by an existing admin from the web UI, which also controls whether
-  the new account starts active.
-- **No self privilege-escalation** — admin (`is_staff`) users cannot change their own
-  `is_staff`/`is_active` flags through the web UI; role changes must come from a different admin.
+  the new account starts active and which Group(s) it's placed in.
+- **No self privilege-escalation** — a user cannot change their own active status or group
+  membership through the web UI; those changes must come from a different admin.
+- **Least-privilege by default** — the built-in **User** group grants no module access beyond a
+  user's own profile page; access to configs/flags/etc. is explicit, via the **Developer**/**Admin**
+  groups or a custom group.
+- **Login policy** (**Policies** in the web UI, singleton, admin-only) — password complexity
+  (min length, upper/lower/digit/symbol requirements, max age), account lockout after N failed
+  attempts for a configurable duration, session idle timeout, an optional login IP allow-list, and
+  an SSO-only toggle that disables password login entirely in favor of OAuth/OIDC.
 - **Rate limiting** — brute-force/credential-stuffing protection on `POST /login/`, plus separate
   per-client-IP throttling of S2S API-key requests (every request counts toward the window, not
   just failed ones). See [Configuration](./configuration.md#rate-limiting).
+- **OIDC tokens** — ID/access tokens issued by control-plane's own OIDC Identity Provider are
+  RS256-signed with a per-install signing key generated on first use and stored encrypted at rest.
 
 ## Deployment hygiene
 

@@ -15,6 +15,11 @@ production-ready build:
   Postgres advisory lock (see
   [`internal/db/db.go`](https://github.com/charanck/idp/blob/master/internal/db/db.go)) — safe
   for multiple replicas starting concurrently.
+- Scheduled background work (notification delivery, hourly analytics snapshots, monthly data
+  cleanup) runs as [DBOS](https://github.com/dbos-inc/dbos-transact-golang) durable workflows
+  inside this same process — no separate worker deployment, queue broker, or cron infra needed.
+  DBOS connects to the same Postgres database (`cfg.DSN()`) but manages its own `dbos` schema
+  independently of goose, migrating it synchronously on startup before workflows register.
 
 ```bash
 docker build -t idp:local .

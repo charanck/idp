@@ -12,11 +12,17 @@ a master key, then re-encrypted per-client on read. Built on [Echo](https://echo
 owns the schema via `internal/db/migrations/`), and [templ](https://templ.guide/) for
 server-rendered HTML. See the Architecture section below for package-by-package detail.
 
-Access control is Group-based: every `User` belongs to one or more `Group`s (built-in **Admin**
-and **User**, plus admin-creatable custom groups), each granting a coarse set of module
-permissions and an optional Application allow-list; `User.IsStaff`/`IsSuperuser` remain as DB
-columns for legacy/back-compat but are no longer read for gating. Service clients, users, configs,
-secrets, and feature flags are all managed through the session-authenticated web UI.
+Access control is Group-based: every `User` belongs to one or more `Group`s — built-in **Admin**
+(every module), **Developer** (`dashboard`, `configs`, `flags`), and **User** (no module access
+beyond their own profile; the default for new accounts) — plus admin-creatable custom groups, each
+granting a coarse set of module permissions and an optional Application allow-list.
+`User.IsStaff`/`IsSuperuser` remain as DB columns for legacy/back-compat but are no longer read for
+gating. Service clients, users, groups, configs, secrets, feature flags, and notification settings
+are all managed through the session-authenticated web UI.
+
+Scheduled background work (notification delivery, hourly analytics snapshots, monthly data
+cleanup) runs as [DBOS](https://github.com/dbos-inc/dbos-transact-golang) durable workflows inside
+the same `cmd/server` process — no separate worker process or queue infra to deploy.
 
 Beyond S2S API-key auth for reading configs/flags, this control-plane is also an OAuth2/OIDC
 **Identity Provider** for other applications: an "auth application" (a `ServiceClient` with
@@ -66,28 +72,38 @@ Package layout under `internal/`, each with a narrow role:
 |---|---|
 | `appconfig` | Loads runtime configuration from environment variables. |
 | `db` | Schema management. GORM is a query layer only; goose (`internal/db/migrations`) owns the schema. `Migrate` runs on every startup, guarded by a Postgres advisory lock. |
-| `auth` | `User` (custom, email-based login, UUID PK, `ForcePasswordReset` flag), `Group` (the access-control primitive — module permissions + Application allow-list, unioned across a user's groups via `ComputeEffectivePermissions`), `Policy` (singleton login policies, e.g. self-registration email-domain allow-list), `ServiceClient` (S2S API-key holder + per-client Fernet `EncryptionKey`; also doubles as an OIDC `client_id`/`client_secret` when `IsAuthApplication`), OAuth2/OIDC login models, and `AuthService`/`OAuthService`/`OIDCService`. `OAuthService` is control-plane-as-relying-party (logging control-plane's own users in via an external IdP); `OIDCService` is control-plane-as-Identity-Provider (RS256 JWKS, authorization codes, token issuance for other applications) — unrelated, independent flows. |
-| `config` | `Application` → `Environment` (unique per app) → `ConfigEntry` (unique per app+env+key; secrets are just `IsSecret=true` entries) and `FeatureFlag` (same app+env scoping, soft-deleted). `ConfigEntryVersion` is an immutable snapshot written on every create/update/delete/rollback of a `ConfigEntry`. `Activity` is an append-only audit log. `ConfigService`/`FeatureFlagService` both **get-or-create** the `Application`/`Environment` scope from `(service, environment)` string pairs rather than taking foreign keys directly — this is the shape both the API and the web UI call into. |
+| `model` | Plain GORM structs + repository *interfaces* only, split by domain (`model/auth`, `model/config`, `model/notification`, `model/dashboard`, `model/analytics`, `model/activity`) — no business logic. `User`, `Group`, `Policy`, `ServiceClient`, `OIDCSigningKey`/`OIDCAuthorizationCode`, `Application`/`Environment`/`ConfigEntry`/`ConfigEntryVersion`/`FeatureFlag`, `Notification`/`ProviderSetting` all live here. |
+| `repository` | GORM implementations of the `model.*Repository` interfaces, one subpackage per domain mirroring `model`'s split. Services depend on the `model` interfaces, not this package directly, so they're swappable in tests. |
+| `auth` | `AuthService` (users, password/lockout policy enforcement, group membership), `Group`-permission logic (`ComputeEffectivePermissions` unions a user's groups' module permissions + Application allow-lists), `OAuthService` (control-plane-as-relying-party: logging control-plane's own users in via an external IdP), `OIDCService` (control-plane-as-Identity-Provider: RS256 JWKS, authorization codes, token issuance for other applications) — unrelated, independent flows sharing the same `ServiceClient` model (`IsAuthApplication` marks one as an OIDC `client_id`/`client_secret` holder). Built-in groups are **Admin** (every module), **Developer** (`dashboard`,`configs`,`flags`), **User** (no module access; default for new accounts). |
+| `config` | `Application` → `Environment` (unique per app) → `ConfigEntry` (unique per app+env+key; secrets are just `IsSecret=true` entries) and `FeatureFlag` (same app+env scoping, soft-deleted). `ConfigEntryVersion` is an immutable snapshot written on every create/update/delete/rollback of a `ConfigEntry`. `ConfigService`/`FeatureFlagService` both **get-or-create** the `Application`/`Environment` scope from `(service, environment)` string pairs rather than taking foreign keys directly — this is the shape both the API and the web UI call into. |
+| `notification` | `Service` (queue/list/get), `TaskEnqueuer`/`worker.go` (DBOS-workflow-backed send pipeline with retries across `email`/`sms`/`inapp` channel providers, `internal/notification/provider/`), `sse_hub.go` (in-process pub/sub for realtime delivery events), `token.go` (short-lived Fernet bearer tokens scoping an end user to the SSE/inbox endpoints), `ProviderSettingService` (per-channel settings, e.g. SMTP, edited in the web UI). Gated as a whole by the `Enabled` const in `flag.go`. |
+| `dashboard` | Aggregates counts (`Application`/`Environment`/`ConfigEntry`/`FeatureFlag`/`ServiceClient`) and recent activity spanning `config` and `auth` for the web UI dashboard landing page. |
+| `analytics` | Computes/serves the dashboard's trend data: an hourly DBOS-scheduled workflow snapshots `dashboard.Counts` + event counters into a rolling 7-day Postgres window, read back through a short Redis cache. |
+| `cleanup` | A monthly DBOS-scheduled workflow pruning data that would otherwise grow unbounded: delivered/failed notifications (90d), the activity audit log (180d), expired OIDC authorization codes. |
 | `crypto` | Fernet master-key encryption (`EncryptForStorage`/`DecryptFromStorage`) + per-client re-encryption (`ReEncryptForClient`). |
 | `security` | Password hashing. |
 | `session` | Redis-backed signed-cookie sessions; flash messages and the CSRF token live in the same session blob. |
 | `ratelimit` | Redis fixed-window limiter. |
 | `activity` | Append-only audit log writer. |
 | `cache` | Redis-backed, version-counter invalidation for `ConfigService`/`FeatureFlagService` list reads. |
-| `api/http` | The S2S config/flag JSON API (`/api/v1/config/...`) — `APIKeyAuth` reads the `X-API-Key` header. |
-| `web` | Session-authenticated CRUD handlers for everything: applications, environments, configs/secrets (incl. history/rollback), feature flags, users, service clients, OAuth providers, OAuth login/callback, activity log. Routes registered in `web/router.go`. |
+| `api/http` | The S2S config/flag/notification JSON API (`/api/v1/...`) and the stateless half of the OIDC IdP (`/.well-known/...`, `POST /oauth2/token`, `GET /oauth2/userinfo`). `APIKeyAuth`/`NotificationAPIKeyAuthMiddleware` read the `X-API-Key` header. |
+| `web` | Session-authenticated CRUD handlers for everything: applications, environments, configs/secrets (incl. history/rollback), feature flags, users, groups, service clients, OAuth providers, OAuth login/callback, the browser half of `/oauth2/authorize`, policies, branding, notification settings, forward-auth, activity log, dashboard. Routes registered in `web/router.go`. |
 | `observability` | Opt-in OTLP traces/metrics/logs, enabled only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. |
 
 `web/template/` holds the `.templ` sources and their generated `_templ.go` output (generated files
 are committed, so a plain `go build` never needs the templ CLI). `web/static/` is served at
 `/static`.
 
-### Three auth systems
+### Four auth surfaces
 
-1. **S2S API** (`/api/v1/config/...`): stateless. `APIKeyAuth` reads `X-API-Key: <key_id>.<secret>`
-   and resolves a `ServiceClient` via `AuthService`'s API-key verification. A client's
+1. **S2S API** (`/api/v1/config/...`, `/api/v1/notifications`): stateless. `APIKeyAuth` /
+   `NotificationAPIKeyAuthMiddleware` read `X-API-Key: <key_id>.<secret>` and resolve a
+   `ServiceClient` via `AuthService`'s API-key verification. A client's
    `ServiceClientApplicationIDs` allow-list (empty = unrestricted), if non-empty, 404s config/flag
-   reads for services outside its scope.
+   reads for services outside its scope. The two end-user notification endpoints
+   (`/api/v1/notifications/sse/events`, `/api/v1/notifications/inapp/unread`) instead take a
+   short-lived `Authorization: Bearer <token>` minted by `POST /api/v1/notifications/sessions` —
+   the caller is the end user, not the service client.
 2. **Web UI** (`/...`): signed-cookie session auth (`internal/session`), gated by a login-required
    check and per-module `ModuleRequired(module)` checks driven by the logged-in user's effective
    Group permissions (see `web/authz.go`).
@@ -95,9 +111,14 @@ are committed, so a plain `go build` never needs the templ CLI). `web/static/` i
    redirects its users to the session-authenticated `GET/POST /oauth2/authorize` (in `web`), then
    exchanges the resulting code for tokens via the stateless `POST /oauth2/token` /
    `GET /oauth2/userinfo` (in `api/http`), both backed by `OIDCService`.
+4. **Forward-auth** (`GET /forward-auth/verify`): stateless-ish — reads the same session cookie as
+   the Web UI (via `authMW.LoadUser()`, not `LoginRequired()`, since a reverse proxy needs a plain
+   401/302 rather than a redirect bounce) plus `X-Forwarded-*` headers, and gates a *third-party*
+   app's whole origin behind control-plane login without that app implementing any auth itself —
+   see `web/forwardauth_handler.go` and [Configuration](docs/configuration.md#forward-auth-identity-provider).
 
-All three operate on the same `auth`/`config` models and services — when changing a service
-method, check `api/http` and `web` for callers.
+All four operate on the same `auth`/`config`/`notification` models and services — when changing a
+service method, check `api/http` and `web` for callers.
 
 ### Encryption flow
 

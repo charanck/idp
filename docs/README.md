@@ -1,30 +1,42 @@
 # Documentation
 
 A Go control plane for configuration & secret management and feature flags, with API-key
-service-to-service (S2S) auth, OAuth2/OIDC login, a notification system (email/SMS/in-app,
-with realtime SSE delivery), and a server-rendered web UI.
+service-to-service (S2S) auth, Group-based access control, OAuth2/OIDC login (both as relying
+party and as its own Identity Provider), a notification system (email/SMS/in-app, with realtime
+SSE delivery), and a server-rendered web UI.
 
 - **Configuration & secrets** scoped per application + environment, **encrypted at rest** and
   re-encrypted per service client on read — a client only ever sees ciphertext it can decrypt with
   its own key. See [Config & Secrets](./guides/config-and-secrets.md).
 - **Feature flags**, per application + environment. See [Feature Flags](./guides/feature-flags.md).
-- **Notifications** across email, SMS, and in-app channels, processed by a background
-  worker with retries. See [Notifications](./guides/notifications.md).
+- **Group-based access control** — every user belongs to one or more Groups (built-in Admin,
+  Developer, User, plus custom groups) granting module permissions and an optional Application
+  allow-list.
+- **Notifications** across email, SMS, and in-app channels, processed by a durable
+  ([DBOS](https://github.com/dbos-inc/dbos-transact-golang)) background worker with retries. See
+  [Notifications](./guides/notifications.md).
 - **Realtime delivery events over SSE** and a **persisted, pull-based in-app inbox** for
   user-facing notifications. See [Realtime events](./guides/sse.md) and
   [In-app inbox](./guides/inapp-inbox.md).
-- **API-key (S2S) auth** for every programmatic endpoint, and session auth (with OAuth2/OIDC
-  support) for the web UI.
+- **OIDC Identity Provider** — other applications can redirect their users here to log in, on top
+  of control-plane's own OAuth2/OIDC login via an external IdP.
+- **Forward-auth** — a reverse proxy can gate any other app behind control-plane's login session,
+  without that app implementing its own auth.
+- **API-key (S2S) auth** for every programmatic endpoint, and session auth for the web UI.
 - **Config version history & rollback** — every write is snapshotted; roll back to any prior
   version without losing the audit trail.
+- **Dashboard & analytics** — live counts plus hourly trend snapshots of applications, configs,
+  secrets, flags, and clients.
 - **Append-only activity log**, Redis-backed caching, and rate limiting on auth-sensitive
   endpoints.
 
 ## Where to go next
 
 - **[Getting Started](./getting-started.md)** — run the server locally in a few minutes.
-- **[Architecture](./architecture.md)** — apps, the two auth systems, encryption flow, config
-  history/rollback, caching, rate limiting.
+- **[Admin Setup Guide](./guides/admin-setup.md)** — a step-by-step tutorial for admins: users,
+  groups, applications, service clients, OIDC/OAuth, notifications, policies.
+- **[Architecture](./architecture.md)** — packages, the four auth surfaces, Groups, encryption
+  flow, notifications, config history/rollback, caching, rate limiting.
 - **[Configuration](./configuration.md)** — every environment variable, with defaults.
 - **Guides** — worked examples (cURL, Python, Node.js/TypeScript, Go) for every API:
   [Config & Secrets](./guides/config-and-secrets.md), [Feature Flags](./guides/feature-flags.md),
@@ -39,5 +51,5 @@ For contributing (dev setup, tests, PR process), see [`CONTRIBUTING.md`](../CONT
 
 Everything except reading configs/secrets/feature-flags and the notification API is managed
 through the session-authenticated web UI (applications, environments, configs, secrets, feature
-flags, users, service clients, OAuth providers) — there's no generic REST CRUD API and no
-JWT-based user/service auth surface by design.
+flags, users, groups, service clients, OAuth providers, policies) — there's no generic REST CRUD
+API and no JWT-based user/service auth surface by design.

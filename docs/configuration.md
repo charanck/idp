@@ -85,10 +85,12 @@ session cookie set by the web UI and the standard forwarded-request headers
 (`X-Forwarded-Host`, `X-Forwarded-Uri`/`X-Original-URL`, `X-Forwarded-Proto`), then:
 
 1. Requires a valid, logged-in session — otherwise denies.
-2. Resolves an `Application` from the forwarded `Host` header (configured per-application under
-   **Applications → Edit → Forward-Auth Domains** as a comma-separated hostname list) and requires
-   the logged-in user's Group(s) to include that Application in their allow-list — otherwise
-   denies. A host that isn't mapped to any Application always denies (fails closed).
+2. Resolves a `ServiceClient` from the forwarded `Host` header (configured under
+   **Service Clients → Edit**: a comma/newline-separated list of hostnames, plus the
+   **Is Proxy-Auth Enabled** toggle) and requires the logged-in user to be in that client's
+   **Allowed Groups** (empty allow-list = any logged-in user) — otherwise denies. A host that
+   isn't mapped to any client, or maps to an inactive/proxy-auth-disabled one, always denies
+   (fails closed).
 3. On success, responds `200` with identity headers: `X-Auth-Request-Email`,
    `X-Auth-Request-User` (user ID), `X-Auth-Request-Groups` (comma-separated group names) — the
    same header names `oauth2-proxy`/nginx `auth_request` setups conventionally expect.

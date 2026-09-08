@@ -22,11 +22,17 @@
   re-encrypted per service client on read — a client only ever sees ciphertext it can decrypt with
   its own key.
 - **Feature flags**, per application + environment.
-- **API-key (S2S) auth** for the config/flag API (`/api/v1/config/...`), and standard
-  session auth for the web UI, gated by role.
-- **OAuth2 / OIDC login** for the web UI.
+- **Group-based access control** — built-in Admin/Developer/User groups plus admin-creatable
+  custom groups, each with module permissions and an optional Application allow-list.
+- **Notifications** (email/SMS/in-app) with a durable, retrying background worker, realtime SSE
+  delivery, and a persisted in-app inbox.
+- **API-key (S2S) auth** for the config/flag/notification API (`/api/v1/...`), session auth for
+  the web UI, and an **OIDC Identity Provider** other applications can log their users in through.
+- **OAuth2 / OIDC login** for the web UI via an external provider (Google, GitHub, Okta, ...).
+- **Forward-auth** endpoint so a reverse proxy can gate any other app behind this login session.
 - **Config version history & rollback** — every write is snapshotted; roll back to any prior
   version without losing the audit trail.
+- **Dashboard & analytics** — live counts plus hourly trend snapshots.
 - **Append-only activity log** of who did what, from where.
 - **Rate limiting** on the login endpoint and failed S2S API-key attempts.
 - **Redis-backed caching** for read-heavy config/flag lookups.
@@ -89,7 +95,8 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full dev workflow.
 | | |
 |---|---|
 | [Getting Started](./docs/getting-started.md) | Run it locally in a few minutes. |
-| [Architecture](./docs/architecture.md) | Packages, auth systems, encryption flow, caching, config history/rollback. |
+| [Admin Setup Guide](./docs/guides/admin-setup.md) | Step-by-step tutorial for admins: users, groups, applications, service clients, OIDC/OAuth, notifications, policies. |
+| [Architecture](./docs/architecture.md) | Packages, the four auth surfaces, Groups, encryption flow, notifications, caching, config history/rollback. |
 | [Configuration](./docs/configuration.md) | Every environment variable. |
 | Guides | Worked examples (cURL/Python/Node.js/Go) for [config & secrets](./docs/guides/config-and-secrets.md), [feature flags](./docs/guides/feature-flags.md), [notifications](./docs/guides/notifications.md), [SSE](./docs/guides/sse.md), and the [in-app inbox](./docs/guides/inapp-inbox.md). |
 | [API reference](./docs/api.md) | Full endpoint list, auth model, encryption model, OAuth2/OIDC setup. |

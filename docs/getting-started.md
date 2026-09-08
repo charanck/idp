@@ -51,8 +51,12 @@ stack, and GHCR releases.
 5. Use that API key to read the config back over the S2S API — see
    [Config & Secrets](guides/config-and-secrets.md).
 
+For the full walkthrough — users, groups, notifications, OAuth/OIDC, policies — see the
+[Admin Setup Guide](guides/admin-setup.md).
+
 ## Next
 
+- [Admin Setup Guide](guides/admin-setup.md) — a tutorial covering everything an admin sets up.
 - [Guides](guides/config-and-secrets.md) — worked examples for every API, in cURL, Python,
   Node.js/TypeScript, and Go.
 - [Architecture](architecture.md) — how the pieces fit together.
