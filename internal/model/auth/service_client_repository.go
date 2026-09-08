@@ -28,6 +28,12 @@ type ServiceClientRepository interface {
 
 	ListAllowedGroupIDs(ctx context.Context, clientID uuid.UUID) ([]uuid.UUID, error)
 	SetAllowedGroups(ctx context.Context, clientID uuid.UUID, groupIDs []uuid.UUID) error
+
+	ListDomains(ctx context.Context, clientID uuid.UUID) ([]string, error)
+	SetDomains(ctx context.Context, clientID uuid.UUID, hosts []string) error
+	// FindByHost returns the active ServiceClient whose service_client_domains
+	// claims host, or nil with no error if no client claims it.
+	FindByHost(ctx context.Context, host string) (*ServiceClient, error)
 }
 
 // OIDCSigningKeyRepository is the persistence boundary for the singleton

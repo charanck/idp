@@ -141,6 +141,7 @@ type fakeServiceClientRepository struct {
 	clientApps    map[uuid.UUID]map[uuid.UUID]struct{} // clientID -> applicationIDs
 	redirectURIs  map[uuid.UUID][]string               // clientID -> redirect URIs
 	allowedGroups map[uuid.UUID]map[uuid.UUID]struct{} // clientID -> groupIDs
+	domains       map[uuid.UUID][]string               // clientID -> hosts
 }
 
 func newFakeServiceClientRepository() *fakeServiceClientRepository {
@@ -149,6 +150,7 @@ func newFakeServiceClientRepository() *fakeServiceClientRepository {
 		clientApps:    make(map[uuid.UUID]map[uuid.UUID]struct{}),
 		redirectURIs:  make(map[uuid.UUID][]string),
 		allowedGroups: make(map[uuid.UUID]map[uuid.UUID]struct{}),
+		domains:       make(map[uuid.UUID][]string),
 	}
 }
 
@@ -289,6 +291,36 @@ func (f *fakeServiceClientRepository) SetAllowedGroups(ctx context.Context, clie
 	}
 	f.allowedGroups[clientID] = set
 	return nil
+}
+
+func (f *fakeServiceClientRepository) ListDomains(ctx context.Context, clientID uuid.UUID) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.domains[clientID], nil
+}
+
+func (f *fakeServiceClientRepository) SetDomains(ctx context.Context, clientID uuid.UUID, hosts []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.domains[clientID] = hosts
+	return nil
+}
+
+func (f *fakeServiceClientRepository) FindByHost(ctx context.Context, host string) (*authmodel.ServiceClient, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for clientID, hosts := range f.domains {
+		for _, h := range hosts {
+			if h == host {
+				if c, ok := f.clients[clientID]; ok {
+					cp := c
+					return &cp, nil
+				}
+				return nil, nil
+			}
+		}
+	}
+	return nil, nil
 }
 
 // fakeOAuthProviderRepository is an in-memory authmodel.OAuthProviderRepository.

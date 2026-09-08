@@ -479,6 +479,48 @@ func (s *AuthService) UnlockUser(ctx context.Context, id uuid.UUID) (*model.User
 	return user, nil
 }
 
+// ForceUserPasswordReset flags a user's account so their next successful
+// login requires setting a new password, returning nil if not found. Used by
+// admins from the Users page, parallel to UnlockUser.
+func (s *AuthService) ForceUserPasswordReset(ctx context.Context, id uuid.UUID) (*model.User, error) {
+	user, err := s.GetUserByIDAny(ctx, id)
+	if err != nil || user == nil {
+		return user, err
+	}
+	user.ForcePasswordReset = true
+	if err := s.users.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	s.invalidateUsersCache(ctx)
+	return user, nil
+}
+
+// UpdateOwnProfileInput bundles UpdateOwnProfile's self-editable fields -
+// deliberately excludes email, groups, and active status, which stay
+// admin-only via UpdateUserAdmin.
+type UpdateOwnProfileInput struct {
+	Username  string
+	FirstName string
+	LastName  string
+}
+
+// UpdateOwnProfile lets a logged-in user edit their own identity fields
+// (username, first/last name), returning nil if not found.
+func (s *AuthService) UpdateOwnProfile(ctx context.Context, userID uuid.UUID, in UpdateOwnProfileInput) (*model.User, error) {
+	user, err := s.GetUserByIDAny(ctx, userID)
+	if err != nil || user == nil {
+		return user, err
+	}
+	user.Username = in.Username
+	user.FirstName = in.FirstName
+	user.LastName = in.LastName
+	if err := s.users.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	s.invalidateUsersCache(ctx)
+	return user, nil
+}
+
 // DeleteUser deletes a user by ID, returning nil if not found.
 func (s *AuthService) DeleteUser(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	user, err := s.GetUserByIDAny(ctx, id)
@@ -586,25 +628,78 @@ func (s *AuthService) ServiceClientRedirectURIs(ctx context.Context, id uuid.UUI
 }
 
 // ServiceClientAllowedGroupIDs returns the Groups allowed to log into a
-// service client acting as an OIDC auth application (empty = any user).
+// service client acting as an OIDC auth application, or through forward-auth
+// as a proxy-auth application (empty = any user; the same list gates both).
 func (s *AuthService) ServiceClientAllowedGroupIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error) {
 	return s.clients.ListAllowedGroupIDs(ctx, id)
+}
+
+// ServiceClientDomains returns the hostnames a reverse proxy may forward
+// (X-Forwarded-Host) that map to a service client acting as a proxy-auth
+// application.
+func (s *AuthService) ServiceClientDomains(ctx context.Context, id uuid.UUID) ([]string, error) {
+	return s.clients.ListDomains(ctx, id)
+}
+
+// ServiceClientByHost resolves the ServiceClient mapped to host (as
+// forwarded by a reverse proxy via X-Forwarded-Host), or nil if no client
+// claims that host. Used by the forward-auth verify endpoint.
+func (s *AuthService) ServiceClientByHost(ctx context.Context, host string) (*model.ServiceClient, error) {
+	return s.clients.FindByHost(ctx, host)
+}
+
+// ServiceClientAllowsUser reports whether userID may use client - for OIDC
+// login or forward-auth alike: true if the client's allowed-groups list is
+// empty (any directory user), or the user belongs to at least one of those
+// groups.
+func (s *AuthService) ServiceClientAllowsUser(ctx context.Context, client *model.ServiceClient, userID uuid.UUID) (bool, error) {
+	return serviceClientAllowsUser(ctx, s.clients, s.groups, client, userID)
+}
+
+// serviceClientAllowsUser is the shared allow-list check behind both
+// AuthService.ServiceClientAllowsUser (forward-auth) and
+// OIDCService.UserAllowedForClient (OIDC login), so the two gates can never
+// drift apart.
+func serviceClientAllowsUser(ctx context.Context, clients model.ServiceClientRepository, groups model.GroupRepository, client *model.ServiceClient, userID uuid.UUID) (bool, error) {
+	allowedGroupIDs, err := clients.ListAllowedGroupIDs(ctx, client.ID)
+	if err != nil {
+		return false, err
+	}
+	if len(allowedGroupIDs) == 0 {
+		return true, nil
+	}
+	allowed := make(map[uuid.UUID]bool, len(allowedGroupIDs))
+	for _, id := range allowedGroupIDs {
+		allowed[id] = true
+	}
+	userGroups, err := groups.ListByUserID(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, g := range userGroups {
+		if allowed[g.ID] {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // UpdateServiceClientSettingsInput is the set of fields
 // UpdateServiceClientSettings can change beyond the plain name; every slice
 // field replaces its join table wholesale, same as SetUserGroups/SetApplications.
 type UpdateServiceClientSettingsInput struct {
-	ApplicationIDs    []uuid.UUID // config/flag S2S read scope; empty = unrestricted
-	IsAuthApplication bool
-	RequireConsent    bool
-	RedirectURIs      []string
-	AllowedGroupIDs   []uuid.UUID // empty = any directory user may log in
+	ApplicationIDs     []uuid.UUID // config/flag S2S read scope; empty = unrestricted
+	IsAuthApplication  bool
+	RequireConsent     bool
+	RedirectURIs       []string
+	IsProxyAuthEnabled bool
+	Domains            []string
+	AllowedGroupIDs    []uuid.UUID // empty = any directory user may log in (shared by OIDC and proxy-auth)
 }
 
 // UpdateServiceClientSettings updates a service client's config/flag
-// Application scope and OIDC identity-provider settings, returning nil if
-// not found.
+// Application scope, OIDC identity-provider settings, and proxy-auth
+// (forward-auth) settings, returning nil if not found.
 func (s *AuthService) UpdateServiceClientSettings(ctx context.Context, id uuid.UUID, in UpdateServiceClientSettingsInput) (*model.ServiceClient, error) {
 	client, err := s.GetServiceClientByIDAny(ctx, id)
 	if err != nil || client == nil {
@@ -612,6 +707,7 @@ func (s *AuthService) UpdateServiceClientSettings(ctx context.Context, id uuid.U
 	}
 	client.IsAuthApplication = in.IsAuthApplication
 	client.RequireConsent = in.RequireConsent
+	client.IsProxyAuthEnabled = in.IsProxyAuthEnabled
 	if err := s.clients.Update(ctx, client); err != nil {
 		return nil, err
 	}
@@ -622,6 +718,9 @@ func (s *AuthService) UpdateServiceClientSettings(ctx context.Context, id uuid.U
 		return nil, err
 	}
 	if err := s.clients.SetAllowedGroups(ctx, client.ID, in.AllowedGroupIDs); err != nil {
+		return nil, err
+	}
+	if err := s.clients.SetDomains(ctx, client.ID, in.Domains); err != nil {
 		return nil, err
 	}
 	s.invalidateClientsCache(ctx)

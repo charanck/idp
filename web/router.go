@@ -23,7 +23,11 @@ func RegisterRoutes(e *echo.Echo, h *Handlers, authMW *AuthMiddleware) {
 	authed := e.Group("", authMW.LoginRequired())
 	authed.GET("/password/change/", h.Auth.PasswordChange)
 	authed.POST("/password/change/", h.Auth.PasswordChange)
-	authed.GET("/dashboard/", h.Dashboard.Show)
+	authed.GET("/profile/", h.Profile.Show)
+	authed.POST("/profile/", h.Profile.Show)
+
+	dashboard := e.Group("", authMW.ModuleRequired(auth.ModuleDashboard))
+	dashboard.GET("/dashboard/", h.Dashboard.Show)
 
 	if notification.Enabled {
 		authed.GET("/notifications/", h.Notification.List)
@@ -78,6 +82,7 @@ func RegisterRoutes(e *echo.Echo, h *Handlers, authMW *AuthMiddleware) {
 	users.GET("/users/:id/delete/", h.User.Delete)
 	users.POST("/users/:id/delete/", h.User.Delete)
 	users.POST("/users/:id/unlock/", h.User.Unlock)
+	users.POST("/users/:id/force-reset/", h.User.ForceReset)
 
 	groups := e.Group("", authMW.ModuleRequired(auth.ModuleGroups))
 	groups.GET("/groups/", h.Group.List)

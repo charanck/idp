@@ -256,6 +256,7 @@ var moduleLabels = map[string]string{
 	auth.ModuleBranding:             "Branding",
 	auth.ModuleNotificationSettings: "Notification Settings",
 	auth.ModuleActivityLog:          "Activity Log",
+	auth.ModuleDashboard:            "Dashboard",
 }
 
 func GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData) templ.Component {
@@ -298,7 +299,7 @@ func GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData)
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(data.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 122, Col: 18}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 123, Col: 18}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -316,7 +317,7 @@ func GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData)
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(data.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 125, Col: 48}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 126, Col: 48}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -334,7 +335,7 @@ func GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData)
 			var templ_7745c5c3_Var15 templ.SafeURL
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(data.Action))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 127, Col: 54}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 128, Col: 54}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
@@ -347,7 +348,7 @@ func GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData)
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.CSRFToken)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 128, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 129, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 			if templ_7745c5c3_Err != nil {
@@ -360,7 +361,7 @@ func GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData)
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue(data.Name)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 131, Col: 87}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 132, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 			if templ_7745c5c3_Err != nil {
@@ -383,7 +384,7 @@ func GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData)
 					var templ_7745c5c3_Var18 string
 					templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue("module_" + module)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 138, Col: 56}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 139, Col: 56}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 					if templ_7745c5c3_Err != nil {
@@ -401,7 +402,7 @@ func GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData)
 					var templ_7745c5c3_Var19 string
 					templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue("module_" + module)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 140, Col: 56}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 141, Col: 56}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 					if templ_7745c5c3_Err != nil {
@@ -415,7 +416,7 @@ func GroupForm(flashes []session.Flash, user layout.NavUser, data GroupFormData)
 				var templ_7745c5c3_Var20 string
 				templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(moduleLabels[module])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 142, Col: 29}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/template/pages/groups.templ`, Line: 143, Col: 29}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 				if templ_7745c5c3_Err != nil {

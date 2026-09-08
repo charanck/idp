@@ -55,18 +55,23 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 // ServiceClient is an S2S API-key holder with its own per-client encryption
 // key. It doubles as an OIDC "auth application" (relying party) when
 // IsAuthApplication is set: client_id/client_secret for that flow are the
-// same APIKeyID/API key secret used for S2S config/flag reads.
+// same APIKeyID/API key secret used for S2S config/flag reads. It also
+// doubles as the registration for a reverse-proxied app when
+// IsProxyAuthEnabled is set: the client's own hostnames (service_client_domains)
+// and AllowedGroupIDs gate the forward-auth verify endpoint, mirroring how
+// IsAuthApplication+AllowedGroupIDs gate OIDC login.
 type ServiceClient struct {
-	ID                uuid.UUID `gorm:"column:id;type:uuid;primaryKey"`
-	Name              string    `gorm:"column:name"`
-	APIKeyID          *string   `gorm:"column:api_key_id"`
-	APIKeyHash        string    `gorm:"column:api_key_hash"`
-	EncryptionKey     string    `gorm:"column:encryption_key"`
-	IsActive          bool      `gorm:"column:is_active"`
-	IsAuthApplication bool      `gorm:"column:is_auth_application"`
-	RequireConsent    bool      `gorm:"column:require_consent"`
-	CreatedAt         time.Time `gorm:"column:created_at;autoCreateTime"`
-	UpdatedAt         time.Time `gorm:"column:updated_at;autoUpdateTime"`
+	ID                 uuid.UUID `gorm:"column:id;type:uuid;primaryKey"`
+	Name               string    `gorm:"column:name"`
+	APIKeyID           *string   `gorm:"column:api_key_id"`
+	APIKeyHash         string    `gorm:"column:api_key_hash"`
+	EncryptionKey      string    `gorm:"column:encryption_key"`
+	IsActive           bool      `gorm:"column:is_active"`
+	IsAuthApplication  bool      `gorm:"column:is_auth_application"`
+	RequireConsent     bool      `gorm:"column:require_consent"`
+	IsProxyAuthEnabled bool      `gorm:"column:is_proxy_auth_enabled"`
+	CreatedAt          time.Time `gorm:"column:created_at;autoCreateTime"`
+	UpdatedAt          time.Time `gorm:"column:updated_at;autoUpdateTime"`
 }
 
 func (ServiceClient) TableName() string { return "service_clients" }

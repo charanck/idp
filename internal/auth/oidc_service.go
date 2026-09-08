@@ -193,29 +193,10 @@ func (s *OIDCService) ValidateClient(ctx context.Context, clientID, redirectURI 
 
 // UserAllowedForClient reports whether userID may log into client: true if
 // the client's allowed-groups list is empty (any directory user), or the
-// user belongs to at least one of those groups.
+// user belongs to at least one of those groups. Shared with forward-auth's
+// proxy-auth gate via serviceClientAllowsUser.
 func (s *OIDCService) UserAllowedForClient(ctx context.Context, client *model.ServiceClient, userID uuid.UUID) (bool, error) {
-	allowedGroupIDs, err := s.clients.ListAllowedGroupIDs(ctx, client.ID)
-	if err != nil {
-		return false, err
-	}
-	if len(allowedGroupIDs) == 0 {
-		return true, nil
-	}
-	allowed := make(map[uuid.UUID]bool, len(allowedGroupIDs))
-	for _, id := range allowedGroupIDs {
-		allowed[id] = true
-	}
-	userGroups, err := s.groups.ListByUserID(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	for _, g := range userGroups {
-		if allowed[g.ID] {
-			return true, nil
-		}
-	}
-	return false, nil
+	return serviceClientAllowsUser(ctx, s.clients, s.groups, client, userID)
 }
 
 // IssueAuthorizationCode creates a single-use, short-lived authorization

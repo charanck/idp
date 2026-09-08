@@ -109,6 +109,40 @@ func TestUserEditHandler_UnknownIDReturns404(t *testing.T) {
 	}
 }
 
+func TestUserForceResetHandler_SetsForcePasswordReset(t *testing.T) {
+	store := newSessionStore(t)
+	users, activity, h := newUserHandlerFixture()
+	target := users.put(authmodel.User{Email: "target@example.com", Username: "target"})
+	id := target.ID.String()
+
+	rec := callHandlerWithParams(t, store, http.MethodPost, "/users/"+id+"/force-reset/",
+		map[string]string{"id": id}, nil, nil, h.ForceReset)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusFound, rec.Body.String())
+	}
+	if activity.count() != 1 {
+		t.Fatalf("activity.count() = %d, want 1", activity.count())
+	}
+	updated, _ := users.GetUserByIDAny(context.Background(), target.ID)
+	if updated == nil || !updated.ForcePasswordReset {
+		t.Fatalf("expected ForcePasswordReset = true, got %+v", updated)
+	}
+}
+
+func TestUserForceResetHandler_UnknownIDReturns404(t *testing.T) {
+	store := newSessionStore(t)
+	_, _, h := newUserHandlerFixture()
+
+	unknown := uuid.New().String()
+	rec := callHandlerWithParams(t, store, http.MethodPost, "/users/"+unknown+"/force-reset/",
+		map[string]string{"id": unknown}, nil, nil, h.ForceReset)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
 func TestUserDeleteHandler_CannotDeleteOwnAccount(t *testing.T) {
 	store := newSessionStore(t)
 	users, activity, h := newUserHandlerFixture()

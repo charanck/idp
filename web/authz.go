@@ -54,8 +54,12 @@ func (m *AuthMiddleware) ModuleRequired(module string) echo.MiddlewareFunc {
 	loginRequired := m.LoginRequired()
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return loginRequired(func(c echo.Context) error {
-			if !EffectivePermissionsFromContext(c).HasModule(module) {
+			perms := EffectivePermissionsFromContext(c)
+			if !perms.HasModule(module) {
 				AddFlash(c, "danger", "You do not have permission to access this page.")
+				if !perms.HasModule(auth.ModuleDashboard) {
+					return c.Redirect(http.StatusFound, "/profile/")
+				}
 				return c.Redirect(http.StatusFound, "/dashboard/")
 			}
 			return next(c)

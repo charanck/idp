@@ -17,6 +17,7 @@ type Handlers struct {
 	Policy               *PolicyHandler
 	Branding             *BrandingHandler
 	Auth                 *AuthHandler
+	Profile              *ProfileHandler
 	OAuthLogin           *OAuthLoginHandler
 	OAuthProvider        *OAuthProviderHandler
 	OIDC                 *OIDCHandler

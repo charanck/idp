@@ -359,3 +359,68 @@ func mustCreateUser(t *testing.T, users *fakeUserRepository, email string, isSta
 		t.Fatalf("seed user %s: %v", email, err)
 	}
 }
+
+func TestForceUserPasswordReset_SetsFlag(t *testing.T) {
+	svc, users, _ := newTestAuthService()
+	ctx := context.Background()
+
+	user := &authmodel.User{Email: "alice@example.com", IsActive: true}
+	if err := users.Create(ctx, user); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	updated, err := svc.ForceUserPasswordReset(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ForceUserPasswordReset: %v", err)
+	}
+	if !updated.ForcePasswordReset {
+		t.Fatal("expected ForcePasswordReset to be true")
+	}
+}
+
+func TestForceUserPasswordReset_UnknownUserReturnsNil(t *testing.T) {
+	svc, _, _ := newTestAuthService()
+
+	updated, err := svc.ForceUserPasswordReset(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("ForceUserPasswordReset: %v", err)
+	}
+	if updated != nil {
+		t.Fatalf("expected nil for unknown user, got %+v", updated)
+	}
+}
+
+func TestUpdateOwnProfile_UpdatesIdentityFields(t *testing.T) {
+	svc, users, _ := newTestAuthService()
+	ctx := context.Background()
+
+	user := &authmodel.User{Email: "alice@example.com", Username: "alice", IsActive: true}
+	if err := users.Create(ctx, user); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+
+	updated, err := svc.UpdateOwnProfile(ctx, user.ID, auth.UpdateOwnProfileInput{
+		Username: "alice2", FirstName: "Alice", LastName: "Anderson",
+	})
+	if err != nil {
+		t.Fatalf("UpdateOwnProfile: %v", err)
+	}
+	if updated.Username != "alice2" || updated.FirstName != "Alice" || updated.LastName != "Anderson" {
+		t.Fatalf("unexpected user after update: %+v", updated)
+	}
+	if updated.Email != "alice@example.com" {
+		t.Fatalf("expected email to remain unchanged, got %q", updated.Email)
+	}
+}
+
+func TestUpdateOwnProfile_UnknownUserReturnsNil(t *testing.T) {
+	svc, _, _ := newTestAuthService()
+
+	updated, err := svc.UpdateOwnProfile(context.Background(), uuid.New(), auth.UpdateOwnProfileInput{Username: "x"})
+	if err != nil {
+		t.Fatalf("UpdateOwnProfile: %v", err)
+	}
+	if updated != nil {
+		t.Fatalf("expected nil for unknown user, got %+v", updated)
+	}
+}

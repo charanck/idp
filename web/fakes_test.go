@@ -247,13 +247,12 @@ func (f *fakeAnalyticsReader) RecentSnapshots(ctx context.Context) ([]analyticsm
 
 // fakeApplicationStore implements web.ApplicationStore in-memory.
 type fakeApplicationStore struct {
-	mu      sync.Mutex
-	apps    map[uuid.UUID]configmodel.Application
-	domains map[uuid.UUID][]string
+	mu   sync.Mutex
+	apps map[uuid.UUID]configmodel.Application
 }
 
 func newFakeApplicationStore() *fakeApplicationStore {
-	return &fakeApplicationStore{apps: map[uuid.UUID]configmodel.Application{}, domains: map[uuid.UUID][]string{}}
+	return &fakeApplicationStore{apps: map[uuid.UUID]configmodel.Application{}}
 }
 
 func (f *fakeApplicationStore) put(a configmodel.Application) configmodel.Application {
@@ -332,21 +331,7 @@ func (f *fakeApplicationStore) DeleteApplication(ctx context.Context, id uuid.UU
 		return nil, nil
 	}
 	delete(f.apps, id)
-	delete(f.domains, id)
 	return &a, nil
-}
-
-func (f *fakeApplicationStore) ListApplicationDomains(ctx context.Context, applicationID uuid.UUID) ([]string, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return append([]string(nil), f.domains[applicationID]...), nil
-}
-
-func (f *fakeApplicationStore) SetApplicationDomains(ctx context.Context, applicationID uuid.UUID, hosts []string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.domains[applicationID] = append([]string(nil), hosts...)
-	return nil
 }
 
 // fakeEnvironmentStore implements web.EnvironmentStore in-memory.
@@ -715,6 +700,7 @@ type fakeClientStore struct {
 	applications  map[uuid.UUID][]uuid.UUID
 	redirectURIs  map[uuid.UUID][]string
 	allowedGroups map[uuid.UUID][]uuid.UUID
+	domains       map[uuid.UUID][]string
 }
 
 func newFakeClientStore() *fakeClientStore {
@@ -723,6 +709,7 @@ func newFakeClientStore() *fakeClientStore {
 		applications:  map[uuid.UUID][]uuid.UUID{},
 		redirectURIs:  map[uuid.UUID][]string{},
 		allowedGroups: map[uuid.UUID][]uuid.UUID{},
+		domains:       map[uuid.UUID][]string{},
 	}
 }
 
@@ -828,6 +815,12 @@ func (f *fakeClientStore) ServiceClientAllowedGroupIDs(ctx context.Context, id u
 	return f.allowedGroups[id], nil
 }
 
+func (f *fakeClientStore) ServiceClientDomains(ctx context.Context, id uuid.UUID) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.domains[id], nil
+}
+
 func (f *fakeClientStore) UpdateServiceClientSettings(ctx context.Context, id uuid.UUID, in auth.UpdateServiceClientSettingsInput) (*authmodel.ServiceClient, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -837,6 +830,7 @@ func (f *fakeClientStore) UpdateServiceClientSettings(ctx context.Context, id uu
 	}
 	c.IsAuthApplication = in.IsAuthApplication
 	c.RequireConsent = in.RequireConsent
+	c.IsProxyAuthEnabled = in.IsProxyAuthEnabled
 	f.clients[id] = c
 	if f.applications == nil {
 		f.applications = map[uuid.UUID][]uuid.UUID{}
@@ -847,9 +841,13 @@ func (f *fakeClientStore) UpdateServiceClientSettings(ctx context.Context, id uu
 	if f.allowedGroups == nil {
 		f.allowedGroups = map[uuid.UUID][]uuid.UUID{}
 	}
+	if f.domains == nil {
+		f.domains = map[uuid.UUID][]string{}
+	}
 	f.applications[id] = in.ApplicationIDs
 	f.redirectURIs[id] = in.RedirectURIs
 	f.allowedGroups[id] = in.AllowedGroupIDs
+	f.domains[id] = in.Domains
 	return &c, nil
 }
 
@@ -1037,6 +1035,18 @@ func (f *fakeUserStore) UnlockUser(ctx context.Context, id uuid.UUID) (*authmode
 	return &u, nil
 }
 
+func (f *fakeUserStore) ForceUserPasswordReset(ctx context.Context, id uuid.UUID) (*authmodel.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	u, ok := f.users[id]
+	if !ok {
+		return nil, nil
+	}
+	u.ForcePasswordReset = true
+	f.users[id] = u
+	return &u, nil
+}
+
 func (f *fakeUserStore) ListGroups(ctx context.Context, q string) ([]authmodel.Group, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1066,15 +1076,31 @@ func (f *fakeUserStore) SetUserGroups(ctx context.Context, userID uuid.UUID, gro
 	return nil
 }
 
-// fakeAuthStore implements web.AuthStore.
+// fakeAuthStore implements web.AuthStore. UserGroups defaults to a single
+// group granting the dashboard module, so existing tests that don't care
+// about the group hierarchy keep landing on /dashboard/ as before.
 type fakeAuthStore struct {
 	mu           sync.Mutex
 	usersByEmail map[string]authmodel.User
 	authenticate func(email, password string) (*authmodel.User, error)
+	groups       []authmodel.Group
 }
 
 func newFakeAuthStore() *fakeAuthStore {
-	return &fakeAuthStore{usersByEmail: map[string]authmodel.User{}}
+	return &fakeAuthStore{
+		usersByEmail: map[string]authmodel.User{},
+		groups:       []authmodel.Group{{ID: uuid.New(), Name: "Admin", Permissions: []byte(`["dashboard"]`)}},
+	}
+}
+
+func (f *fakeAuthStore) UserGroups(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.groups, nil
+}
+
+func (f *fakeAuthStore) GroupApplicationIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
+	return nil, nil
 }
 
 func (f *fakeAuthStore) put(u authmodel.User) {
@@ -1105,6 +1131,40 @@ func (f *fakeAuthStore) SetPassword(ctx context.Context, userID uuid.UUID, hashe
 
 func (f *fakeAuthStore) GetPolicy(ctx context.Context) (*authmodel.Policy, error) {
 	return &authmodel.Policy{}, nil
+}
+
+// fakeProfileStore implements web.ProfileStore in-memory.
+type fakeProfileStore struct {
+	mu    sync.Mutex
+	users map[uuid.UUID]authmodel.User
+}
+
+func newFakeProfileStore() *fakeProfileStore {
+	return &fakeProfileStore{users: map[uuid.UUID]authmodel.User{}}
+}
+
+func (f *fakeProfileStore) put(u authmodel.User) authmodel.User {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if u.ID == uuid.Nil {
+		u.ID = uuid.New()
+	}
+	f.users[u.ID] = u
+	return u
+}
+
+func (f *fakeProfileStore) UpdateOwnProfile(ctx context.Context, userID uuid.UUID, in auth.UpdateOwnProfileInput) (*authmodel.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	u, ok := f.users[userID]
+	if !ok {
+		return nil, nil
+	}
+	u.Username = in.Username
+	u.FirstName = in.FirstName
+	u.LastName = in.LastName
+	f.users[userID] = u
+	return &u, nil
 }
 
 // fakeOAuthActiveLister implements web.OAuthActiveLister.

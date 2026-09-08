@@ -164,3 +164,47 @@ func (r *gormServiceClientRepository) SetAllowedGroups(ctx context.Context, clie
 		return nil
 	})
 }
+
+func (r *gormServiceClientRepository) ListDomains(ctx context.Context, clientID uuid.UUID) ([]string, error) {
+	var hosts []string
+	err := r.db.WithContext(ctx).Table("service_client_domains").
+		Where("service_client_id = ?", clientID).
+		Order("host").
+		Pluck("host", &hosts).Error
+	if err != nil {
+		return nil, err
+	}
+	return hosts, nil
+}
+
+func (r *gormServiceClientRepository) SetDomains(ctx context.Context, clientID uuid.UUID, hosts []string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("service_client_domains").Where("service_client_id = ?", clientID).Delete(nil).Error; err != nil {
+			return err
+		}
+		for _, host := range hosts {
+			if err := tx.Table("service_client_domains").Create(map[string]any{
+				"service_client_id": clientID,
+				"host":              host,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (r *gormServiceClientRepository) FindByHost(ctx context.Context, host string) (*model.ServiceClient, error) {
+	var ids []uuid.UUID
+	err := r.db.WithContext(ctx).Table("service_client_domains").
+		Where("host = ?", host).
+		Limit(1).
+		Pluck("service_client_id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	return r.FindByID(ctx, ids[0])
+}

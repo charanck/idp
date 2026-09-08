@@ -26,6 +26,7 @@ type UserStore interface {
 	UpdateUserAdmin(ctx context.Context, id uuid.UUID, in auth.UpdateUserAdminInput) (*authmodel.User, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
 	UnlockUser(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
+	ForceUserPasswordReset(ctx context.Context, id uuid.UUID) (*authmodel.User, error)
 	ListGroups(ctx context.Context, q string) ([]authmodel.Group, error)
 	UserGroups(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error)
 	SetUserGroups(ctx context.Context, userID uuid.UUID, groupIDs []uuid.UUID) error
@@ -339,6 +340,30 @@ func (h *UserHandler) Unlock(c echo.Context) error {
 		return c.NoContent(http.StatusOK)
 	}
 	AddFlash(c, "success", "User "+target.Email+" unlocked.")
+	return c.Redirect(http.StatusFound, "/users/")
+}
+
+// ForceReset flags a user's account so their next login requires setting a
+// new password, mirroring Unlock's flash/HTMX-toast shape.
+func (h *UserHandler) ForceReset(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+	target, err := h.users.ForceUserPasswordReset(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+	if target == nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+
+	h.activity.LogUpdate(requestContext(c), "user", target.ID.String(), target.Email, nil)
+	if IsHXRequest(c) {
+		TriggerToast(c, "success", "Password reset forced for "+target.Email+".")
+		return c.NoContent(http.StatusOK)
+	}
+	AddFlash(c, "success", "Password reset forced for "+target.Email+".")
 	return c.Redirect(http.StatusFound, "/users/")
 }
 

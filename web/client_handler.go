@@ -28,6 +28,7 @@ type ClientStore interface {
 	ServiceClientApplicationIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error)
 	ServiceClientRedirectURIs(ctx context.Context, id uuid.UUID) ([]string, error)
 	ServiceClientAllowedGroupIDs(ctx context.Context, id uuid.UUID) ([]uuid.UUID, error)
+	ServiceClientDomains(ctx context.Context, id uuid.UUID) ([]string, error)
 	UpdateServiceClientSettings(ctx context.Context, id uuid.UUID, in auth.UpdateServiceClientSettingsInput) (*authmodel.ServiceClient, error)
 }
 
@@ -140,9 +141,14 @@ func (h *ClientHandler) Detail(c echo.Context) error {
 	if client.APIKeyID != nil {
 		apiKeyID = *client.APIKeyID
 	}
+	domains, err := h.clients.ServiceClientDomains(c.Request().Context(), client.ID)
+	if err != nil {
+		return err
+	}
 	return pages.ClientDetail(flashes(c), navUser(c), pages.ClientDetailData{
 		CSRFToken: csrfToken(c), ID: client.ID.String(), Name: client.Name, APIKeyID: apiKeyID,
 		EncryptionKey: client.EncryptionKey, IsActive: client.IsActive, IsAuthApplication: client.IsAuthApplication,
+		IsProxyAuthEnabled: client.IsProxyAuthEnabled, Domains: domains,
 		CreatedAt: client.CreatedAt.Format("2006-01-02 15:04"), UpdatedAt: client.UpdatedAt.Format("2006-01-02 15:04"),
 	}).Render(c.Request().Context(), c.Response())
 }
@@ -173,8 +179,9 @@ func (h *ClientHandler) allGroupOptions(ctx context.Context) ([]pages.ClientGrou
 
 func clientSettingsInput(c echo.Context) auth.UpdateServiceClientSettingsInput {
 	in := auth.UpdateServiceClientSettingsInput{
-		IsAuthApplication: c.FormValue("is_auth_application") != "",
-		RequireConsent:    c.FormValue("require_consent") != "",
+		IsAuthApplication:  c.FormValue("is_auth_application") != "",
+		RequireConsent:     c.FormValue("require_consent") != "",
+		IsProxyAuthEnabled: c.FormValue("is_proxy_auth_enabled") != "",
 	}
 	for _, idStr := range c.Request().Form["application_ids"] {
 		if id, err := uuid.Parse(idStr); err == nil {
@@ -189,6 +196,11 @@ func clientSettingsInput(c echo.Context) auth.UpdateServiceClientSettingsInput {
 	for _, line := range strings.Split(c.FormValue("redirect_uris"), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			in.RedirectURIs = append(in.RedirectURIs, line)
+		}
+	}
+	for _, line := range strings.Split(c.FormValue("domains"), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			in.Domains = append(in.Domains, line)
 		}
 	}
 	return in
@@ -223,10 +235,16 @@ func (h *ClientHandler) Edit(c echo.Context) error {
 		if err != nil {
 			return err
 		}
+		domains, err := h.clients.ServiceClientDomains(c.Request().Context(), client.ID)
+		if err != nil {
+			return err
+		}
 		return pages.ClientEdit(flashes(c), navUser(c), pages.ClientEditData{
 			CSRFToken: csrfToken(c), ID: client.ID.String(), Name: client.Name, Action: action,
 			IsAuthApplication: client.IsAuthApplication, RequireConsent: client.RequireConsent,
+			IsProxyAuthEnabled:     client.IsProxyAuthEnabled,
 			RedirectURIs:           strings.Join(redirectURIs, "\n"),
+			Domains:                strings.Join(domains, "\n"),
 			Applications:           apps,
 			SelectedApplicationIDs: selectedSet(appIDs),
 			Groups:                 groupOpts,
@@ -242,7 +260,9 @@ func (h *ClientHandler) Edit(c echo.Context) error {
 		return pages.ClientEdit(flashes(c), navUser(c), pages.ClientEditData{
 			CSRFToken: csrfToken(c), ID: client.ID.String(), Name: client.Name, Action: action, Error: errMsg,
 			IsAuthApplication: in.IsAuthApplication, RequireConsent: in.RequireConsent,
+			IsProxyAuthEnabled:     in.IsProxyAuthEnabled,
 			RedirectURIs:           strings.Join(in.RedirectURIs, "\n"),
+			Domains:                strings.Join(in.Domains, "\n"),
 			Applications:           apps,
 			SelectedApplicationIDs: selectedSet(in.ApplicationIDs),
 			Groups:                 groupOpts,

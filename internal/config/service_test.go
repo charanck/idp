@@ -21,8 +21,7 @@ func newTestConfigService(t *testing.T) (*config.ConfigService, *fakeApplication
 	apps := newFakeApplicationRepository()
 	envs := newFakeEnvironmentRepository(apps)
 	configs := newFakeConfigRepository(apps, envs)
-	domains := newFakeApplicationDomainRepository()
-	svc := config.NewConfigService(configs, apps, envs, domains, crypto.NewEncryptionService(masterKey), newFakeCache(), time.Minute)
+	svc := config.NewConfigService(configs, apps, envs, crypto.NewEncryptionService(masterKey), newFakeCache(), time.Minute)
 	return svc, apps, envs, configs
 }
 

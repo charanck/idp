@@ -22,6 +22,30 @@ type AuthStore interface {
 	AuthenticateUser(ctx context.Context, email, password string) (*authmodel.User, error)
 	SetPassword(ctx context.Context, userID uuid.UUID, hashedPassword string) error
 	GetPolicy(ctx context.Context) (*authmodel.Policy, error)
+	UserGroups(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error)
+	GroupApplicationIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error)
+}
+
+// postLoginLandingPath is where a just-authenticated user should land:
+// /dashboard/ if their groups grant the dashboard module, else /profile/
+// (a User-tier account has nothing else to see in the web UI).
+func postLoginLandingPath(ctx context.Context, store AuthStore, userID uuid.UUID) string {
+	groups, err := store.UserGroups(ctx, userID)
+	if err != nil {
+		return "/profile/"
+	}
+	appIDs := make(map[uuid.UUID][]uuid.UUID, len(groups))
+	for _, g := range groups {
+		ids, err := store.GroupApplicationIDs(ctx, g.ID)
+		if err != nil {
+			return "/profile/"
+		}
+		appIDs[g.ID] = ids
+	}
+	if auth.ComputeEffectivePermissions(groups, appIDs).HasModule(auth.ModuleDashboard) {
+		return "/dashboard/"
+	}
+	return "/profile/"
 }
 
 // OAuthActiveLister feeds the "log in with..." buttons on the login page.
@@ -78,15 +102,15 @@ func (h *AuthHandler) activeOAuthProviders(ctx context.Context) ([]pages.LoginOA
 // Home mirrors web_ui/views.py's home: redirect to the dashboard if logged
 // in, else to the login page.
 func (h *AuthHandler) Home(c echo.Context) error {
-	if CurrentUser(c) != nil {
-		return c.Redirect(http.StatusFound, "/dashboard/")
+	if user := CurrentUser(c); user != nil {
+		return c.Redirect(http.StatusFound, postLoginLandingPath(c.Request().Context(), h.auth, user.ID))
 	}
 	return c.Redirect(http.StatusFound, "/login/")
 }
 
 func (h *AuthHandler) Login(c echo.Context) error {
-	if CurrentUser(c) != nil {
-		return c.Redirect(http.StatusFound, "/dashboard/")
+	if user := CurrentUser(c); user != nil {
+		return c.Redirect(http.StatusFound, postLoginLandingPath(c.Request().Context(), h.auth, user.ID))
 	}
 	providers, err := h.activeOAuthProviders(c.Request().Context())
 	if err != nil {
@@ -167,7 +191,7 @@ func (h *AuthHandler) Login(c echo.Context) error {
 
 	next := c.QueryParam("next")
 	if next == "" {
-		next = "/dashboard/"
+		next = postLoginLandingPath(c.Request().Context(), h.auth, user.ID)
 	}
 	return c.Redirect(http.StatusFound, next)
 }
@@ -232,7 +256,7 @@ func (h *AuthHandler) PasswordChange(c echo.Context) error {
 	}
 
 	AddFlash(c, "success", "Your password has been changed.")
-	return c.Redirect(http.StatusFound, "/dashboard/")
+	return c.Redirect(http.StatusFound, "/profile/")
 }
 
 var (

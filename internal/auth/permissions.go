@@ -22,6 +22,7 @@ const (
 	ModuleBranding             = "branding"
 	ModuleNotificationSettings = "notification_settings"
 	ModuleActivityLog          = "activity_log"
+	ModuleDashboard            = "dashboard"
 )
 
 // AllModules is the fixed vocabulary of module keys assignable to a Group,
@@ -39,6 +40,7 @@ var AllModules = []string{
 	ModuleBranding,
 	ModuleNotificationSettings,
 	ModuleActivityLog,
+	ModuleDashboard,
 }
 
 // EffectivePermissions is the union of a user's groups: the set of module

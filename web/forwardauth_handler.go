@@ -11,14 +11,15 @@ import (
 	"github.com/labstack/echo/v4"
 
 	authmodel "controlplane/internal/model/auth"
-	model "controlplane/internal/model/config"
 )
 
-// ApplicationHostResolver is what the forward-auth verify endpoint needs to
-// resolve a proxy-forwarded Host header to the Application whose Group
-// allow-list gates access. Satisfied by *config.ConfigService.
-type ApplicationHostResolver interface {
-	ApplicationByHost(ctx context.Context, host string) (*model.Application, error)
+// ProxyAuthResolver is what the forward-auth verify endpoint needs to
+// resolve a proxy-forwarded Host header to the ServiceClient whose
+// IsProxyAuthEnabled toggle and AllowedGroupIDs allow-list gate access.
+// Satisfied by *auth.AuthService.
+type ProxyAuthResolver interface {
+	ServiceClientByHost(ctx context.Context, host string) (*authmodel.ServiceClient, error)
+	ServiceClientAllowsUser(ctx context.Context, client *authmodel.ServiceClient, userID uuid.UUID) (bool, error)
 }
 
 // GroupLister feeds the X-Auth-Request-Groups identity header. Satisfied by
@@ -28,12 +29,12 @@ type GroupLister interface {
 }
 
 type ForwardAuthHandler struct {
-	apps   ApplicationHostResolver
-	groups GroupLister
+	clients ProxyAuthResolver
+	groups  GroupLister
 }
 
-func NewForwardAuthHandler(apps ApplicationHostResolver, groups GroupLister) *ForwardAuthHandler {
-	return &ForwardAuthHandler{apps: apps, groups: groups}
+func NewForwardAuthHandler(clients ProxyAuthResolver, groups GroupLister) *ForwardAuthHandler {
+	return &ForwardAuthHandler{clients: clients, groups: groups}
 }
 
 // Verify is a generic forward-auth endpoint a reverse proxy calls on every
@@ -41,8 +42,9 @@ func NewForwardAuthHandler(apps ApplicationHostResolver, groups GroupLister) *Fo
 // login session (shared via the COOKIE_DOMAIN-scoped session cookie), for
 // both Traefik ForwardAuth and nginx auth_request style configs. It reads
 // the forwarded Host/URI/Proto standard proxy headers, resolves the
-// Application mapped to that host (see application_domains), and checks the
-// session user's effective Group Application allow-list against it.
+// ServiceClient mapped to that host (see service_client_domains), and checks
+// the session user against that client's AllowedGroupIDs - the same gate
+// OIDC login uses.
 //
 // On success: 200 with X-Auth-Request-Email/-User/-Groups identity headers,
 // the header names nginx/oauth2-proxy conventions already expect.
@@ -52,8 +54,9 @@ func NewForwardAuthHandler(apps ApplicationHostResolver, groups GroupLister) *Fo
 // redirect via `error_page 401 = /login/`. Passing ?redirect=1 instead
 // returns a 302 to /login/?next=<forwarded-url>, for proxies (Traefik
 // ForwardAuth) that forward the auth response to the client verbatim rather
-// than remapping the status code themselves. A host with no configured
-// Application fails closed (401/redirect), never silently allowed.
+// than remapping the status code themselves. A host with no client mapped,
+// or a client with proxy-auth disabled/inactive, fails closed (401/redirect),
+// never silently allowed.
 func (h *ForwardAuthHandler) Verify(c echo.Context) error {
 	host := c.Request().Header.Get("X-Forwarded-Host")
 	uri := c.Request().Header.Get("X-Forwarded-Uri")
@@ -68,12 +71,21 @@ func (h *ForwardAuthHandler) Verify(c echo.Context) error {
 		return h.deny(c, host, proto, uri)
 	}
 
-	app, err := h.apps.ApplicationByHost(c.Request().Context(), host)
+	client, err := h.clients.ServiceClientByHost(c.Request().Context(), host)
 	if err != nil {
 		return err
 	}
-	if app == nil || !ApplicationAllowed(c, app.ID) {
-		slog.DebugContext(c.Request().Context(), "forward-auth denied: host has no application mapping or user not allowed", "host", host, "user_id", user.ID, "app_found", app != nil)
+	if client == nil || !client.IsActive || !client.IsProxyAuthEnabled {
+		slog.DebugContext(c.Request().Context(), "forward-auth denied: host has no proxy-auth client mapping", "host", host, "user_id", user.ID, "client_found", client != nil)
+		return h.deny(c, host, proto, uri)
+	}
+
+	allowed, err := h.clients.ServiceClientAllowsUser(c.Request().Context(), client, user.ID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		slog.DebugContext(c.Request().Context(), "forward-auth denied: user not allowed for client", "host", host, "user_id", user.ID, "client_id", client.ID)
 		return h.deny(c, host, proto, uri)
 	}
 
@@ -86,7 +98,7 @@ func (h *ForwardAuthHandler) Verify(c echo.Context) error {
 		names = append(names, g.Name)
 	}
 
-	slog.DebugContext(c.Request().Context(), "forward-auth allowed", "host", host, "user_id", user.ID, "application_id", app.ID)
+	slog.DebugContext(c.Request().Context(), "forward-auth allowed", "host", host, "user_id", user.ID, "client_id", client.ID)
 
 	resp := c.Response()
 	resp.Header().Set("X-Auth-Request-Email", user.Email)

@@ -88,6 +88,16 @@ templ UsersList(flashes []session.Flash, user layout.NavUser, data UsersListData
 										hx-swap="none"
 									>Unlock</a>
 								}
+								<a
+									role="button"
+									class="btn-sm outline"
+									href={ templ.URL("/users/" + row.ID.String() + "/edit/") }
+									hx-post={ "/users/" + row.ID.String() + "/force-reset/" }
+									hx-vals={ `{"csrf_token": "` + data.CSRFToken + `"}` }
+									hx-confirm="Force this user to reset their password on next login?"
+									hx-target="closest tr"
+									hx-swap="none"
+								>Force Password Reset</a>
 								<a role="button" class="btn-sm btn-danger outline" href={ templ.URL("/users/" + row.ID.String() + "/delete/") }>Delete</a>
 							</td>
 						</tr>

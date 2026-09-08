@@ -107,12 +107,13 @@ func main() {
 		Policy:               web.NewPolicyHandler(svc.Auth, svc.Activity),
 		Branding:             web.NewBrandingHandler(svc.Auth, svc.Activity),
 		Auth:                 web.NewAuthHandler(svc.Auth, svc.OAuth, svc.RateLimiter, svc.Activity, cfg.AuthRateLimit, cfg.AuthRateLimitWindowSeconds),
+		Profile:              web.NewProfileHandler(svc.Auth),
 		OAuthLogin:           web.NewOAuthLoginHandler(svc.OAuth, svc.Activity),
 		OAuthProvider:        web.NewOAuthProviderHandler(svc.OAuth, svc.Activity),
 		OIDC:                 web.NewOIDCHandler(svc.OIDC, svc.Activity),
 		NotificationSettings: web.NewNotificationSettingsHandler(notif.Settings, svc.Activity),
 		Notification:         web.NewNotificationHandler(notif.Service, svc.Config),
-		ForwardAuth:          web.NewForwardAuthHandler(svc.Config, svc.Auth),
+		ForwardAuth:          web.NewForwardAuthHandler(svc.Auth, svc.Auth),
 	}
 	web.RegisterRoutes(e, webHandlers, webAuthMW)
 

@@ -84,7 +84,6 @@ type ApplicationFormData struct {
 	Error     string
 	IsEdit    bool
 	Action    string
-	Domains   string
 }
 
 templ ApplicationForm(flashes []session.Flash, user layout.NavUser, data ApplicationFormData) {
@@ -106,19 +105,6 @@ templ ApplicationForm(flashes []session.Flash, user layout.NavUser, data Applica
 					Name
 					<input type="text" id="name" name="name" value={ data.Name } required autofocus/>
 				</label>
-				if data.IsEdit {
-					<label for="domains">
-						Forward-Auth Domains
-						<input
-							type="text"
-							id="domains"
-							name="domains"
-							placeholder="app.example.com, staging.example.com"
-							value={ data.Domains }
-						/>
-						<small>Comma-separated hostnames a reverse proxy forwards to /forward-auth/verify for this application. Leave blank to disable forward-auth for it.</small>
-					</label>
-				}
 				<div class="form-actions">
 					<button type="submit">Save</button>
 					<a role="button" class="secondary outline" href="/applications/">Cancel</a>

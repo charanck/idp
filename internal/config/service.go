@@ -23,14 +23,13 @@ type ConfigService struct {
 	configs      model.ConfigRepository
 	apps         model.ApplicationRepository
 	envs         model.EnvironmentRepository
-	domains      model.ApplicationDomainRepository
 	encryption   *crypto.EncryptionService
 	cache        cache.Cache
 	cacheTimeout time.Duration
 }
 
-func NewConfigService(configs model.ConfigRepository, apps model.ApplicationRepository, envs model.EnvironmentRepository, domains model.ApplicationDomainRepository, encryption *crypto.EncryptionService, c cache.Cache, cacheTimeout time.Duration) *ConfigService {
-	return &ConfigService{configs: configs, apps: apps, envs: envs, domains: domains, encryption: encryption, cache: c, cacheTimeout: cacheTimeout}
+func NewConfigService(configs model.ConfigRepository, apps model.ApplicationRepository, envs model.EnvironmentRepository, encryption *crypto.EncryptionService, c cache.Cache, cacheTimeout time.Duration) *ConfigService {
+	return &ConfigService{configs: configs, apps: apps, envs: envs, encryption: encryption, cache: c, cacheTimeout: cacheTimeout}
 }
 
 // getScope looks up an existing Application/Environment without creating
