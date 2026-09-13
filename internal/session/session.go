@@ -11,6 +11,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -118,6 +120,9 @@ func (st *Store) load(c echo.Context) *Session {
 
 	val, err := st.rdb.Get(c.Request().Context(), redisKey(id)).Result()
 	if err != nil {
+		if !errors.Is(err, redis.Nil) {
+			slog.WarnContext(c.Request().Context(), "session: redis get failed, falling back to anonymous session", "err", err)
+		}
 		return &Session{data: map[string]any{}}
 	}
 
@@ -161,6 +166,7 @@ func (st *Store) persist(c echo.Context, sess *Session) error {
 		return err
 	}
 	if err := st.rdb.Set(ctx, redisKey(sess.id), string(b), st.ttl).Err(); err != nil {
+		slog.ErrorContext(ctx, "session: redis set failed, cookie will not be issued", "err", err)
 		return err
 	}
 
