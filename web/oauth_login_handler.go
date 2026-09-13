@@ -26,12 +26,13 @@ type OAuthFlow interface {
 }
 
 type OAuthLoginHandler struct {
-	oauth    OAuthFlow
-	activity ActivityRecorder
+	oauth        OAuthFlow
+	activity     ActivityRecorder
+	cookieDomain string
 }
 
-func NewOAuthLoginHandler(oauth OAuthFlow, activity ActivityRecorder) *OAuthLoginHandler {
-	return &OAuthLoginHandler{oauth: oauth, activity: activity}
+func NewOAuthLoginHandler(oauth OAuthFlow, activity ActivityRecorder, cookieDomain string) *OAuthLoginHandler {
+	return &OAuthLoginHandler{oauth: oauth, activity: activity, cookieDomain: cookieDomain}
 }
 
 func redirectURIFor(c echo.Context, providerID string) string {
@@ -71,6 +72,9 @@ func (h *OAuthLoginHandler) Login(c echo.Context) error {
 	sess := session.FromContext(c)
 	sess.Set("oauth_state_"+provider.ID.String(), state)
 	sess.Set("oauth_provider_"+provider.ID.String(), provider.ID.String())
+	if next := safeNext(c, c.QueryParam("next"), h.cookieDomain); next != "" {
+		sess.Set("oauth_next_"+provider.ID.String(), next)
+	}
 
 	return c.Redirect(http.StatusFound, authURL)
 }
@@ -142,6 +146,9 @@ func (h *OAuthLoginHandler) Callback(c echo.Context) error {
 	h.activity.LogLogin(requestContext(c), user.Email, "OAuth login via "+provider.Name)
 
 	AddFlash(c, "success", "Successfully logged in with "+provider.Name+"!")
+	if next, ok := sess.PopString("oauth_next_" + provider.ID.String()); ok && next != "" {
+		return c.Redirect(http.StatusFound, next)
+	}
 	return c.Redirect(http.StatusFound, "/dashboard/")
 }
 

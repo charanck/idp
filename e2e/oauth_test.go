@@ -96,7 +96,19 @@ func newAnonymousClient(t *testing.T) *http.Client {
 // what a real browser would carry through to the callback.
 func beginOAuthLogin(t *testing.T, client *http.Client, base, providerID string) string {
 	t.Helper()
-	resp, err := client.Get(base + "/oauth/login/" + providerID + "/")
+	return beginOAuthLoginWithNext(t, client, base, providerID, "")
+}
+
+// beginOAuthLoginWithNext is beginOAuthLogin but also carries a ?next=
+// post-login redirect target through to /oauth/login/:id/, mirroring a
+// browser that arrived at the OAuth button from /login/?next=....
+func beginOAuthLoginWithNext(t *testing.T, client *http.Client, base, providerID, next string) string {
+	t.Helper()
+	u := base + "/oauth/login/" + providerID + "/"
+	if next != "" {
+		u += "?next=" + url.QueryEscape(next)
+	}
+	resp, err := client.Get(u)
 	if err != nil {
 		t.Fatalf("GET /oauth/login/: %v", err)
 	}

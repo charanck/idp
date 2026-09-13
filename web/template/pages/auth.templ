@@ -8,6 +8,7 @@ import "controlplane/web/template/layout"
 type LoginData struct {
 	CSRFToken          string
 	Email              string
+	Next               string
 	Error              string
 	OAuthProviders     []LoginOAuthProvider
 	ProductName        string
@@ -19,6 +20,7 @@ type LoginData struct {
 type LoginOAuthProvider struct {
 	ID   string
 	Name string
+	Href string
 }
 
 templ Login(flashes []session.Flash, data LoginData) {
@@ -42,6 +44,7 @@ templ Login(flashes []session.Flash, data LoginData) {
 			}
 			<form method="post" action="/login/" class="login-form">
 				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+				<input type="hidden" name="next" value={ data.Next }/>
 				<label for="email">
 					Username or email
 					<input type="email" id="email" name="username" value={ data.Email } required autofocus/>
@@ -56,7 +59,7 @@ templ Login(flashes []session.Flash, data LoginData) {
 				<div class="login-divider"><span>or</span></div>
 				<div class="login-oauth-list">
 					for _, p := range data.OAuthProviders {
-						<a role="button" class="secondary outline block mb-2" href={ templ.URL("/oauth/login/" + p.ID + "/") }>
+						<a role="button" class="secondary outline block mb-2" href={ templ.URL(p.Href) }>
 							<i class="bi bi-box-arrow-in-right"></i> Continue with { p.Name }
 						</a>
 					}
