@@ -142,8 +142,18 @@ func TestOIDCService_IssueAndExchangeCode_Succeeds(t *testing.T) {
 		t.Fatalf("expected preferred_username claim, got %v", claims["preferred_username"])
 	}
 
-	if _, err := f.svc.ValidateAccessToken(ctx, accessToken); err != nil {
+	accessClaims, err := f.svc.ValidateAccessToken(ctx, accessToken)
+	if err != nil {
 		t.Fatalf("ValidateAccessToken(accessToken): %v", err)
+	}
+	// /oauth2/userinfo (UserInfo in api/http/oidc_handler.go) returns exactly
+	// these access-token claims, so email/preferred_username must be on the
+	// access token too, not just the ID token, for userinfo to expose them.
+	if accessClaims["email"] != user.Email {
+		t.Fatalf("expected email claim on access token (scope requested), got %v", accessClaims["email"])
+	}
+	if accessClaims["preferred_username"] != user.Username {
+		t.Fatalf("expected preferred_username claim on access token, got %v", accessClaims["preferred_username"])
 	}
 }
 

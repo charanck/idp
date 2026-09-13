@@ -293,11 +293,27 @@ func (s *OIDCService) ExchangeCode(ctx context.Context, clientID, clientSecret, 
 	if authCode.Nonce != nil {
 		idClaims["nonce"] = *authCode.Nonce
 	}
+
+	accessClaims := jwt.MapClaims{
+		"iss":   issuer,
+		"sub":   user.ID.String(),
+		"aud":   clientID,
+		"exp":   expiresAt.Unix(),
+		"iat":   now.Unix(),
+		"scope": authCode.Scope,
+	}
+
+	// The access token carries the same scope-gated profile claims as the ID
+	// token -- /oauth2/userinfo (UserInfo in api/http/oidc_handler.go) reads
+	// them straight off the access token via ValidateAccessToken, not the ID
+	// token, so a claim added only to idClaims would never be visible there.
 	if hasScope["profile"] {
 		idClaims["preferred_username"] = user.Username
+		accessClaims["preferred_username"] = user.Username
 	}
 	if hasScope["email"] {
 		idClaims["email"] = user.Email
+		accessClaims["email"] = user.Email
 	}
 	if hasScope["groups"] {
 		userGroups, err := s.groups.ListByUserID(ctx, user.ID)
@@ -309,15 +325,7 @@ func (s *OIDCService) ExchangeCode(ctx context.Context, clientID, clientSecret, 
 			names[i] = g.Name
 		}
 		idClaims["groups"] = names
-	}
-
-	accessClaims := jwt.MapClaims{
-		"iss":   issuer,
-		"sub":   user.ID.String(),
-		"aud":   clientID,
-		"exp":   expiresAt.Unix(),
-		"iat":   now.Unix(),
-		"scope": authCode.Scope,
+		accessClaims["groups"] = names
 	}
 
 	idToken, err = signClaims(privKey, kid, idClaims)
