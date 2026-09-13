@@ -113,7 +113,7 @@ func main() {
 		OIDC:                 web.NewOIDCHandler(svc.OIDC, svc.Activity),
 		NotificationSettings: web.NewNotificationSettingsHandler(notif.Settings, svc.Activity),
 		Notification:         web.NewNotificationHandler(notif.Service, svc.Config),
-		ForwardAuth:          web.NewForwardAuthHandler(svc.Auth, svc.Auth),
+		ForwardAuth:          web.NewForwardAuthHandler(svc.Auth, svc.Auth, cfg.PublicURL),
 	}
 	web.RegisterRoutes(e, webHandlers, webAuthMW)
 

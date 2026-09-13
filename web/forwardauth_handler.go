@@ -29,12 +29,18 @@ type GroupLister interface {
 }
 
 type ForwardAuthHandler struct {
-	clients ProxyAuthResolver
-	groups  GroupLister
+	clients   ProxyAuthResolver
+	groups    GroupLister
+	publicURL string
 }
 
-func NewForwardAuthHandler(clients ProxyAuthResolver, groups GroupLister) *ForwardAuthHandler {
-	return &ForwardAuthHandler{clients: clients, groups: groups}
+// NewForwardAuthHandler builds the forward-auth verify handler. publicURL is
+// idp's own externally-reachable base URL (see appconfig.Config.PublicURL) -
+// required to build a browser-reachable "/login/?next=..." redirect, since
+// this endpoint is always reached over the internal network and can't infer
+// its own public origin from the request it receives.
+func NewForwardAuthHandler(clients ProxyAuthResolver, groups GroupLister, publicURL string) *ForwardAuthHandler {
+	return &ForwardAuthHandler{clients: clients, groups: groups, publicURL: publicURL}
 }
 
 // Verify is a generic forward-auth endpoint a reverse proxy calls on every
@@ -116,7 +122,15 @@ func (h *ForwardAuthHandler) deny(c echo.Context, host, proto, uri string) error
 			}
 			next = proto + "://" + host + uri
 		}
-		return c.Redirect(http.StatusFound, "/login/?next="+url.QueryEscape(next))
+		// Absolute, so Traefik's forwardAuth (which resolves a relative
+		// Location against the address it dialed - the internal
+		// http://idp:8000 one) forwards it to the browser unchanged instead
+		// of resolving it into that unreachable internal address.
+		loginPath := "/login/?next=" + url.QueryEscape(next)
+		if h.publicURL != "" {
+			return c.Redirect(http.StatusFound, h.publicURL+loginPath)
+		}
+		return c.Redirect(http.StatusFound, loginPath)
 	}
 	return echo.NewHTTPError(http.StatusUnauthorized)
 }
