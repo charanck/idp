@@ -221,6 +221,58 @@ func TestOAuthCallback_AllowsLoginForActivatedUser(t *testing.T) {
 	}
 }
 
+// TestOAuthCallback_RejectsNewUserWhenDomainNotAllowed proves the Policy's
+// self_registration_allowed_domains allow-list also gates brand-new OAuth
+// auto-provisioned accounts, not just the (disabled) /register/ form.
+func TestOAuthCallback_RejectsNewUserWhenDomainNotAllowed(t *testing.T) {
+	base := e2eBaseURL(t)
+	admin := newAdminSession(t)
+
+	original := admin.currentSelfRegistrationDomains(t)
+	t.Cleanup(func() {
+		token := admin.csrfToken(t, "/policies/")
+		resp, err := admin.http.PostForm(base+"/policies/", url.Values{
+			"csrf_token":                        {token},
+			"self_registration_allowed_domains": {original},
+		})
+		if err != nil {
+			t.Logf("cleanup restore policy: %v", err)
+			return
+		}
+		resp.Body.Close()
+	})
+
+	token := admin.csrfToken(t, "/policies/")
+	resp, err := admin.http.PostForm(base+"/policies/", url.Values{
+		"csrf_token":                        {token},
+		"self_registration_allowed_domains": {"allowed.example"},
+	})
+	if err != nil {
+		t.Fatalf("POST /policies/: %v", err)
+	}
+	resp.Body.Close()
+
+	email := fmt.Sprintf("e2e-oauth-%d@notallowed.example", time.Now().UnixNano())
+	fake := fakeOAuthProviderServer(t, email)
+	providerID := admin.createOAuthProvider(t, fake.URL)
+
+	client := newAnonymousClient(t)
+	state := beginOAuthLogin(t, client, base, providerID)
+
+	callbackResp, err := client.Get(base + "/oauth/callback/" + providerID + "/?code=abc&state=" + state)
+	if err != nil {
+		t.Fatalf("GET oauth callback: %v", err)
+	}
+	defer callbackResp.Body.Close()
+	if callbackResp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want 302", callbackResp.StatusCode)
+	}
+	if loc := callbackResp.Header.Get("Location"); loc != "/login/" {
+		t.Fatalf("Location = %q, want /login/", loc)
+	}
+	assertNoAuthenticatedSession(t, client, base)
+}
+
 func TestOAuthCallback_RejectsLoginForNewlyAutoCreatedUser(t *testing.T) {
 	base := e2eBaseURL(t)
 	admin := newAdminSession(t)

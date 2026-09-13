@@ -44,7 +44,7 @@ templ PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFo
 			<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 
 			<article class="form-card-lg">
-				<h3>Registration</h3>
+				<h3>Account Creation</h3>
 				<label for="self_registration_allowed_domains">
 					Self-Registration Allowed Domains
 					<input
@@ -54,7 +54,7 @@ templ PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFo
 						placeholder="example.com, another.com"
 						value={ data.SelfRegistrationAllowedDomains }
 					/>
-					<small>Comma-separated list of email domains allowed to self-register. Leave blank to allow any domain.</small>
+					<small>Comma-separated list of email domains allowed to create an account, whether via self-registration or OAuth/SSO auto-provisioning. Leave blank to allow any domain.</small>
 				</label>
 			</article>
 

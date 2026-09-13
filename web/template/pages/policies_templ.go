@@ -103,7 +103,7 @@ func PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFor
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"><article class=\"form-card-lg\"><h3>Registration</h3><label for=\"self_registration_allowed_domains\">Self-Registration Allowed Domains <input type=\"text\" id=\"self_registration_allowed_domains\" name=\"self_registration_allowed_domains\" placeholder=\"example.com, another.com\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "\"><article class=\"form-card-lg\"><h3>Account Creation</h3><label for=\"self_registration_allowed_domains\">Self-Registration Allowed Domains <input type=\"text\" id=\"self_registration_allowed_domains\" name=\"self_registration_allowed_domains\" placeholder=\"example.com, another.com\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -116,7 +116,7 @@ func PoliciesForm(flashes []session.Flash, user layout.NavUser, data PoliciesFor
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\"> <small>Comma-separated list of email domains allowed to self-register. Leave blank to allow any domain.</small></label></article><article class=\"form-card-lg\"><h3>Password Policy</h3><label for=\"password_min_length\">Minimum Length <input type=\"number\" min=\"0\" id=\"password_min_length\" name=\"password_min_length\" value=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "\"> <small>Comma-separated list of email domains allowed to create an account, whether via self-registration or OAuth/SSO auto-provisioning. Leave blank to allow any domain.</small></label></article><article class=\"form-card-lg\"><h3>Password Policy</h3><label for=\"password_min_length\">Minimum Length <input type=\"number\" min=\"0\" id=\"password_min_length\" name=\"password_min_length\" value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
