@@ -12,7 +12,7 @@ import (
 
 func newAuthHandlerFixture(authStore *fakeAuthStore, limiter fakeRateLimiter) (*fakeActivityRecorder, *web.AuthHandler) {
 	activity := &fakeActivityRecorder{}
-	h := web.NewAuthHandler(authStore, fakeOAuthActiveLister{}, limiter, activity, 5, 60)
+	h := web.NewAuthHandler(authStore, fakeOAuthActiveLister{}, limiter, activity, 5, 60, "")
 	return activity, h
 }
 

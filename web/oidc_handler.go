@@ -87,15 +87,21 @@ func (h *OIDCHandler) Authorize(c echo.Context) error {
 			return redirectWithOAuthError(c, redirectURI, state, "access_denied")
 		}
 	} else if client.RequireConsent {
-		return pages.OIDCConsent(flashes(c), navUser(c), pages.OIDCConsentData{
-			CSRFToken:    csrfToken(c),
-			ClientName:   client.Name,
-			Scope:        scope,
-			ClientID:     clientID,
-			RedirectURI:  redirectURI,
-			ResponseType: responseType,
-			State:        state,
-			Nonce:        nonce,
+		branding := BrandingFromContext(c)
+		return pages.OIDCConsent(flashes(c), pages.OIDCConsentData{
+			CSRFToken:          csrfToken(c),
+			ClientName:         client.Name,
+			Scope:              scope,
+			ClientID:           clientID,
+			RedirectURI:        redirectURI,
+			ResponseType:       responseType,
+			State:              state,
+			Nonce:              nonce,
+			UserEmail:          user.Email,
+			ProductName:        branding.ProductName,
+			LogoURL:            branding.LogoURL,
+			AccentColor:        branding.AccentColor,
+			BackgroundImageURL: branding.BackgroundImageURL,
 		}).Render(ctx, c.Response())
 	}
 
@@ -120,7 +126,14 @@ func (h *OIDCHandler) Authorize(c echo.Context) error {
 }
 
 func (h *OIDCHandler) errorPage(c echo.Context, message string) error {
-	return pages.OIDCError(flashes(c), navUser(c), message).Render(c.Request().Context(), c.Response())
+	branding := BrandingFromContext(c)
+	return pages.OIDCError(flashes(c), pages.OIDCErrorData{
+		Message:            message,
+		ProductName:        branding.ProductName,
+		LogoURL:            branding.LogoURL,
+		AccentColor:        branding.AccentColor,
+		BackgroundImageURL: branding.BackgroundImageURL,
+	}).Render(c.Request().Context(), c.Response())
 }
 
 // redirectWithOAuthError redirects back to the relying party with a

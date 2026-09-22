@@ -3,22 +3,52 @@ package pages
 import "controlplane/internal/session"
 import "controlplane/web/template/layout"
 
+// OIDCConsentData drives the standalone consent screen. Like LoginData, it
+// carries its own branding fields (rather than a layout.NavUser) because the
+// screen renders through layout.Base's unauthenticated "auth-shell" branch,
+// deliberately kept separate from the dashboard chrome even though the user
+// is logged in - see OIDCConsent.
 type OIDCConsentData struct {
-	CSRFToken    string
-	ClientName   string
-	Scope        string
-	ClientID     string
-	RedirectURI  string
-	ResponseType string
-	State        string
-	Nonce        string
+	CSRFToken          string
+	ClientName         string
+	Scope              string
+	ClientID           string
+	RedirectURI        string
+	ResponseType       string
+	State              string
+	Nonce              string
+	UserEmail          string
+	ProductName        string
+	LogoURL            string
+	AccentColor        string
+	BackgroundImageURL string
 }
 
-templ OIDCConsent(flashes []session.Flash, user layout.NavUser, data OIDCConsentData) {
-	@layout.Base("Authorize "+data.ClientName, "", user, flashes) {
-		<h2>Authorize { data.ClientName }</h2>
-		<article class="form-card-lg">
+// OIDCConsent renders the OIDC "Authorize <app>" screen as its own
+// full-page, login-style card rather than embedded in the dashboard shell:
+// it builds a bare layout.NavUser (LoggedIn left false) so layout.Base takes
+// the unauthenticated auth-shell branch, even though the visiting user is in
+// fact logged in (their email is shown instead, via UserEmail).
+templ OIDCConsent(flashes []session.Flash, data OIDCConsentData) {
+	@layout.Base("Authorize "+data.ClientName, "", layout.NavUser{ProductName: data.ProductName, LogoURL: data.LogoURL, AccentColor: data.AccentColor, BackgroundImageURL: data.BackgroundImageURL}, flashes) {
+		<article class="login-card">
+			<div class="login-brand">
+				if data.LogoURL != "" {
+					<img src={ data.LogoURL } alt="" class="brand-logo"/>
+				}
+				<h4>
+					if data.ProductName != "" {
+						{ data.ProductName }
+					} else {
+						Control Plane
+					}
+				</h4>
+				<p class="login-subtitle">Authorize { data.ClientName }</p>
+			</div>
 			<p><strong>{ data.ClientName }</strong> wants to log you in and access: <code>{ data.Scope }</code></p>
+			if data.UserEmail != "" {
+				<p class="login-subtitle">Signed in as { data.UserEmail }</p>
+			}
 			<form method="post" action="/oauth2/authorize">
 				<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
 				<input type="hidden" name="client_id" value={ data.ClientID }/>
@@ -28,7 +58,7 @@ templ OIDCConsent(flashes []session.Flash, user layout.NavUser, data OIDCConsent
 				<input type="hidden" name="state" value={ data.State }/>
 				<input type="hidden" name="nonce" value={ data.Nonce }/>
 				<div class="form-actions">
-					<button type="submit" name="decision" value="allow">Allow</button>
+					<button type="submit" name="decision" value="allow" class="login-submit">Allow</button>
 					<button type="submit" name="decision" value="deny" class="secondary outline">Deny</button>
 				</div>
 			</form>
@@ -36,9 +66,34 @@ templ OIDCConsent(flashes []session.Flash, user layout.NavUser, data OIDCConsent
 	}
 }
 
-templ OIDCError(flashes []session.Flash, user layout.NavUser, message string) {
-	@layout.Base("Authorization Error", "", user, flashes) {
-		<h2>Authorization Error</h2>
-		<div class="alert alert-danger">{ message }</div>
+// OIDCErrorData mirrors OIDCConsentData's reasoning: its own branding fields
+// so the error screen also renders standalone rather than in the dashboard
+// shell.
+type OIDCErrorData struct {
+	Message            string
+	ProductName        string
+	LogoURL            string
+	AccentColor        string
+	BackgroundImageURL string
+}
+
+templ OIDCError(flashes []session.Flash, data OIDCErrorData) {
+	@layout.Base("Authorization Error", "", layout.NavUser{ProductName: data.ProductName, LogoURL: data.LogoURL, AccentColor: data.AccentColor, BackgroundImageURL: data.BackgroundImageURL}, flashes) {
+		<article class="login-card">
+			<div class="login-brand">
+				if data.LogoURL != "" {
+					<img src={ data.LogoURL } alt="" class="brand-logo"/>
+				}
+				<h4>
+					if data.ProductName != "" {
+						{ data.ProductName }
+					} else {
+						Control Plane
+					}
+				</h4>
+				<p class="login-subtitle">Authorization Error</p>
+			</div>
+			<div class="alert alert-danger">{ data.Message }</div>
+		</article>
 	}
 }

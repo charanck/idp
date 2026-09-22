@@ -19,6 +19,12 @@ import (
 	model "controlplane/internal/model/auth"
 )
 
+// ErrOAuthDomainNotAllowed is returned by AuthenticateOrCreateUser when a
+// brand-new OAuth-provisioned account's email domain is rejected by the
+// policy's self-registration domain allow-list. Existing users
+// re-authenticating via OAuth are never subject to this check.
+var ErrOAuthDomainNotAllowed = errors.New("your email domain is not permitted to create an account")
+
 // OAuthService mirrors authentication/oauth_service.py's OAuthService: a
 // generic OAuth2/OIDC authorization-code flow for user login, provider
 // details (endpoints, scopes) coming entirely from the OAuthProvider model
@@ -27,6 +33,7 @@ type OAuthService struct {
 	providers  model.OAuthProviderRepository
 	tokens     model.OAuthUserTokenRepository
 	users      model.UserRepository
+	policies   model.PolicyRepository
 	httpClient *http.Client
 
 	// cache/cacheTimeout back the read-through, version-counter-invalidated
@@ -35,8 +42,8 @@ type OAuthService struct {
 	cacheTimeout time.Duration
 }
 
-func NewOAuthService(providers model.OAuthProviderRepository, tokens model.OAuthUserTokenRepository, users model.UserRepository, c cache.Cache, cacheTimeout time.Duration) *OAuthService {
-	return &OAuthService{providers: providers, tokens: tokens, users: users, httpClient: http.DefaultClient, cache: c, cacheTimeout: cacheTimeout}
+func NewOAuthService(providers model.OAuthProviderRepository, tokens model.OAuthUserTokenRepository, users model.UserRepository, policies model.PolicyRepository, c cache.Cache, cacheTimeout time.Duration) *OAuthService {
+	return &OAuthService{providers: providers, tokens: tokens, users: users, policies: policies, httpClient: http.DefaultClient, cache: c, cacheTimeout: cacheTimeout}
 }
 
 const providersCacheVersionKey = "authcache:providers-version"
@@ -164,6 +171,13 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *m
 		if errors.Is(userErr, gorm.ErrRecordNotFound) {
 			if !provider.AutoCreateUsers {
 				return nil, nil, errors.New("user does not exist and auto-creation is disabled")
+			}
+			policy, policyErr := s.policies.Get(ctx)
+			if policyErr != nil {
+				return nil, nil, policyErr
+			}
+			if !domainAllowed(policy.SelfRegistrationAllowedDomains, email) {
+				return nil, nil, ErrOAuthDomainNotAllowed
 			}
 			username, genErr := s.uniqueUsernameFromEmail(ctx, email)
 			if genErr != nil {

@@ -13,7 +13,7 @@ import (
 func TestOAuthLoginHandler_UnknownProviderReturns404(t *testing.T) {
 	store := newSessionStore(t)
 	flow := &fakeOAuthFlow{}
-	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
+	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{}, "")
 
 	id := uuid.New().String()
 	rec := callHandlerWithParams(t, store, http.MethodGet, "/oauth/login/"+id+"/",
@@ -28,7 +28,7 @@ func TestOAuthLoginHandler_RedirectsToAuthorizationURL(t *testing.T) {
 	store := newSessionStore(t)
 	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "Google"}
 	flow := &fakeOAuthFlow{activeProvider: provider, authURL: "https://provider.example/authorize", state: "abc123"}
-	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
+	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{}, "")
 
 	id := provider.ID.String()
 	rec := callHandlerWithParams(t, store, http.MethodGet, "/oauth/login/"+id+"/",
@@ -45,7 +45,7 @@ func TestOAuthLoginHandler_RedirectsToAuthorizationURL(t *testing.T) {
 func TestOAuthCallbackHandler_UnknownProviderReturns404(t *testing.T) {
 	store := newSessionStore(t)
 	flow := &fakeOAuthFlow{}
-	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
+	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{}, "")
 
 	id := uuid.New().String()
 	rec := callHandlerWithParams(t, store, http.MethodGet, "/oauth/callback/"+id+"/",
@@ -60,7 +60,7 @@ func TestOAuthCallbackHandler_ProviderErrorRedirectsToLogin(t *testing.T) {
 	store := newSessionStore(t)
 	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "Google"}
 	flow := &fakeOAuthFlow{provider: provider}
-	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
+	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{}, "")
 
 	id := provider.ID.String()
 	rec := callHandlerWithParams(t, store, http.MethodGet, "/oauth/callback/"+id+"/?error=access_denied",
@@ -78,7 +78,7 @@ func TestOAuthCallbackHandler_MissingCodeRedirectsToLogin(t *testing.T) {
 	store := newSessionStore(t)
 	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "Google"}
 	flow := &fakeOAuthFlow{provider: provider}
-	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
+	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{}, "")
 
 	id := provider.ID.String()
 	rec := callHandlerWithParams(t, store, http.MethodGet, "/oauth/callback/"+id+"/",
@@ -96,7 +96,7 @@ func TestOAuthCallbackHandler_StateMismatchRedirectsToLogin(t *testing.T) {
 	store := newSessionStore(t)
 	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "Google"}
 	flow := &fakeOAuthFlow{provider: provider}
-	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{})
+	h := web.NewOAuthLoginHandler(flow, &fakeActivityRecorder{}, "")
 
 	id := provider.ID.String()
 	rec := callHandlerWithParams(t, store, http.MethodGet, "/oauth/callback/"+id+"/?code=abc&state=unexpected",

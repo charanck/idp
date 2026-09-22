@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,12 +67,14 @@ type AuthHandler struct {
 	activity               ActivityRecorder
 	rateLimit              int
 	rateLimitWindowSeconds int
+	cookieDomain           string
 }
 
-func NewAuthHandler(auth AuthStore, oauthProviders OAuthActiveLister, limiter RateLimiter, activity ActivityRecorder, rateLimit, rateLimitWindowSeconds int) *AuthHandler {
+func NewAuthHandler(auth AuthStore, oauthProviders OAuthActiveLister, limiter RateLimiter, activity ActivityRecorder, rateLimit, rateLimitWindowSeconds int, cookieDomain string) *AuthHandler {
 	return &AuthHandler{
 		auth: auth, oauthProviders: oauthProviders, limiter: limiter, activity: activity,
 		rateLimit: rateLimit, rateLimitWindowSeconds: rateLimitWindowSeconds,
+		cookieDomain: cookieDomain,
 	}
 }
 
@@ -87,14 +90,18 @@ func (h *AuthHandler) loginData(c echo.Context, in pages.LoginData) pages.LoginD
 	return in
 }
 
-func (h *AuthHandler) activeOAuthProviders(ctx context.Context) ([]pages.LoginOAuthProvider, error) {
+func (h *AuthHandler) activeOAuthProviders(ctx context.Context, next string) ([]pages.LoginOAuthProvider, error) {
 	providers, err := h.oauthProviders.ListActiveProviders(ctx)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]pages.LoginOAuthProvider, 0, len(providers))
 	for _, p := range providers {
-		out = append(out, pages.LoginOAuthProvider{ID: p.ID.String(), Name: p.Name})
+		href := "/oauth/login/" + p.ID.String() + "/"
+		if next != "" {
+			href += "?next=" + url.QueryEscape(next)
+		}
+		out = append(out, pages.LoginOAuthProvider{ID: p.ID.String(), Name: p.Name, Href: href})
 	}
 	return out, nil
 }
@@ -110,19 +117,29 @@ func (h *AuthHandler) Home(c echo.Context) error {
 
 func (h *AuthHandler) Login(c echo.Context) error {
 	if user := CurrentUser(c); user != nil {
+		if next := safeNext(c, c.QueryParam("next"), h.cookieDomain); next != "" {
+			return c.Redirect(http.StatusFound, next)
+		}
 		return c.Redirect(http.StatusFound, postLoginLandingPath(c.Request().Context(), h.auth, user.ID))
-	}
-	providers, err := h.activeOAuthProviders(c.Request().Context())
-	if err != nil {
-		return err
 	}
 
 	if c.Request().Method == http.MethodGet {
-		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{CSRFToken: csrfToken(c), OAuthProviders: providers})).Render(c.Request().Context(), c.Response())
+		next := c.QueryParam("next")
+		providers, err := h.activeOAuthProviders(c.Request().Context(), next)
+		if err != nil {
+			return err
+		}
+		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{CSRFToken: csrfToken(c), Next: next, OAuthProviders: providers})).Render(c.Request().Context(), c.Response())
 	}
 
 	email := c.FormValue("username")
 	password := c.FormValue("password")
+	next := c.FormValue("next")
+
+	providers, err := h.activeOAuthProviders(c.Request().Context(), next)
+	if err != nil {
+		return err
+	}
 
 	clientIP := ratelimit.ClientIP(c.Request().Header.Get("X-Forwarded-For"), c.RealIP())
 
@@ -133,7 +150,7 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	if !auth.IPAllowed(policy.LoginIPAllowlist, clientIP) {
 		h.activity.LogLoginFailed(requestContext(c), email, "Login rejected: IP not allow-listed")
 		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
-			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
+			CSRFToken: csrfToken(c), Email: email, Next: next, OAuthProviders: providers,
 			Error: "Login is not permitted from this network.",
 		})).Render(c.Request().Context(), c.Response())
 	}
@@ -145,7 +162,7 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	}
 	if limited {
 		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
-			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
+			CSRFToken: csrfToken(c), Email: email, Next: next, OAuthProviders: providers,
 			Error: "Too many login attempts. Please try again later.",
 		})).Render(c.Request().Context(), c.Response())
 	}
@@ -155,13 +172,13 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	case errors.Is(err, auth.ErrAccountLocked):
 		h.activity.LogLoginFailed(requestContext(c), email, "Login rejected: account locked")
 		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
-			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
+			CSRFToken: csrfToken(c), Email: email, Next: next, OAuthProviders: providers,
 			Error: "This account is temporarily locked due to too many failed login attempts. Try again later.",
 		})).Render(c.Request().Context(), c.Response())
 	case errors.Is(err, auth.ErrPasswordAuthDisabled):
 		h.activity.LogLoginFailed(requestContext(c), email, "Login rejected: SSO-only policy")
 		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
-			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
+			CSRFToken: csrfToken(c), Email: email, Next: next, OAuthProviders: providers,
 			Error: "Password login is disabled. Please sign in with SSO.",
 		})).Render(c.Request().Context(), c.Response())
 	case err != nil:
@@ -170,7 +187,7 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	if user == nil {
 		h.activity.LogLoginFailed(requestContext(c), email, "Invalid web login attempt")
 		return pages.Login(flashes(c), h.loginData(c, pages.LoginData{
-			CSRFToken: csrfToken(c), Email: email, OAuthProviders: providers,
+			CSRFToken: csrfToken(c), Email: email, Next: next, OAuthProviders: providers,
 			Error: "Invalid email or password.",
 		})).Render(c.Request().Context(), c.Response())
 	}
@@ -189,11 +206,10 @@ func (h *AuthHandler) Login(c echo.Context) error {
 		return c.Redirect(http.StatusFound, "/password/change/")
 	}
 
-	next := c.QueryParam("next")
-	if next == "" {
-		next = postLoginLandingPath(c.Request().Context(), h.auth, user.ID)
+	if safe := safeNext(c, next, h.cookieDomain); safe != "" {
+		return c.Redirect(http.StatusFound, safe)
 	}
-	return c.Redirect(http.StatusFound, next)
+	return c.Redirect(http.StatusFound, postLoginLandingPath(c.Request().Context(), h.auth, user.ID))
 }
 
 // Register mirrors web_ui/views.py's register_view: public self-registration

@@ -43,6 +43,16 @@ type Config struct {
 	// forward-auth. Empty (the default) keeps today's exact-host behavior.
 	CookieDomain string
 
+	// PublicURL is idp's own externally-reachable base URL (scheme://host,
+	// no trailing slash), e.g. "https://idp.staging.venusestates.in". The
+	// forward-auth verify endpoint is always dialed over the internal
+	// docker network (never idp's own public domain - doing so would loop
+	// the request back through the edge proxy and clobber the very
+	// X-Forwarded-Host/-Uri headers it needs to read), so it can't infer
+	// its own public origin from the request it receives and must be told
+	// explicitly to build a browser-reachable "/login/?next=..." redirect.
+	PublicURL string
+
 	Port string
 }
 
@@ -143,6 +153,7 @@ func Load() (*Config, error) {
 
 		SessionSecret: getenv("SESSION_SECRET", "dev-insecure-session-secret"),
 		CookieDomain:  os.Getenv("COOKIE_DOMAIN"),
+		PublicURL:     strings.TrimSuffix(os.Getenv("PUBLIC_URL"), "/"),
 
 		Port: getenv("PORT", "8000"),
 	}

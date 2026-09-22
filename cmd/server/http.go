@@ -60,9 +60,14 @@ func newEchoServer(sessions *session.Store) *echo.Echo {
 	return e
 }
 
-// skipForStatelessAPI wraps a middleware so it's a no-op for /api/... paths
-// and the stateless OIDC endpoints, letting the web UI's session/CSRF
-// middleware share an *echo.Echo with the stateless JSON API.
+// skipForStatelessAPI wraps a middleware so it's a no-op for /api/... paths,
+// the stateless OIDC endpoints, and public static assets (/static/...,
+// /favicon.ico), letting the web UI's session/CSRF middleware share an
+// *echo.Echo with the stateless JSON API. Static assets must be excluded:
+// e.Static registers a plain route still wrapped by e.Use middleware, so
+// without this, concurrent asset requests on a cookie-less page load would
+// each mint and persist their own session/CSRF token, racing the page's own
+// cookie and causing CSRF validation to fail unpredictably.
 // /oauth2/authorize is deliberately excluded - it's browser-facing and
 // still needs session auth + CSRF.
 func skipForStatelessAPI(mw echo.MiddlewareFunc) echo.MiddlewareFunc {
@@ -78,8 +83,8 @@ func skipForStatelessAPI(mw echo.MiddlewareFunc) echo.MiddlewareFunc {
 }
 
 func isStatelessAPIPath(path string) bool {
-	if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/.well-known/") {
+	if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/.well-known/") || strings.HasPrefix(path, "/static/") {
 		return true
 	}
-	return path == "/oauth2/token" || path == "/oauth2/userinfo"
+	return path == "/oauth2/token" || path == "/oauth2/userinfo" || path == "/favicon.ico"
 }
