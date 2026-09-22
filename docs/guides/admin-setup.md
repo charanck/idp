@@ -139,6 +139,8 @@ The client's `api_key_id`/API-key-secret double as the OIDC `client_id`/`client_
 application's OIDC library at `/.well-known/openid-configuration` and you're done — full endpoint
 list in [API reference: OIDC Identity Provider](../api.md#oidc-identity-provider).
 
+eg: egsafes.geav325#wfesf -> client_id: egsafes, client_secret: geav325#wfesf, api_key: egsafes.geav325#wfesf
+
 ## 10. (Optional) Let your users log in via Google/GitHub/Okta instead of a password
 
 Opposite direction from step 9: this is *control-plane's own users* authenticating via an
