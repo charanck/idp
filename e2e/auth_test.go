@@ -11,8 +11,10 @@ import (
 // TestLogin_SucceedsWithValidCredentials uses a freshly created member user
 // rather than the bootstrap admin: admin.go unconditionally sets
 // ForcePasswordReset=true on the admin account on every server startup, so
-// asserting a /dashboard/ redirect for the admin would be flaky depending on
-// whether this process already drove it through /password/change/.
+// asserting a /profile/ redirect for the admin would be flaky depending on
+// whether this process already drove it through /password/change/. A plain
+// member user lands on /profile/, not /dashboard/, since the default built-in
+// User group grants no module access, including dashboard.
 func TestLogin_SucceedsWithValidCredentials(t *testing.T) {
 	base := e2eBaseURL(t)
 	admin := newAdminSession(t)
@@ -32,17 +34,17 @@ func TestLogin_SucceedsWithValidCredentials(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("status = %d, want 302", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/dashboard/" {
-		t.Fatalf("Location = %q, want /dashboard/", loc)
+	if loc := resp.Header.Get("Location"); loc != "/profile/" {
+		t.Fatalf("Location = %q, want /profile/", loc)
 	}
 
-	dashResp, err := client.Get(base + "/dashboard/")
+	profileResp, err := client.Get(base + "/profile/")
 	if err != nil {
-		t.Fatalf("GET /dashboard/: %v", err)
+		t.Fatalf("GET /profile/: %v", err)
 	}
-	defer dashResp.Body.Close()
-	if dashResp.StatusCode != http.StatusOK {
-		t.Fatalf("dashboard status = %d, want 200", dashResp.StatusCode)
+	defer profileResp.Body.Close()
+	if profileResp.StatusCode != http.StatusOK {
+		t.Fatalf("profile status = %d, want 200", profileResp.StatusCode)
 	}
 }
 
@@ -214,7 +216,7 @@ func TestPasswordChange_UpdatesCredentialsAndOldPasswordStopsWorking(t *testing.
 		t.Fatalf("login with new password: %v", err)
 	}
 	defer freshResp.Body.Close()
-	if freshResp.StatusCode != http.StatusFound || freshResp.Header.Get("Location") != "/dashboard/" {
+	if freshResp.StatusCode != http.StatusFound || freshResp.Header.Get("Location") != "/profile/" {
 		t.Fatalf("login with new password: status = %d, Location = %q", freshResp.StatusCode, freshResp.Header.Get("Location"))
 	}
 }

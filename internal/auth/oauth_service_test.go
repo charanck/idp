@@ -148,6 +148,9 @@ func TestAuthenticateOrCreateUser_AutoCreatesUserWhenAllowed(t *testing.T) {
 	if user.Password != "!unusable" {
 		t.Fatalf("expected an unusable password, got %q", user.Password)
 	}
+	if !user.ForcePasswordReset {
+		t.Fatal("expected new OAuth-created user to be forced to set a real password")
+	}
 	if user.IsActive {
 		t.Fatal("expected new OAuth-created user to be inactive")
 	}

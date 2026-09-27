@@ -46,6 +46,8 @@ func RegisterRoutes(e *echo.Echo, h *Handlers, authMW *AuthMiddleware) {
 	configs.POST("/configs/:id/delete/", h.Config.Delete)
 	configs.GET("/configs/:id/history/", h.Config.History)
 	configs.POST("/configs/:id/rollback/:version/", h.Config.Rollback)
+	configs.GET("/configs/:id/reveal/", h.Config.Reveal)
+	configs.POST("/configs/:id/reveal/", h.Config.Reveal)
 
 	flags := e.Group("", authMW.ModuleRequired(auth.ModuleFlags))
 	flags.GET("/flags/", h.Flag.List)

@@ -158,4 +158,29 @@ S2S API-key auth (`X-API-Key`, used by every endpoint under `/api/v1/config/...`
 request counts toward the window**, whether the key is valid or not; there is no separate
 failed-only tracking.
 
+`POST /configs/:id/reveal/` (the secret step-up decryption endpoint, see below) is throttled per
+logged-in user ID via `SECRET_REVEAL_RATE_LIMIT` / `SECRET_REVEAL_RATE_LIMIT_WINDOW_SECONDS`, so a
+hijacked session can't brute-force the user's own password through repeated reveal attempts.
+
 See [Configuration](./configuration.md) for the relevant environment variables.
+
+## Revealing secrets
+
+`ConfigEntry` secrets are always rendered masked in the web UI. A "Reveal" button on each secret
+row triggers a step-up re-authentication: the logged-in user re-enters their own account login
+password (not a new or per-secret key — since secrets are shared team resources decrypted with
+`MASTER_ENCRYPTION_KEY`, no value derived from a single user's password could ever be the actual
+decryption key). `ConfigHandler.Reveal` verifies the password via `security.VerifyPassword` on
+every single reveal (no caching/time window), then decrypts strictly via
+`ConfigStore.DecryptConfigValue` and logs an `activity.LogRead` audit entry (resource + who + when,
+never the value itself). Anyone with `configs` module access can reveal — there is no separate
+granular permission. "Hide" re-masks the value client-side with no server round trip, since
+re-masking needs no authorization.
+
+OAuth-provisioned users are created with an unusable password sentinel
+(`internal/auth/oauth_service.go`), so they're forced through `/password/change/` (reusing the
+existing admin-forced-reset flow, `User.ForcePasswordReset`) on their first login before they can
+reveal a secret or do anything else requiring password verification. The password they set there
+also becomes valid for direct (non-SSO) login going forward; deployments that need to keep OAuth
+users SSO-only should enable `Policy.SSOOnly`, which rejects password-based login regardless of
+whether a user has set one.

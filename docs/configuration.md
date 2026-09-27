@@ -59,6 +59,8 @@ server fails to boot if it's unreachable.
 | `AUTH_RATE_LIMIT` | `10` | Max requests per client IP per window, for `POST /login/`. |
 | `AUTH_RATE_LIMIT_WINDOW_SECONDS` | `60` | Window size. |
 | `S2S_AUTH_RATE_LIMIT` | `20` | Max S2S API-key requests per client IP per window — every request counts toward the limit, whether the key is valid or not. |
+| `SECRET_REVEAL_RATE_LIMIT` | `10` | Max requests per logged-in user per window, for `POST /configs/:id/reveal/`. |
+| `SECRET_REVEAL_RATE_LIMIT_WINDOW_SECONDS` | `60` | Window size. |
 
 See [Architecture](./architecture.md#rate-limiting) for how these are enforced.
 

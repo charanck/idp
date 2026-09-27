@@ -23,6 +23,47 @@ type ConfigGroupEntry struct {
 	DisplayValue    string
 }
 
+type SecretRevealPromptData struct {
+	ConfigID  string
+	CSRFToken string
+	Error     string
+}
+
+// SecretRevealPrompt is the inline password step-up form swapped into a
+// secret's value cell when "Reveal" is clicked. Submitting it re-verifies
+// the current user's own login password server-side before the server
+// decrypts the value with the existing master-key-backed flow - the
+// password is a re-authentication gate, never a second encryption key.
+templ SecretRevealPrompt(data SecretRevealPromptData) {
+	<form
+		class="secret-reveal-form"
+		hx-post={ "/configs/" + data.ConfigID + "/reveal/" }
+		hx-target={ "#config-value-" + data.ConfigID }
+		hx-swap="innerHTML"
+	>
+		<input type="hidden" name="csrf_token" value={ data.CSRFToken }/>
+		<input type="password" name="password" placeholder="Your password" autocomplete="current-password" required/>
+		<button type="submit" class="btn-sm secondary">Confirm</button>
+		if data.Error != "" {
+			<div class="alert alert-danger">{ data.Error }</div>
+		}
+	</form>
+}
+
+type SecretRevealedValueData struct {
+	ConfigID string
+	Value    string
+}
+
+// SecretRevealedValue is swapped in after a successful reveal. "Hide"
+// restores the masked markup client-side (from the sibling <template>
+// rendered alongside it) since re-masking needs no auth and shouldn't cost a
+// server round trip.
+templ SecretRevealedValue(data SecretRevealedValueData) {
+	<code>{ data.Value }</code>
+	<button type="button" class="btn-sm outline secondary" data-hide-secret={ data.ConfigID }>Hide</button>
+}
+
 type ConfigsListData struct {
 	Groups                []ConfigGroup
 	CSRFToken             string
@@ -115,7 +156,14 @@ templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsList
 									<td class="col-env">{ entry.EnvironmentName }</td>
 									<td class="truncate max-w-xs">
 										if group.IsSecret {
-											<code>••••••••</code>
+											<template id={ "config-masked-" + entry.ID }>
+												<code>••••••••</code>
+												<button type="button" class="btn-sm outline secondary" hx-get={ "/configs/" + entry.ID + "/reveal/" } hx-target={ "#config-value-" + entry.ID } hx-swap="innerHTML">Reveal</button>
+											</template>
+											<span id={ "config-value-" + entry.ID }>
+												<code>••••••••</code>
+												<button type="button" class="btn-sm outline secondary" hx-get={ "/configs/" + entry.ID + "/reveal/" } hx-target={ "#config-value-" + entry.ID } hx-swap="innerHTML">Reveal</button>
+											</span>
 										} else {
 											<code>{ entry.DisplayValue }</code>
 										}
@@ -165,6 +213,16 @@ templ ConfigsList(flashes []session.Flash, user layout.NavUser, data ConfigsList
 				appSelect.addEventListener('change', function() { selectedEnvId = ''; repopulate(); });
 				repopulate();
 			})();
+			document.addEventListener('click', function(e) {
+				var btn = e.target.closest('[data-hide-secret]');
+				if (!btn) { return; }
+				var id = btn.getAttribute('data-hide-secret');
+				var span = document.getElementById('config-value-' + id);
+				var tmpl = document.getElementById('config-masked-' + id);
+				if (!span || !tmpl) { return; }
+				span.innerHTML = tmpl.innerHTML;
+				if (window.htmx) { window.htmx.process(span); }
+			});
 		</script>
 	}
 }

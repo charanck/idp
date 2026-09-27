@@ -258,8 +258,10 @@ func TestGroupModulePermissions_RestrictsAccessToGrantedModulesOnly(t *testing.T
 	if flagsResp.StatusCode != http.StatusFound {
 		t.Fatalf("GET /flags/ status = %d, want 302 (module not granted)", flagsResp.StatusCode)
 	}
-	if loc := flagsResp.Header.Get("Location"); loc != "/dashboard/" {
-		t.Fatalf("GET /flags/ Location = %q, want /dashboard/", loc)
+	// This group only grants configs, not dashboard, so the ModuleRequired
+	// denial redirect falls back to /profile/ rather than /dashboard/.
+	if loc := flagsResp.Header.Get("Location"); loc != "/profile/" {
+		t.Fatalf("GET /flags/ Location = %q, want /profile/", loc)
 	}
 
 	usersResp, err := member.Get(base + "/users/")

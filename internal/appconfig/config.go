@@ -31,6 +31,9 @@ type Config struct {
 	AuthRateLimitWindowSeconds int
 	S2SAuthRateLimit           int
 
+	SecretRevealRateLimit              int
+	SecretRevealRateLimitWindowSeconds int
+
 	AllowedHosts       []string
 	CSRFTrustedOrigins []string
 
@@ -144,6 +147,9 @@ func Load() (*Config, error) {
 		AuthRateLimit:              getenvInt("AUTH_RATE_LIMIT", 10),
 		AuthRateLimitWindowSeconds: getenvInt("AUTH_RATE_LIMIT_WINDOW_SECONDS", 60),
 		S2SAuthRateLimit:           getenvInt("S2S_AUTH_RATE_LIMIT", 20),
+
+		SecretRevealRateLimit:              getenvInt("SECRET_REVEAL_RATE_LIMIT", 10),
+		SecretRevealRateLimitWindowSeconds: getenvInt("SECRET_REVEAL_RATE_LIMIT_WINDOW_SECONDS", 60),
 
 		AllowedHosts:       splitCSV(getenv("ALLOWED_HOSTS", "localhost,127.0.0.1")),
 		CSRFTrustedOrigins: splitCSV(os.Getenv("CSRF_TRUSTED_ORIGINS")),

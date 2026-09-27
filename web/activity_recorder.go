@@ -12,6 +12,7 @@ type ActivityRecorder interface {
 	LogCreate(ctx context.Context, resource, resourceID, resourceName string, details any)
 	LogUpdate(ctx context.Context, resource, resourceID, resourceName string, details any)
 	LogDelete(ctx context.Context, resource, resourceID, resourceName string, details any)
+	LogRead(ctx context.Context, resource, resourceID, resourceName string, details any)
 	LogToggle(ctx context.Context, resource, resourceID, resourceName string, details any)
 	LogLogin(ctx context.Context, userEmail string, details any)
 	LogLogout(ctx context.Context, userEmail string)

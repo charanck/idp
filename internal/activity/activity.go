@@ -103,6 +103,10 @@ func (l *Logger) LogDelete(ctx context.Context, resource, resourceID, resourceNa
 	l.log(ctx, model.ActivityTypeDelete, resource, resourceID, resourceName, "", details)
 }
 
+func (l *Logger) LogRead(ctx context.Context, resource, resourceID, resourceName string, details any) {
+	l.log(ctx, model.ActivityTypeRead, resource, resourceID, resourceName, "", details)
+}
+
 func (l *Logger) LogToggle(ctx context.Context, resource, resourceID, resourceName string, details any) {
 	l.log(ctx, model.ActivityTypeToggle, resource, resourceID, resourceName, "", details)
 }

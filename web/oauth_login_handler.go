@@ -27,12 +27,13 @@ type OAuthFlow interface {
 
 type OAuthLoginHandler struct {
 	oauth        OAuthFlow
+	auth         AuthStore
 	activity     ActivityRecorder
 	cookieDomain string
 }
 
-func NewOAuthLoginHandler(oauth OAuthFlow, activity ActivityRecorder, cookieDomain string) *OAuthLoginHandler {
-	return &OAuthLoginHandler{oauth: oauth, activity: activity, cookieDomain: cookieDomain}
+func NewOAuthLoginHandler(oauth OAuthFlow, auth AuthStore, activity ActivityRecorder, cookieDomain string) *OAuthLoginHandler {
+	return &OAuthLoginHandler{oauth: oauth, auth: auth, activity: activity, cookieDomain: cookieDomain}
 }
 
 func redirectURIFor(c echo.Context, providerID string) string {
@@ -145,11 +146,16 @@ func (h *OAuthLoginHandler) Callback(c echo.Context) error {
 	sess.SetUserID(user.ID.String())
 	h.activity.LogLogin(requestContext(c), user.Email, "OAuth login via "+provider.Name)
 
+	if user.ForcePasswordReset {
+		AddFlash(c, "warning", "Please set a password before continuing.")
+		return c.Redirect(http.StatusFound, "/password/change/")
+	}
+
 	AddFlash(c, "success", "Successfully logged in with "+provider.Name+"!")
 	if next, ok := sess.PopString("oauth_next_" + provider.ID.String()); ok && next != "" {
 		return c.Redirect(http.StatusFound, next)
 	}
-	return c.Redirect(http.StatusFound, "/dashboard/")
+	return c.Redirect(http.StatusFound, postLoginLandingPath(ctx, h.auth, user.ID))
 }
 
 var _ OAuthFlow = (*auth.OAuthService)(nil)

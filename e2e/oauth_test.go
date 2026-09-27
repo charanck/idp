@@ -207,17 +207,19 @@ func TestOAuthCallback_AllowsLoginForActivatedUser(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("status = %d, want 302", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/dashboard/" {
-		t.Fatalf("Location = %q, want /dashboard/", loc)
+	// admin.createUser assigns the default built-in User group, which grants
+	// no module access including dashboard, so login lands on /profile/.
+	if loc := resp.Header.Get("Location"); loc != "/profile/" {
+		t.Fatalf("Location = %q, want /profile/", loc)
 	}
 
-	dashResp, err := client.Get(base + "/dashboard/")
+	profileResp, err := client.Get(base + "/profile/")
 	if err != nil {
-		t.Fatalf("GET /dashboard/: %v", err)
+		t.Fatalf("GET /profile/: %v", err)
 	}
-	defer dashResp.Body.Close()
-	if dashResp.StatusCode != http.StatusOK {
-		t.Fatalf("dashboard status = %d, want 200 (session should be authenticated)", dashResp.StatusCode)
+	defer profileResp.Body.Close()
+	if profileResp.StatusCode != http.StatusOK {
+		t.Fatalf("profile status = %d, want 200 (session should be authenticated)", profileResp.StatusCode)
 	}
 }
 

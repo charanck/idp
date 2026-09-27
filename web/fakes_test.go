@@ -165,6 +165,15 @@ func (f *fakeActivityRecorder) count() int {
 	return len(f.calls)
 }
 
+func (f *fakeActivityRecorder) lastCall() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.calls) == 0 {
+		return ""
+	}
+	return f.calls[len(f.calls)-1]
+}
+
 func (f *fakeActivityRecorder) LogCreate(ctx context.Context, resource, resourceID, resourceName string, details any) {
 	f.record("create:" + resource)
 }
@@ -173,6 +182,9 @@ func (f *fakeActivityRecorder) LogUpdate(ctx context.Context, resource, resource
 }
 func (f *fakeActivityRecorder) LogDelete(ctx context.Context, resource, resourceID, resourceName string, details any) {
 	f.record("delete:" + resource)
+}
+func (f *fakeActivityRecorder) LogRead(ctx context.Context, resource, resourceID, resourceName string, details any) {
+	f.record("read:" + resource)
 }
 func (f *fakeActivityRecorder) LogToggle(ctx context.Context, resource, resourceID, resourceName string, details any) {
 	f.record("toggle:" + resource)
@@ -572,6 +584,10 @@ func (f *fakeConfigStore) RollbackConfig(ctx context.Context, configID string, v
 
 func (f *fakeConfigStore) DecryptConfigValueOrOriginal(entry *configmodel.ConfigEntry) string {
 	return entry.Value
+}
+
+func (f *fakeConfigStore) DecryptConfigValue(entry *configmodel.ConfigEntry) (string, error) {
+	return entry.Value, nil
 }
 
 // fakeFlagStore implements web.FlagStore in-memory.

@@ -8,12 +8,14 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
 	"controlplane/internal/config"
 	configmodel "controlplane/internal/model/config"
+	"controlplane/internal/security"
 	"controlplane/web/template/pages"
 )
 
@@ -34,17 +36,24 @@ type ConfigStore interface {
 	GetConfigHistory(ctx context.Context, configID string) ([]configmodel.ConfigEntryVersion, error)
 	RollbackConfig(ctx context.Context, configID string, version int, changedBy string) (*configmodel.ConfigEntry, error)
 	DecryptConfigValueOrOriginal(entry *configmodel.ConfigEntry) string
+	DecryptConfigValue(entry *configmodel.ConfigEntry) (string, error)
 }
 
 type ConfigHandler struct {
-	configs  ConfigStore
-	envs     EnvironmentStore
-	apps     ApplicationStore
-	activity ActivityRecorder
+	configs                            ConfigStore
+	envs                               EnvironmentStore
+	apps                               ApplicationStore
+	activity                           ActivityRecorder
+	limiter                            RateLimiter
+	revealRateLimit                    int
+	revealRateLimitWindowSeconds       int
 }
 
-func NewConfigHandler(configs ConfigStore, envs EnvironmentStore, apps ApplicationStore, activity ActivityRecorder) *ConfigHandler {
-	return &ConfigHandler{configs: configs, envs: envs, apps: apps, activity: activity}
+func NewConfigHandler(configs ConfigStore, envs EnvironmentStore, apps ApplicationStore, activity ActivityRecorder, limiter RateLimiter, revealRateLimit, revealRateLimitWindowSeconds int) *ConfigHandler {
+	return &ConfigHandler{
+		configs: configs, envs: envs, apps: apps, activity: activity,
+		limiter: limiter, revealRateLimit: revealRateLimit, revealRateLimitWindowSeconds: revealRateLimitWindowSeconds,
+	}
 }
 
 // environmentsByApplicationJSON builds the JSON blob the config form's
@@ -433,6 +442,62 @@ func (h *ConfigHandler) Delete(c echo.Context) error {
 	}
 	AddFlash(c, "success", "Config deleted.")
 	return c.Redirect(http.StatusFound, "/configs/")
+}
+
+// Reveal is the step-up-gated secret decryption endpoint. GET renders the
+// inline password prompt; POST re-verifies the current user's own login
+// password before decrypting - the password is a re-authentication gate
+// only, never a second encryption key, since secrets are shared team
+// resources decrypted with the master key regardless of who reveals them.
+func (h *ConfigHandler) Reveal(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+	entry, err := h.configs.GetConfigByID(c.Request().Context(), id)
+	if err != nil {
+		return err
+	}
+	if entry == nil || !entry.IsSecret || !ApplicationAllowed(c, entry.ApplicationID) {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+
+	if c.Request().Method == http.MethodGet {
+		return pages.SecretRevealPrompt(pages.SecretRevealPromptData{
+			ConfigID: id.String(), CSRFToken: csrfToken(c),
+		}).Render(c.Request().Context(), c.Response())
+	}
+
+	user := CurrentUser(c)
+	window := time.Duration(h.revealRateLimitWindowSeconds) * time.Second
+	limited, err := h.limiter.IsRateLimited(c.Request().Context(), "secret-reveal", user.ID.String(), h.revealRateLimit, window)
+	if err != nil {
+		return err
+	}
+	if limited {
+		return pages.SecretRevealPrompt(pages.SecretRevealPromptData{
+			ConfigID: id.String(), CSRFToken: csrfToken(c), Error: "Too many attempts. Please try again later.",
+		}).Render(c.Request().Context(), c.Response())
+	}
+
+	if !security.VerifyPassword(c.FormValue("password"), user.Password) {
+		return pages.SecretRevealPrompt(pages.SecretRevealPromptData{
+			ConfigID: id.String(), CSRFToken: csrfToken(c), Error: "Incorrect password.",
+		}).Render(c.Request().Context(), c.Response())
+	}
+
+	value, err := h.configs.DecryptConfigValue(entry)
+	if err != nil {
+		return pages.SecretRevealPrompt(pages.SecretRevealPromptData{
+			ConfigID: id.String(), CSRFToken: csrfToken(c), Error: "This secret could not be decrypted.",
+		}).Render(c.Request().Context(), c.Response())
+	}
+
+	h.activity.LogRead(requestContext(c), "config", id.String(), entry.Key, nil)
+
+	return pages.SecretRevealedValue(pages.SecretRevealedValueData{
+		ConfigID: id.String(), Value: value,
+	}).Render(c.Request().Context(), c.Response())
 }
 
 func (h *ConfigHandler) History(c echo.Context) error {

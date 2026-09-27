@@ -219,7 +219,8 @@ func TestBrandingShow_RequiresLogin(t *testing.T) {
 // TestBrandingShow_RequiresAdmin proves the ModuleRequired("branding") check,
 // not just LoginRequired: a logged-in user whose groups don't grant the
 // branding module (the default built-in User group doesn't) must be bounced
-// to the dashboard rather than allowed through.
+// to /profile/ rather than allowed through — the default User group also
+// lacks the dashboard module, so that's where the denial redirect lands.
 func TestBrandingShow_RequiresAdmin(t *testing.T) {
 	base := e2eBaseURL(t)
 	admin := newAdminSession(t)
@@ -246,7 +247,7 @@ func TestBrandingShow_RequiresAdmin(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("status = %d, want 302", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/dashboard/" {
-		t.Fatalf("Location = %q, want /dashboard/", loc)
+	if loc := resp.Header.Get("Location"); loc != "/profile/" {
+		t.Fatalf("Location = %q, want /profile/", loc)
 	}
 }

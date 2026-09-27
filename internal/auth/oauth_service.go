@@ -188,7 +188,12 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *m
 				Email:    email,
 				Username: username,
 				IsActive: false,
-				Password: "!unusable", // sentinel: no valid hash will ever match this, so password login for OAuth-created accounts always fails closed.
+				// Sentinel: no valid hash will ever match this, so password login is
+				// closed until the user sets a real password (forced below via
+				// ForcePasswordReset, reusing the same /password/change/ flow admins
+				// use to force a reset).
+				Password:           "!unusable",
+				ForcePasswordReset: true,
 			}
 			if err := s.users.Create(ctx, user); err != nil {
 				return nil, nil, err

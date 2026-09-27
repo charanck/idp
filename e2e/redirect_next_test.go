@@ -283,7 +283,9 @@ func TestOAuthLogin_CallbackIgnoresUnsafeNext(t *testing.T) {
 	if resp.StatusCode != http.StatusFound {
 		t.Fatalf("status = %d, want 302", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/dashboard/" {
-		t.Fatalf("Location = %q, want /dashboard/ (unsafe next must be ignored)", loc)
+	// admin.createUser assigns the default built-in User group, which grants
+	// no module access including dashboard, so login lands on /profile/.
+	if loc := resp.Header.Get("Location"); loc != "/profile/" {
+		t.Fatalf("Location = %q, want /profile/ (unsafe next must be ignored)", loc)
 	}
 }
