@@ -25,6 +25,12 @@ func TestEmailChannel_ValidateRequiresEmailAndSubject(t *testing.T) {
 	if err := ch.Validate([]byte(`{"email":"a@example.com"}`), []byte(`{"subject":"hi"}`)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if err := ch.Validate([]byte(`{"email":"a@example.com"}`), []byte(`{"subject":"hi","attachments":[{"filename":"report.txt","content":"aGVsbG8="}]}`)); err != nil {
+		t.Fatalf("unexpected error for valid attachment: %v", err)
+	}
+	if err := ch.Validate([]byte(`{"email":"a@example.com"}`), []byte(`{"subject":"hi","attachments":[{"filename":"report.txt","content":"not-base64"}]}`)); err == nil {
+		t.Fatal("expected error for invalid attachment base64")
+	}
 }
 
 func TestEmailChannel_SendFailsPermanentlyWhenNotConfigured(t *testing.T) {
@@ -201,6 +207,46 @@ func TestEmailChannel_SendDeliversOverPlaintextSMTP(t *testing.T) {
 		}
 		if !strings.Contains(msg, "Subject: HiBcc: attacker@evil.com") {
 			t.Fatalf("expected sanitized (CRLF-stripped, merged) subject line, got: %s", msg)
+		}
+	default:
+		t.Fatal("fake smtp server never received a DATA payload")
+	}
+}
+
+func TestEmailChannel_SendIncludesMultipartAttachment(t *testing.T) {
+	srv := startFakeSMTPServer(t)
+	host, port, err := net.SplitHostPort(srv.addr)
+	if err != nil {
+		t.Fatalf("SplitHostPort: %v", err)
+	}
+
+	var ch provider.EmailChannel
+	config := fmt.Sprintf(`{"provider":"smtp","host":%q,"port":%s,"from":"noreply@example.com","from_name":"Example","tls_mode":"none"}`, host, port)
+
+	result, err := ch.Send(context.Background(),
+		provider.Notification{
+			Recipient: []byte(`{"email":"a@example.com"}`),
+			Content:   []byte(`{"subject":"Invoice","body":"hello world","attachments":[{"filename":"report.txt","content_type":"text/plain","content":"aGVsbG8gd29ybGQ="}]}`),
+		},
+		provider.Settings{Config: datatypes.JSON(config)},
+	)
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if result.Provider != "smtp" || result.ProviderMessageID == "" {
+		t.Fatalf("result = %+v", result)
+	}
+
+	select {
+	case msg := <-srv.received:
+		if !strings.Contains(msg, "Content-Type: multipart/mixed") {
+			t.Fatalf("message missing multipart content type: %s", msg)
+		}
+		if !strings.Contains(msg, "filename=\"report.txt\"") {
+			t.Fatalf("message missing attachment filename: %s", msg)
+		}
+		if !strings.Contains(msg, "aGVsbG8gd29ybGQ=") {
+			t.Fatalf("message missing base64 attachment payload: %s", msg)
 		}
 	default:
 		t.Fatal("fake smtp server never received a DATA payload")

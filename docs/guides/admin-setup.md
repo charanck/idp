@@ -166,8 +166,30 @@ curl -X POST "http://localhost:8000/api/v1/notifications" \
        "content":{"subject":"Order shipped","body":"..."}}'
 ```
 
-Delivery happens asynchronously via a durable background worker with retries — see
-[Notifications](notifications.md), [Realtime events (SSE)](sse.md), and
+Email messages can include attachments via base64 payloads in `content.attachments`:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/notifications" \
+  -H "X-API-Key: <key_id>.<secret>" -H "Content-Type: application/json" \
+  -d '{
+        "service":"orders-api",
+        "channel":"email",
+        "recipient":{"email":"user@example.com"},
+        "content":{
+          "subject":"Invoice for order #4821",
+          "body":"Your invoice is attached.",
+          "attachments":[{
+            "filename":"invoice.txt",
+            "content_type":"text/plain",
+            "content":"SGVsbG8gZnJvbSBjb250cm9sLXBsYW5l"
+          }]
+        }
+      }'
+```
+
+`content.attachments[*].content` must be base64-encoded; the server decodes and sends it as a
+multipart email attachment. Delivery happens asynchronously via a durable background worker with
+retries — see [Notifications](notifications.md), [Realtime events (SSE)](sse.md), and
 [In-app inbox](inapp-inbox.md) for the full flow, including how end users (not the service client)
 pull their own notifications.
 

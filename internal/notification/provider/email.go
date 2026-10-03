@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,11 +24,21 @@ type EmailRecipient struct {
 	Email  string `json:"email"`
 }
 
+// EmailAttachment is an optional MIME attachment for a notification email.
+// The API accepts base64-encoded raw content and the SMTP sender decodes it
+// before constructing the multipart body.
+type EmailAttachment struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type,omitempty"`
+	Content     string `json:"content"`
+}
+
 // EmailContent is the typed shape of a "channel":"email" notification's
 // Content JSON.
 type EmailContent struct {
-	Subject string `json:"subject"`
-	Body    string `json:"body,omitempty"`
+	Subject     string           `json:"subject"`
+	Body        string           `json:"body,omitempty"`
+	Attachments []EmailAttachment `json:"attachments,omitempty"`
 }
 
 // EmailProvider identifies which concrete email provider a channel's
@@ -104,6 +115,17 @@ func (EmailChannel) Validate(recipient, content []byte) error {
 	}
 	if c.Subject == "" {
 		return errors.New(`email content requires "subject"`)
+	}
+	for i, a := range c.Attachments {
+		if a.Filename == "" {
+			return fmt.Errorf("email attachment %d requires a filename", i)
+		}
+		if a.Content == "" {
+			return fmt.Errorf("email attachment %d requires base64 content", i)
+		}
+		if _, err := base64.StdEncoding.DecodeString(a.Content); err != nil {
+			return fmt.Errorf("email attachment %d content must be valid base64", i)
+		}
 	}
 	return nil
 }
@@ -241,13 +263,47 @@ func buildEmailMessage(cfg EmailSMTPConfig, r EmailRecipient, c EmailContent) []
 		from = fmt.Sprintf("%s <%s>", sanitizeEmailHeader(cfg.FromName), from)
 	}
 
+	if len(c.Attachments) == 0 {
+		var b strings.Builder
+		fmt.Fprintf(&b, "From: %s\r\n", from)
+		fmt.Fprintf(&b, "To: %s\r\n", sanitizeEmailHeader(r.Email))
+		fmt.Fprintf(&b, "Subject: %s\r\n", sanitizeEmailHeader(c.Subject))
+		fmt.Fprintf(&b, "MIME-Version: 1.0\r\n")
+		fmt.Fprintf(&b, "Content-Type: text/plain; charset=UTF-8\r\n")
+		fmt.Fprintf(&b, "\r\n")
+		b.WriteString(c.Body)
+		return []byte(b.String())
+	}
+
 	var b strings.Builder
+	boundary := "controlplane-attachment-boundary-" + uuid.NewString()
 	fmt.Fprintf(&b, "From: %s\r\n", from)
 	fmt.Fprintf(&b, "To: %s\r\n", sanitizeEmailHeader(r.Email))
 	fmt.Fprintf(&b, "Subject: %s\r\n", sanitizeEmailHeader(c.Subject))
 	fmt.Fprintf(&b, "MIME-Version: 1.0\r\n")
+	fmt.Fprintf(&b, "Content-Type: multipart/mixed; boundary=%s\r\n", boundary)
+	fmt.Fprintf(&b, "\r\n")
+	fmt.Fprintf(&b, "--%s\r\n", boundary)
 	fmt.Fprintf(&b, "Content-Type: text/plain; charset=UTF-8\r\n")
 	fmt.Fprintf(&b, "\r\n")
 	b.WriteString(c.Body)
+	for _, a := range c.Attachments {
+		fmt.Fprintf(&b, "\r\n--%s\r\n", boundary)
+		contentType := a.ContentType
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		fmt.Fprintf(&b, "Content-Type: %s\r\n", sanitizeEmailHeader(contentType))
+		fmt.Fprintf(&b, "Content-Disposition: attachment; filename=\"%s\"\r\n", sanitizeEmailHeader(a.Filename))
+		fmt.Fprintf(&b, "Content-Transfer-Encoding: base64\r\n")
+		fmt.Fprintf(&b, "\r\n")
+		decoded, err := base64.StdEncoding.DecodeString(a.Content)
+		if err != nil {
+			decoded = []byte{}
+		}
+		b.WriteString(base64.StdEncoding.EncodeToString(decoded))
+		fmt.Fprintf(&b, "\r\n")
+	}
+	fmt.Fprintf(&b, "--%s--\r\n", boundary)
 	return []byte(b.String())
 }

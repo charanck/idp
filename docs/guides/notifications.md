@@ -38,7 +38,7 @@ its own schema:
 
 | Channel | `recipient` requires | `content` requires |
 |---|---|---|
-| `email` | `email` (string); `user_id` optional | `subject`; `body` optional |
+| `email` | `email` (string); `user_id` optional | `subject`; `body` optional; `attachments` optional (array of `{filename, content_type, content}` where `content` is base64) |
 | `sms` | `phone` (string); `user_id` optional | `body` |
 | `inapp` | `user_id` (string, **required** — it's how the notification is ever retrieved) | `title`; `body` optional |
 
