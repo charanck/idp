@@ -32,9 +32,10 @@ Details: [Feature Flags guide](guides/feature-flags.md).
 | `/api/v1/notifications` | GET | `X-API-Key` | List notifications, filterable by `?channel=&status=`. |
 | `/api/v1/notifications/:id` | GET | `X-API-Key` | Get a single notification by ID. |
 | `/api/v1/notifications/sessions` | POST | `X-API-Key` | Mint a short-lived bearer token scoped to one `user_id`, for the two end-user endpoints below. |
-| `/api/v1/notifications/sse/events` | GET | `Bearer <token>` | Stream that user's delivery events in real time (push, not persisted). |
-| `/api/v1/notifications/inapp/unread` | GET | `Bearer <token>` | Fetch and mark-read that user's unread in-app notifications (pull, persisted). |
-
+| `/api/v1/notifications/sse/events` | GET | `****** | Stream that user's delivery events in real time (push, not persisted). |
+| `/api/v1/notifications/inapp` | GET | `****** | List that user's in-app notifications without modifying their read state. |
+| `/api/v1/notifications/inapp/list` | GET | `****** | Alias for `/api/v1/notifications/inapp` for clients that prefer an explicit list path. |
+| `/api/v1/notifications/inapp/unread` | GET | `****** | Fetch and mark-read that user's unread in-app notifications (pull, persisted). |
 Details: [Notifications guide](guides/notifications.md), [Realtime events (SSE)](guides/sse.md),
 [In-app inbox](guides/inapp-inbox.md).
 

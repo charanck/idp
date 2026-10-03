@@ -34,10 +34,12 @@ func RegisterNotificationRoutes(g *echo.Group, notifications *NotificationHandle
 	g.GET("/:id", notifications.Get, auth)
 
 	g.POST("/sessions", sessions.Create, auth)
-	// GET /sse/events and GET /inapp/unread are deliberately not wrapped in
+	// GET /sse/events and the in-app endpoints are deliberately not wrapped in
 	// authMW (the caller is the end user, not the service client, and can't
 	// send an X-API-Key) - they authenticate via the Fernet token minted
 	// above instead, sent as an Authorization header.
 	g.GET("/sse/events", sse.Stream)
+	g.GET("/inapp", inapp.List)
+	g.GET("/inapp/list", inapp.List)
 	g.GET("/inapp/unread", inapp.ConsumeUnread)
 }

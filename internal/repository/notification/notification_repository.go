@@ -69,6 +69,20 @@ func (r *gormNotificationRepository) Create(ctx context.Context, n *model.Notifi
 	return r.db.WithContext(ctx).Create(n).Error
 }
 
+func (r *gormNotificationRepository) ListInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
+	var notifications []model.Notification
+	if err := r.db.WithContext(ctx).
+		Preload("Application").
+		Where("application_id = ?", applicationID).
+		Where("channel = ?", model.ChannelInApp).
+		Where("recipient ->> 'user_id' = ?", userID).
+		Order("created_at DESC").
+		Find(&notifications).Error; err != nil {
+		return nil, err
+	}
+	return notifications, nil
+}
+
 func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
 	var notifications []model.Notification
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

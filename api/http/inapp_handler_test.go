@@ -54,6 +54,32 @@ func TestUnread_InvalidTokenReturns401(t *testing.T) {
 	}
 }
 
+func TestList_ReturnsInAppNotificationsAsJSONWithoutConsumingThem(t *testing.T) {
+	consumer := &fakeUnreadConsumer{notifications: []notificationmodel.Notification{
+		{ID: uuid.New(), Channel: "inapp", Status: notificationmodel.StatusSent, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`)},
+	}}
+	h := apihttp.NewInAppHandler(&fakeSessionValidator{claims: notification.SessionClaims{UserID: "user-1", ApplicationID: uuid.New()}}, consumer)
+
+	c, rec := newInAppRequest("good-token")
+	c.Request().URL.Path = "/notifications/inapp"
+	if err := h.List(c); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var body []struct {
+		Channel string `json:"channel"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(body) != 1 || body[0].Channel != "inapp" {
+		t.Fatalf("unexpected body: %+v", body)
+	}
+}
+
 func TestUnread_ReturnsConsumedNotificationsAsJSON(t *testing.T) {
 	consumer := &fakeUnreadConsumer{notifications: []notificationmodel.Notification{
 		{ID: uuid.New(), Channel: "inapp", Status: notificationmodel.StatusSent, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`)},

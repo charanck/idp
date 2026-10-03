@@ -140,6 +140,42 @@ func TestListNotifications_FiltersByChannelAndStatus(t *testing.T) {
 	}
 }
 
+func TestListInAppForUser_OnlyInAppChannelAndDoesNotMarkRead(t *testing.T) {
+	repo := newFakeNotificationRepository()
+	svc := notification.NewNotificationService(repo, newFakeApplicationRepository(), &fakeEnqueuer{})
+	ctx := context.Background()
+
+	mustCreate := func(channel, userID string) *model.Notification {
+		n, err := svc.CreateNotification(ctx, notification.CreateNotificationInput{
+			Channel:   channel,
+			Recipient: datatypes.JSON(`{"user_id":"` + userID + `"}`),
+			Content:   datatypes.JSON(`{"message":"hi"}`),
+		})
+		if err != nil {
+			t.Fatalf("CreateNotification: %v", err)
+		}
+		return n
+	}
+
+	inApp := mustCreate(model.ChannelInApp, "u1")
+	mustCreate(model.ChannelEmail, "u1")
+	mustCreate(model.ChannelInApp, "u2")
+
+	allInApp, err := svc.ListInAppForUser(ctx, "u1", inApp.ApplicationID)
+	if err != nil {
+		t.Fatalf("ListInAppForUser: %v", err)
+	}
+	if len(allInApp) != 1 {
+		t.Fatalf("expected 1 in-app notification for u1, got %d", len(allInApp))
+	}
+	if allInApp[0].ID != inApp.ID {
+		t.Fatalf("expected the inapp notification, got %+v", allInApp[0])
+	}
+	if allInApp[0].ReadAt != nil {
+		t.Fatal("expected ReadAt to remain unset when listing without consuming")
+	}
+}
+
 func TestConsumeUnreadInAppForUser_OnlyInAppChannelAndMarksRead(t *testing.T) {
 	repo := newFakeNotificationRepository()
 	svc := notification.NewNotificationService(repo, newFakeApplicationRepository(), &fakeEnqueuer{})

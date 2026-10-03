@@ -24,6 +24,9 @@ type NotificationRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*Notification, error)
 	List(ctx context.Context, filter ListNotificationsFilter) ([]Notification, error)
 	Create(ctx context.Context, n *Notification) error
+	// ListInApp lists a user's in-app notifications under applicationID,
+	// newest first, without changing their read state.
+	ListInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]Notification, error)
 	// ConsumeUnreadInApp atomically lists and marks-read a user's unread
 	// InApp notifications under applicationID, newest first - kept as one
 	// transactional repository method (rather than List+Update called

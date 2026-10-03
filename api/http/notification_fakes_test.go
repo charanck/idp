@@ -76,6 +76,10 @@ type fakeUnreadConsumer struct {
 	err           error
 }
 
+func (f *fakeUnreadConsumer) ListInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error) {
+	return f.notifications, f.err
+}
+
 func (f *fakeUnreadConsumer) ConsumeUnreadInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error) {
 	return f.notifications, f.err
 }

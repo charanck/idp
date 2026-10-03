@@ -134,6 +134,12 @@ func (s *NotificationService) ListNotifications(ctx context.Context, filter mode
 	return s.repo.List(ctx, filter)
 }
 
+// ListInAppForUser lists a user's in-app notifications under applicationID,
+// newest first, without changing their read state.
+func (s *NotificationService) ListInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
+	return s.repo.ListInApp(ctx, userID, applicationID)
+}
+
 // ConsumeUnreadInAppForUser lists a user's unread InApp notifications under
 // applicationID, newest first, and marks them read in the same transaction -
 // e.g. so a client catching up on missed notifications only ever sees each

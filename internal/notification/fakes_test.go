@@ -131,6 +131,27 @@ func (f *fakeNotificationRepository) Create(ctx context.Context, n *model.Notifi
 	return nil
 }
 
+func (f *fakeNotificationRepository) ListInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var out []model.Notification
+	for _, n := range f.notifications {
+		if n.Channel != model.ChannelInApp || n.ApplicationID != applicationID {
+			continue
+		}
+		var recipient struct {
+			UserID string `json:"user_id"`
+		}
+		if err := json.Unmarshal(n.Recipient, &recipient); err != nil || recipient.UserID != userID {
+			continue
+		}
+		out = append(out, n)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
 func (f *fakeNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
