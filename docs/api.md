@@ -39,6 +39,9 @@ Details: [Feature Flags guide](guides/feature-flags.md).
 Details: [Notifications guide](guides/notifications.md), [Realtime events (SSE)](guides/sse.md),
 [In-app inbox](guides/inapp-inbox.md).
 
+The `/api/v1/notifications/...` endpoints send CORS headers and handle preflight `OPTIONS`
+requests, so browser-based clients on another origin can call them directly.
+
 ## OIDC Identity Provider
 
 Stateless, machine-facing endpoints for applications that log their users in via control-plane

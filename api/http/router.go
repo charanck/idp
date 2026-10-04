@@ -1,6 +1,9 @@
 package http
 
-import "github.com/labstack/echo/v4"
+import (
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+)
 
 // RegisterConfigRoutes mounts the read-only S2S endpoints service clients
 // poll for their own configs/secrets and feature flags, mirroring the
@@ -27,6 +30,20 @@ func RegisterOIDCRoutes(e *echo.Echo, oidc *OIDCHandler) {
 // RegisterNotificationRoutes mounts the notification S2S API under g
 // (expected to be apiGroup.Group("/notifications")).
 func RegisterNotificationRoutes(g *echo.Group, notifications *NotificationHandler, sessions *SessionHandler, sse *SSEHandler, inapp *InAppHandler, authMW *NotificationAPIKeyAuthMiddleware) {
+	g.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{echo.GET, echo.POST, echo.OPTIONS},
+		AllowHeaders: []string{
+			echo.HeaderAuthorization,
+			echo.HeaderContentType,
+			echo.HeaderAccept,
+			echo.HeaderOrigin,
+			"X-API-Key",
+			"Last-Event-ID",
+			"Cache-Control",
+		},
+	}))
+
 	auth := authMW.Middleware()
 
 	g.POST("", notifications.Create, auth)
