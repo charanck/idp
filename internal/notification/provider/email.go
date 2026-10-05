@@ -34,10 +34,12 @@ type EmailAttachment struct {
 }
 
 // EmailContent is the typed shape of a "channel":"email" notification's
-// Content JSON.
+// Content JSON. content_type is supplied by the API caller and defaults to
+// text/plain when omitted.
 type EmailContent struct {
 	Subject     string           `json:"subject"`
 	Body        string           `json:"body,omitempty"`
+	ContentType string           `json:"content_type,omitempty"`
 	Attachments []EmailAttachment `json:"attachments,omitempty"`
 }
 
@@ -115,6 +117,9 @@ func (EmailChannel) Validate(recipient, content []byte) error {
 	}
 	if c.Subject == "" {
 		return errors.New(`email content requires "subject"`)
+	}
+	if c.ContentType != "" && !isSupportedEmailBodyContentType(c.ContentType) {
+		return fmt.Errorf("email content type %q is not supported; use text/plain or text/html", c.ContentType)
 	}
 	for i, a := range c.Attachments {
 		if a.Filename == "" {
@@ -254,14 +259,38 @@ func sanitizeEmailHeader(s string) string {
 	return strings.NewReplacer("\r", "", "\n", "").Replace(s)
 }
 
-// buildEmailMessage renders a minimal RFC 5322 message: headers plus a
-// plain-text body. Content is only ever text/plain today - EmailContent has
-// no separate HTML field.
+func isSupportedEmailBodyContentType(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "text/plain", "text/plain; charset=utf-8", "text/plain; charset=UTF-8", "text/html", "text/html; charset=utf-8", "text/html; charset=UTF-8":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeEmailBodyContentType(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "text/plain; charset=UTF-8"
+	}
+	lower := strings.ToLower(trimmed)
+	if lower == "text/plain" || lower == "text/plain; charset=utf-8" || lower == "text/plain; charset=UTF-8" {
+		return "text/plain; charset=UTF-8"
+	}
+	if lower == "text/html" || lower == "text/html; charset=utf-8" || lower == "text/html; charset=UTF-8" {
+		return "text/html; charset=UTF-8"
+	}
+	return trimmed
+}
+
+// buildEmailMessage renders a minimal RFC 5322 message with a body content type
+// chosen from the API request (defaults to text/plain when omitted).
 func buildEmailMessage(cfg EmailSMTPConfig, r EmailRecipient, c EmailContent) []byte {
 	from := sanitizeEmailHeader(cfg.From)
 	if cfg.FromName != "" {
 		from = fmt.Sprintf("%s <%s>", sanitizeEmailHeader(cfg.FromName), from)
 	}
+	bodyContentType := normalizeEmailBodyContentType(c.ContentType)
 
 	if len(c.Attachments) == 0 {
 		var b strings.Builder
@@ -269,7 +298,7 @@ func buildEmailMessage(cfg EmailSMTPConfig, r EmailRecipient, c EmailContent) []
 		fmt.Fprintf(&b, "To: %s\r\n", sanitizeEmailHeader(r.Email))
 		fmt.Fprintf(&b, "Subject: %s\r\n", sanitizeEmailHeader(c.Subject))
 		fmt.Fprintf(&b, "MIME-Version: 1.0\r\n")
-		fmt.Fprintf(&b, "Content-Type: text/plain; charset=UTF-8\r\n")
+		fmt.Fprintf(&b, "Content-Type: %s\r\n", sanitizeEmailHeader(bodyContentType))
 		fmt.Fprintf(&b, "\r\n")
 		b.WriteString(c.Body)
 		return []byte(b.String())
@@ -284,7 +313,7 @@ func buildEmailMessage(cfg EmailSMTPConfig, r EmailRecipient, c EmailContent) []
 	fmt.Fprintf(&b, "Content-Type: multipart/mixed; boundary=%s\r\n", boundary)
 	fmt.Fprintf(&b, "\r\n")
 	fmt.Fprintf(&b, "--%s\r\n", boundary)
-	fmt.Fprintf(&b, "Content-Type: text/plain; charset=UTF-8\r\n")
+	fmt.Fprintf(&b, "Content-Type: %s\r\n", sanitizeEmailHeader(bodyContentType))
 	fmt.Fprintf(&b, "\r\n")
 	b.WriteString(c.Body)
 	for _, a := range c.Attachments {

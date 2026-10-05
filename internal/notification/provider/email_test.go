@@ -25,6 +25,12 @@ func TestEmailChannel_ValidateRequiresEmailAndSubject(t *testing.T) {
 	if err := ch.Validate([]byte(`{"email":"a@example.com"}`), []byte(`{"subject":"hi"}`)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if err := ch.Validate([]byte(`{"email":"a@example.com"}`), []byte(`{"subject":"hi","content_type":"text/html","body":"<b>hello</b>"}`)); err != nil {
+		t.Fatalf("unexpected error for valid html content type: %v", err)
+	}
+	if err := ch.Validate([]byte(`{"email":"a@example.com"}`), []byte(`{"subject":"hi","content_type":"application/json"}`)); err == nil {
+		t.Fatal("expected error for unsupported content type")
+	}
 	if err := ch.Validate([]byte(`{"email":"a@example.com"}`), []byte(`{"subject":"hi","attachments":[{"filename":"report.txt","content":"aGVsbG8="}]}`)); err != nil {
 		t.Fatalf("unexpected error for valid attachment: %v", err)
 	}
@@ -207,6 +213,43 @@ func TestEmailChannel_SendDeliversOverPlaintextSMTP(t *testing.T) {
 		}
 		if !strings.Contains(msg, "Subject: HiBcc: attacker@evil.com") {
 			t.Fatalf("expected sanitized (CRLF-stripped, merged) subject line, got: %s", msg)
+		}
+	default:
+		t.Fatal("fake smtp server never received a DATA payload")
+	}
+}
+
+func TestEmailChannel_SendDeliversHTMLContentType(t *testing.T) {
+	srv := startFakeSMTPServer(t)
+	host, port, err := net.SplitHostPort(srv.addr)
+	if err != nil {
+		t.Fatalf("SplitHostPort: %v", err)
+	}
+
+	var ch provider.EmailChannel
+	config := fmt.Sprintf(`{"provider":"smtp","host":%q,"port":%s,"from":"noreply@example.com","from_name":"Example","tls_mode":"none"}`, host, port)
+
+	result, err := ch.Send(context.Background(),
+		provider.Notification{
+			Recipient: []byte(`{"email":"a@example.com"}`),
+			Content:   []byte(`{"subject":"Welcome","content_type":"text/html","body":"<p>Hello <strong>world</strong></p>"}`),
+		},
+		provider.Settings{Config: datatypes.JSON(config)},
+	)
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if result.Provider != "smtp" || result.ProviderMessageID == "" {
+		t.Fatalf("result = %+v", result)
+	}
+
+	select {
+	case msg := <-srv.received:
+		if !strings.Contains(msg, "Content-Type: text/html; charset=UTF-8") {
+			t.Fatalf("message missing html content type: %s", msg)
+		}
+		if !strings.Contains(msg, "<p>Hello <strong>world</strong></p>") {
+			t.Fatalf("message missing html body: %s", msg)
 		}
 	default:
 		t.Fatal("fake smtp server never received a DATA payload")
