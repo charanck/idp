@@ -118,7 +118,7 @@ func TestListNotifications_FiltersByChannelAndStatus(t *testing.T) {
 		t.Fatalf("CreateNotification: %v", err)
 	}
 	if _, err := svc.CreateNotification(context.Background(), notification.CreateNotificationInput{
-		Channel: model.ChannelSMS, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`),
+		Channel: model.ChannelInApp, Recipient: datatypes.JSON(`{"user_id":"u1"}`), Content: datatypes.JSON(`{"message":"hi"}`),
 	}); err != nil {
 		t.Fatalf("CreateNotification: %v", err)
 	}

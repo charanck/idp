@@ -153,7 +153,7 @@ Policy's self-registration domain allow-list from step 2, if set). Full details 
 
 ## 11. (Optional) Turn on notifications
 
-Notifications (email/SMS/in-app) are always available in the API; only **email** has a real
+Notifications (email/in-app) are always available in the API; only **email** has a real
 provider wired up, over SMTP. Go to **Notification Settings → Email → Edit** and set the SMTP
 host, port, from address/name, TLS mode (`none`/`starttls`/`tls`), and credentials, then mark it
 active. Once active, a service client can queue notifications:

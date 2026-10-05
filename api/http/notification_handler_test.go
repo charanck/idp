@@ -111,11 +111,11 @@ func TestCreate_ReturnsCreatedNotificationAsJSON(t *testing.T) {
 
 func TestList_ReturnsNotificationsAsJSON(t *testing.T) {
 	lister := &fakeNotificationLister{notifications: []notificationmodel.Notification{
-		{ID: uuid.New(), Channel: "sms", Status: notificationmodel.StatusQueued, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`)},
+		{ID: uuid.New(), Channel: "inapp", Status: notificationmodel.StatusQueued, Recipient: datatypes.JSON(`{"user_id":"u1"}`), Content: datatypes.JSON(`{"message":"hi"}`)},
 	}}
 	h := apihttp.NewNotificationHandler(&fakeNotificationCreator{}, lister, &fakeNotificationGetter{}, notification.NewChannelRegistry())
 
-	c, rec := newNotificationRequest(http.MethodGet, "/notifications?channel=sms", "")
+	c, rec := newNotificationRequest(http.MethodGet, "/notifications?channel=inapp", "")
 	if err := h.List(c); err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestList_ReturnsNotificationsAsJSON(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(body) != 1 || body[0].Channel != "sms" {
+	if len(body) != 1 || body[0].Channel != "inapp" {
 		t.Fatalf("unexpected body: %+v", body)
 	}
 }

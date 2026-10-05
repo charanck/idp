@@ -1,6 +1,6 @@
 // Package provider defines the notification delivery channel interface and
-// the Email/SMS implementations (email is a real SMTP sender; SMS remains a
-// skeleton pending a real integration).
+// the provider implementations (email is the real SMTP sender; in-app is a
+// persisted pull-based channel).
 package provider
 
 import (

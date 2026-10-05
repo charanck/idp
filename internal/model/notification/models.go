@@ -14,7 +14,6 @@ import (
 
 const (
 	ChannelEmail = "email"
-	ChannelSMS   = "sms"
 	// ChannelInApp is the only channel with a pull-based unread inbox
 	// (ConsumeUnreadInAppForUser) - see provider.InAppChannel.
 	ChannelInApp = "inapp"

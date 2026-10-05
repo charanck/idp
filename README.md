@@ -24,7 +24,7 @@
 - **Feature flags**, per application + environment.
 - **Group-based access control** — built-in Admin/Developer/User groups plus admin-creatable
   custom groups, each with module permissions and an optional Application allow-list.
-- **Notifications** (email/SMS/in-app) with a durable, retrying background worker, realtime SSE
+- **Notifications** (email/in-app) with a durable, retrying background worker, realtime SSE
   delivery, and a persisted in-app inbox.
 - **API-key (S2S) auth** for the config/flag/notification API (`/api/v1/...`), session auth for
   the web UI, and an **OIDC Identity Provider** other applications can log their users in through.

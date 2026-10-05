@@ -148,7 +148,7 @@ func NotificationList(flashes []session.Flash, user layout.NavUser, data Notific
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			for _, ch := range []string{"email", "sms", "inapp"} {
+			for _, ch := range []string{"email", "inapp"} {
 				if ch == data.CurrentChannel {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<option value=\"")
 					if templ_7745c5c3_Err != nil {

@@ -12,7 +12,7 @@ Package layout under `internal/`, each with a narrow role:
 | `repository` | GORM implementations of the `model.*Repository` interfaces, one subpackage per domain. Services depend on the `model` interfaces, not this package, so they're swappable in tests. |
 | `auth` | `User` (email login, UUID PK), `Group` (the access-control primitive — module permissions + Application allow-list, unioned via `ComputeEffectivePermissions`), `Policy` (singleton: password complexity, lockout, session idle timeout, SSO-only, login IP allow-list, self-registration domain allow-list), `ServiceClient` (S2S API-key holder + per-client Fernet encryption key; doubles as an OIDC `client_id`/`client_secret` when `IsAuthApplication`), and `AuthService`/`OAuthService`/`OIDCService`. |
 | `config` | `Application` → `Environment` (unique per app) → `ConfigEntry` (configs and secrets are the same model) / `FeatureFlag`, plus `ConfigEntryVersion` history and the `Activity` audit log. |
-| `notification` | Queues and delivers messages over `email`/`sms`/`inapp`; a DBOS-durable worker retries failed sends; an in-process SSE hub pushes realtime delivery events; short-lived Fernet tokens scope the two end-user endpoints. |
+| `notification` | Queues and delivers messages over `email`/`inapp`; a DBOS-durable worker retries failed sends; an in-process SSE hub pushes realtime delivery events; short-lived Fernet tokens scope the two end-user endpoints. |
 | `dashboard` | Aggregates counts + recent activity across `config`/`auth` for the web UI landing page. |
 | `analytics` | Hourly DBOS-scheduled snapshots of dashboard counts + event counters into a rolling 7-day window, served through a short Redis cache. |
 | `cleanup` | Monthly DBOS-scheduled pruning of notifications (90d), the activity log (180d), and expired OIDC authorization codes. |
@@ -104,7 +104,7 @@ in history responses — only that a version changed, when, and by whom.
 
 ## Notifications: queue, workers, and realtime delivery
 
-`POST /api/v1/notifications` queues a message on one of three channels (`email`/`sms`/`inapp`),
+`POST /api/v1/notifications` queues a message on one of two channels (`email`/`inapp`),
 scoped to a `service` the same way configs/flags are. Delivery is asynchronous:
 
 - **Worker** — `notification.TaskEnqueuer` starts a [DBOS](https://github.com/dbos-inc/dbos-transact-golang)
@@ -113,7 +113,7 @@ scoped to a `service` the same way configs/flags are. Delivery is asynchronous:
   send survives a restart and won't be double-delivered. Failed sends retry up to a fixed limit
   before the notification is marked `failed`.
 - **Channel providers** (`internal/notification/provider/`) — `email` sends real mail over SMTP
-  (configured per-environment under **Notification Settings**); `sms` is a validate-and-log
+  (configured per-environment under **Notification Settings**); `inapp` is a persisted
   skeleton with no real provider wired up yet; `inapp` "delivery" is just persisting the row.
 - **Realtime fan-out** — an in-process `sse_hub.go` pub/sub pushes delivery events to
   `GET /api/v1/notifications/sse/events` subscribers as they happen (push, not persisted).

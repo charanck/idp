@@ -113,30 +113,27 @@ func TestWorker_InAppSendPublishesToHub(t *testing.T) {
 }
 
 func TestWorker_NonInAppSentNeverPublishes(t *testing.T) {
-	for _, channelName := range []string{model.ChannelEmail, model.ChannelSMS} {
-		t.Run(channelName, func(t *testing.T) {
-			channel := &fakeChannel{result: &provider.Result{Provider: channelName, ProviderMessageID: "m1"}}
-			hub := &fakeHub{}
-			w, _, notifications, _ := newUnitWorker(t, notification.ChannelRegistry{channelName: channel}, hub)
-			ctx := context.Background()
+	channelName := model.ChannelEmail
+	channel := &fakeChannel{result: &provider.Result{Provider: channelName, ProviderMessageID: "m1"}}
+	hub := &fakeHub{}
+	w, _, notifications, _ := newUnitWorker(t, notification.ChannelRegistry{channelName: channel}, hub)
+	ctx := context.Background()
 
-			n, err := notifications.CreateNotification(ctx, notification.CreateNotificationInput{
-				Channel:   channelName,
-				Recipient: datatypes.JSON(`{}`),
-				Content:   datatypes.JSON(`{}`),
-			})
-			if err != nil {
-				t.Fatalf("CreateNotification: %v", err)
-			}
+	n, err := notifications.CreateNotification(ctx, notification.CreateNotificationInput{
+		Channel:   channelName,
+		Recipient: datatypes.JSON(`{}`),
+		Content:   datatypes.JSON(`{}`),
+	})
+	if err != nil {
+		t.Fatalf("CreateNotification: %v", err)
+	}
 
-			if err := handleSend(t, w, n.ID.String()); err != nil {
-				t.Fatalf("HandleSend: %v", err)
-			}
+	if err := handleSend(t, w, n.ID.String()); err != nil {
+		t.Fatalf("HandleSend: %v", err)
+	}
 
-			if hub.count() != 0 {
-				t.Fatalf("expected 0 SSE publishes for %s send, got %d", channelName, hub.count())
-			}
-		})
+	if hub.count() != 0 {
+		t.Fatalf("expected 0 SSE publishes for %s send, got %d", channelName, hub.count())
 	}
 }
 

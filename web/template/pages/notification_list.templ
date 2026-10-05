@@ -55,7 +55,7 @@ templ NotificationList(flashes []session.Flash, user layout.NavUser, data Notifi
 				<label for="channel">Channel</label>
 				<select id="channel" name="channel">
 					<option value="">All channels</option>
-					for _, ch := range []string{"email", "sms", "inapp"} {
+					for _, ch := range []string{"email", "inapp"} {
 						if ch == data.CurrentChannel {
 							<option value={ ch } selected>{ ch }</option>
 						} else {

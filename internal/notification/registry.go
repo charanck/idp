@@ -8,12 +8,11 @@ import (
 // ChannelRegistry maps a notification channel name to its delivery Channel.
 type ChannelRegistry map[string]provider.Channel
 
-// NewChannelRegistry returns the registry wired to the skeleton
-// Email/SMS channels plus InApp.
+// NewChannelRegistry returns the registry wired to the concrete
+// delivery channels supported by the app.
 func NewChannelRegistry() ChannelRegistry {
 	return ChannelRegistry{
 		model.ChannelEmail: provider.EmailChannel{},
-		model.ChannelSMS:   provider.SMSChannel{},
 		model.ChannelInApp: provider.InAppChannel{},
 	}
 }

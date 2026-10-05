@@ -42,38 +42,6 @@ func TestNotificationSettingsEditHandler_UnknownChannelReturns404(t *testing.T) 
 	}
 }
 
-func TestNotificationSettingsEditHandler_InvalidJSONShowsError(t *testing.T) {
-	store := newSessionStore(t)
-	_, activity, h := newNotificationSettingsHandlerFixture()
-
-	form := url.Values{"config": {"{not-json"}, "credentials": {"secret"}}
-	rec := callHandlerWithParams(t, store, http.MethodPost, "/notification-settings/sms/edit/",
-		map[string]string{"channel": notificationmodel.ChannelSMS}, form, nil, h.Edit)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d (re-rendered form); body=%s", rec.Code, http.StatusOK, rec.Body.String())
-	}
-	if activity.count() != 0 {
-		t.Fatalf("activity.count() = %d, want 0 on invalid config", activity.count())
-	}
-}
-
-func TestNotificationSettingsEditHandler_SavesAndRedirects(t *testing.T) {
-	store := newSessionStore(t)
-	_, activity, h := newNotificationSettingsHandlerFixture()
-
-	form := url.Values{"config": {"{}"}, "credentials": {"secret"}, "is_active": {"on"}}
-	rec := callHandlerWithParams(t, store, http.MethodPost, "/notification-settings/sms/edit/",
-		map[string]string{"channel": notificationmodel.ChannelSMS}, form, nil, h.Edit)
-
-	if rec.Code != http.StatusFound {
-		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusFound, rec.Body.String())
-	}
-	if activity.count() != 1 {
-		t.Fatalf("activity.count() = %d, want 1", activity.count())
-	}
-}
-
 func TestNotificationSettingsEditHandler_EmailGetPrefillsStructuredFields(t *testing.T) {
 	store := newSessionStore(t)
 	settings, _, h := newNotificationSettingsHandlerFixture()

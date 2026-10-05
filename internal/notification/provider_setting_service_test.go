@@ -70,7 +70,7 @@ func TestUpsert_PreservesExistingCredentialsWhenBlank(t *testing.T) {
 func TestProviderSettingGet_ReturnsNilWhenNotConfigured(t *testing.T) {
 	svc, _ := newUnitProviderSettingService(t)
 
-	got, err := svc.Get(context.Background(), model.ChannelSMS)
+	got, err := svc.Get(context.Background(), model.ChannelEmail)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestProviderSettingGet_ReturnsNilWhenNotConfigured(t *testing.T) {
 func TestProviderSettingList_ReturnsOnlyConfiguredChannels(t *testing.T) {
 	svc, _ := newUnitProviderSettingService(t)
 
-	if _, err := svc.Upsert(context.Background(), notification.UpsertInput{Channel: model.ChannelSMS, Config: datatypes.JSON(`{}`), Credentials: "k", IsActive: true}); err != nil {
+	if _, err := svc.Upsert(context.Background(), notification.UpsertInput{Channel: model.ChannelEmail, Config: datatypes.JSON(`{"from":"noreply@example.com"}`), Credentials: "k", IsActive: true}); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 
@@ -90,7 +90,7 @@ func TestProviderSettingList_ReturnsOnlyConfiguredChannels(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	if len(settings) != 1 || settings[0].Channel != model.ChannelSMS {
+	if len(settings) != 1 || settings[0].Channel != model.ChannelEmail {
 		t.Fatalf("settings = %+v", settings)
 	}
 }

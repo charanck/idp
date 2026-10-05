@@ -19,8 +19,7 @@ import (
 // Publishing is fire-and-forget: if nobody's subscribed (or Redis is briefly
 // unavailable) the event is simply lost, not queued or retried - SSE is a
 // best-effort live feed, not a delivery channel in its own right, and is
-// never persisted to the notifications table like ChannelEmail/SMS/InApp
-// are.
+// never persisted to the notifications table like ChannelEmail/InApp are.
 type Hub struct {
 	rdb *redis.Client
 }

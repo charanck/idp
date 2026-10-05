@@ -2,7 +2,7 @@
 
 A Go control plane for configuration & secret management and feature flags, with API-key
 service-to-service (S2S) auth, Group-based access control, OAuth2/OIDC login (both as relying
-party and as its own Identity Provider), a notification system (email/SMS/in-app, with realtime
+party and as its own Identity Provider), a notification system (email/in-app, with realtime
 SSE delivery), and a server-rendered web UI.
 
 - **Configuration & secrets** scoped per application + environment, **encrypted at rest** and
@@ -12,7 +12,7 @@ SSE delivery), and a server-rendered web UI.
 - **Group-based access control** — every user belongs to one or more Groups (built-in Admin,
   Developer, User, plus custom groups) granting module permissions and an optional Application
   allow-list.
-- **Notifications** across email, SMS, and in-app channels, processed by a durable
+- **Notifications** across email and in-app channels, processed by a durable
   ([DBOS](https://github.com/dbos-inc/dbos-transact-golang)) background worker with retries. See
   [Notifications](./guides/notifications.md).
 - **Realtime delivery events over SSE** and a **persisted, pull-based in-app inbox** for
