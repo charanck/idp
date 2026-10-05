@@ -80,8 +80,16 @@ func (f *fakeUnreadConsumer) ListInAppForUser(ctx context.Context, userID string
 	return f.notifications, f.err
 }
 
+func (f *fakeUnreadConsumer) GetUnreadInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error) {
+	return f.notifications, f.err
+}
+
 func (f *fakeUnreadConsumer) ConsumeUnreadInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error) {
 	return f.notifications, f.err
+}
+
+func (f *fakeUnreadConsumer) MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error {
+	return f.err
 }
 
 type fakeNotificationAuthenticator struct {

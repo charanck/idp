@@ -83,6 +83,21 @@ func (r *gormNotificationRepository) ListInApp(ctx context.Context, userID strin
 	return notifications, nil
 }
 
+func (r *gormNotificationRepository) GetUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
+	var notifications []model.Notification
+	if err := r.db.WithContext(ctx).
+		Preload("Application").
+		Where("application_id = ?", applicationID).
+		Where("channel = ?", model.ChannelInApp).
+		Where("recipient ->> 'user_id' = ?", userID).
+		Where("read_at IS NULL").
+		Order("created_at DESC").
+		Find(&notifications).Error; err != nil {
+		return nil, err
+	}
+	return notifications, nil
+}
+
 func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
 	var notifications []model.Notification
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -110,6 +125,15 @@ func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, use
 		return nil, err
 	}
 	return notifications, nil
+}
+
+func (r *gormNotificationRepository) MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error {
+	if len(notificationIDs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&model.Notification{}).
+		Where("id IN ?", notificationIDs).
+		Update("read_at", time.Now()).Error
 }
 
 func (r *gormNotificationRepository) MarkProcessing(ctx context.Context, id uuid.UUID) error {

@@ -35,7 +35,8 @@ Details: [Feature Flags guide](guides/feature-flags.md).
 | `/api/v1/notifications/sse/events` | GET | `****** | Stream that user's delivery events in real time (push, not persisted). |
 | `/api/v1/notifications/inapp` | GET | `****** | List that user's in-app notifications without modifying their read state. |
 | `/api/v1/notifications/inapp/list` | GET | `****** | Alias for `/api/v1/notifications/inapp` for clients that prefer an explicit list path. |
-| `/api/v1/notifications/inapp/unread` | GET | `****** | Fetch and mark-read that user's unread in-app notifications (pull, persisted). |
+| `/api/v1/notifications/inapp/unread` | GET | `****** | Fetch that user's unread in-app notifications without modifying their read state. |
+| `/api/v1/notifications/inapp/mark-as-read` | POST | `****** | Mark one or more in-app notifications as read. |
 Details: [Notifications guide](guides/notifications.md), [Realtime events (SSE)](guides/sse.md),
 [In-app inbox](guides/inapp-inbox.md).
 

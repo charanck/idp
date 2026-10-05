@@ -30,7 +30,7 @@ func TestUnread_MissingBearerTokenReturns401(t *testing.T) {
 	h := apihttp.NewInAppHandler(&fakeSessionValidator{}, &fakeUnreadConsumer{})
 
 	c, _ := newInAppRequest("")
-	err := h.ConsumeUnread(c)
+	err := h.GetUnread(c)
 	httpErr, ok := err.(*echo.HTTPError)
 	if !ok {
 		t.Fatalf("expected *echo.HTTPError, got %T", err)
@@ -44,7 +44,7 @@ func TestUnread_InvalidTokenReturns401(t *testing.T) {
 	h := apihttp.NewInAppHandler(&fakeSessionValidator{err: errFakeNotificationService}, &fakeUnreadConsumer{})
 
 	c, _ := newInAppRequest("bad-token")
-	err := h.ConsumeUnread(c)
+	err := h.GetUnread(c)
 	httpErr, ok := err.(*echo.HTTPError)
 	if !ok {
 		t.Fatalf("expected *echo.HTTPError, got %T", err)
@@ -80,15 +80,15 @@ func TestList_ReturnsInAppNotificationsAsJSONWithoutConsumingThem(t *testing.T) 
 	}
 }
 
-func TestUnread_ReturnsConsumedNotificationsAsJSON(t *testing.T) {
+func TestUnread_ReturnsUnreadNotificationsAsJSON(t *testing.T) {
 	consumer := &fakeUnreadConsumer{notifications: []notificationmodel.Notification{
 		{ID: uuid.New(), Channel: "inapp", Status: notificationmodel.StatusSent, Recipient: datatypes.JSON(`{}`), Content: datatypes.JSON(`{}`)},
 	}}
 	h := apihttp.NewInAppHandler(&fakeSessionValidator{claims: notification.SessionClaims{UserID: "user-1", ApplicationID: uuid.New()}}, consumer)
 
 	c, rec := newInAppRequest("good-token")
-	if err := h.ConsumeUnread(c); err != nil {
-		t.Fatalf("ConsumeUnread: %v", err)
+	if err := h.GetUnread(c); err != nil {
+		t.Fatalf("GetUnread: %v", err)
 	}
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)

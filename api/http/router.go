@@ -58,5 +58,6 @@ func RegisterNotificationRoutes(g *echo.Group, notifications *NotificationHandle
 	g.GET("/sse/events", sse.Stream)
 	g.GET("/inapp", inapp.List)
 	g.GET("/inapp/list", inapp.List)
-	g.GET("/inapp/unread", inapp.ConsumeUnread)
+	g.GET("/inapp/unread", inapp.GetUnread)
+	g.POST("/inapp/mark-as-read", inapp.MarkAsRead)
 }

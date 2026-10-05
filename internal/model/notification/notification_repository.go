@@ -33,6 +33,11 @@ type NotificationRepository interface {
 	// separately by the service) so a client catching up on missed
 	// notifications is guaranteed to see each one exactly once.
 	ConsumeUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]Notification, error)
+	// GetUnreadInApp lists a user's unread InApp notifications under applicationID,
+	// newest first, without changing their read state.
+	GetUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]Notification, error)
+	// MarkInAppAsRead marks one or more in-app notifications as read.
+	MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error
 	MarkProcessing(ctx context.Context, id uuid.UUID) error
 	MarkSent(ctx context.Context, id uuid.UUID, provider, providerMessageID string) error
 	MarkRetrying(ctx context.Context, id uuid.UUID, attempt int, sendErr error) error

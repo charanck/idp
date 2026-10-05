@@ -152,6 +152,27 @@ func (f *fakeNotificationRepository) ListInApp(ctx context.Context, userID strin
 	return out, nil
 }
 
+func (f *fakeNotificationRepository) GetUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	var out []model.Notification
+	for _, n := range f.notifications {
+		if n.Channel != model.ChannelInApp || n.ReadAt != nil || n.ApplicationID != applicationID {
+			continue
+		}
+		var recipient struct {
+			UserID string `json:"user_id"`
+		}
+		if err := json.Unmarshal(n.Recipient, &recipient); err != nil || recipient.UserID != userID {
+			continue
+		}
+		out = append(out, n)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out, nil
+}
+
 func (f *fakeNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -179,6 +200,19 @@ func (f *fakeNotificationRepository) ConsumeUnreadInApp(ctx context.Context, use
 		out[i].ReadAt = &now
 	}
 	return out, nil
+}
+
+func (f *fakeNotificationRepository) MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	now := time.Now()
+	for _, id := range notificationIDs {
+		if n, ok := f.notifications[id]; ok {
+			n.ReadAt = &now
+			f.notifications[id] = n
+		}
+	}
+	return nil
 }
 
 func (f *fakeNotificationRepository) MarkProcessing(ctx context.Context, id uuid.UUID) error {

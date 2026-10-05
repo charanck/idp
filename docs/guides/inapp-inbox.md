@@ -15,19 +15,17 @@ Same as [SSE, step 1](sse.md#1-mint-a-session-token):
 `{"user_id": "user-123", "service": "orders"}`, returns
 `{"token": "...", "expires_in_seconds": 300}`.
 
-## 2. List in-app notifications without consuming them
+## 2. List in-app notifications without marking them as read
 
 `GET /api/v1/notifications/inapp`, authenticated with `Authorization: ******`
 
 This endpoint lists the caller's in-app notifications without modifying their read state. It is the non-destructive view for an inbox or dashboard that should not mark messages as read just because they were fetched.
 
-## 3. Fetch and consume unread notifications
+## 3. Fetch unread notifications
 
 `GET /api/v1/notifications/inapp/unread`, authenticated with `Authorization: ******`
 
-> **Warning:** This call marks notifications as read
->
-> Every notification returned by this call is immediately marked read. If your client needs to display them again later, store the response; a second call won't return the same notifications.
+This endpoint lists the caller's unread in-app notifications without marking them as read. It is useful for fetching new notifications without consuming them.
 
 Response:
 
@@ -48,9 +46,32 @@ Response:
 ]
 ```
 
+## 4. Mark notifications as read
+
+`POST /api/v1/notifications/inapp/mark-as-read`, authenticated with `Authorization: ******`
+
+This endpoint marks one or more notifications as read.
+
+Request:
+
+```json
+{
+  "notification_ids": ["d4e1...", "d4e2..."]
+}
+```
+
+Response:
+
+```json
+{
+  "status": "success"
+}
+```
+
 ## Errors
 
 | Status | Meaning |
 |---|---|
+| `400` | Invalid request body or missing/invalid notification IDs. |
 | `401` | Missing/invalid/expired bearer token, or missing/invalid `X-API-Key` (from `sessions`). |
 | `500` | Unexpected server error. |

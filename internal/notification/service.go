@@ -140,6 +140,12 @@ func (s *NotificationService) ListInAppForUser(ctx context.Context, userID strin
 	return s.repo.ListInApp(ctx, userID, applicationID)
 }
 
+// GetUnreadInAppForUser lists a user's unread InApp notifications under
+// applicationID, newest first, without changing their read state.
+func (s *NotificationService) GetUnreadInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
+	return s.repo.GetUnreadInApp(ctx, userID, applicationID)
+}
+
 // ConsumeUnreadInAppForUser lists a user's unread InApp notifications under
 // applicationID, newest first, and marks them read in the same transaction -
 // e.g. so a client catching up on missed notifications only ever sees each
@@ -152,6 +158,11 @@ func (s *NotificationService) ListInAppForUser(ctx context.Context, userID strin
 // notifications for the same user_id.
 func (s *NotificationService) ConsumeUnreadInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
 	return s.repo.ConsumeUnreadInApp(ctx, userID, applicationID)
+}
+
+// MarkInAppAsRead marks one or more in-app notifications as read.
+func (s *NotificationService) MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error {
+	return s.repo.MarkInAppAsRead(ctx, notificationIDs)
 }
 
 // markProcessing/markSent/markRetrying/markFailed are worker-facing status
