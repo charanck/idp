@@ -30,6 +30,17 @@ func (r *gormOAuthUserTokenRepository) FindByProviderAndProviderUserID(ctx conte
 	return &t, nil
 }
 
+func (r *gormOAuthUserTokenRepository) FindByUserAndProvider(ctx context.Context, userID, providerID uuid.UUID) (*model.OAuthUserToken, error) {
+	var t model.OAuthUserToken
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND provider_id = ?", userID, providerID).
+		First(&t).Error
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
 func (r *gormOAuthUserTokenRepository) Create(ctx context.Context, t *model.OAuthUserToken) error {
 	return r.db.WithContext(ctx).Create(t).Error
 }

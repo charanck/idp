@@ -311,6 +311,42 @@ func TestAuthenticateOrCreateUser_UpdatesExistingToken(t *testing.T) {
 	}
 }
 
+func TestAuthenticateOrCreateUser_RelinksTokenWhenProviderUserIDChanged(t *testing.T) {
+	svc, _, tokens, users, _ := newTestOAuthService()
+	ctx := context.Background()
+
+	provider := &authmodel.OAuthProvider{ID: uuid.New(), Name: "okta"}
+	existingUser := &authmodel.User{ID: uuid.New(), Email: "existing@example.com", IsActive: true}
+	if err := users.Create(ctx, existingUser); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	oldID := uuid.New()
+	if err := tokens.Create(ctx, &authmodel.OAuthUserToken{
+		ID:             oldID,
+		UserID:         existingUser.ID,
+		ProviderID:     provider.ID,
+		ProviderUserID: "old-app-sub",
+		AccessToken:    "stale-token",
+	}); err != nil {
+		t.Fatalf("seed token: %v", err)
+	}
+
+	userInfo := map[string]any{"sub": "new-app-sub", "email": "existing@example.com"}
+	user, tok, err := svc.AuthenticateOrCreateUser(ctx, provider, &oauth2.Token{AccessToken: "fresh-token"}, userInfo)
+	if err != nil {
+		t.Fatalf("AuthenticateOrCreateUser: %v", err)
+	}
+	if user.ID != existingUser.ID {
+		t.Fatalf("expected existing user %s, got %s", existingUser.ID, user.ID)
+	}
+	if tok.ID != oldID || tok.ProviderUserID != "new-app-sub" || tok.AccessToken != "fresh-token" {
+		t.Fatalf("expected existing row re-linked, got %+v", tok)
+	}
+	if len(tokens.tokens) != 1 {
+		t.Fatalf("expected exactly 1 token row, got %d", len(tokens.tokens))
+	}
+}
+
 func TestGetActiveProviderByID_InactiveProviderReturnsNil(t *testing.T) {
 	svc, providers, _, _, _ := newTestOAuthService()
 	ctx := context.Background()

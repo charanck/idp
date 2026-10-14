@@ -148,19 +148,7 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *m
 			return nil, nil, err
 		}
 
-		existingToken.AccessToken = token.AccessToken
-		if token.RefreshToken != "" {
-			rt := token.RefreshToken
-			existingToken.RefreshToken = &rt
-		}
-		if token.TokenType != "" {
-			existingToken.TokenType = token.TokenType
-		}
-		existingToken.ProviderUserEmail = &email
-		if !token.Expiry.IsZero() {
-			exp := token.Expiry
-			existingToken.ExpiresAt = &exp
-		}
+		applyTokenToRecord(existingToken, token, providerUserID, email)
 		if err := s.tokens.Update(ctx, existingToken); err != nil {
 			return nil, nil, err
 		}
@@ -202,6 +190,21 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *m
 			return nil, nil, userErr
 		}
 
+		// The (user_id, provider_id) pair is unique, so a user who already has a
+		// token for this provider under a different provider_user_id (e.g. after the
+		// provider's client ID/secret changed) must be re-linked, not inserted again.
+		linked, linkErr := s.tokens.FindByUserAndProvider(ctx, user.ID, provider.ID)
+		if linkErr == nil {
+			applyTokenToRecord(linked, token, providerUserID, email)
+			if err := s.tokens.Update(ctx, linked); err != nil {
+				return nil, nil, err
+			}
+			return user, linked, nil
+		}
+		if !errors.Is(linkErr, gorm.ErrRecordNotFound) {
+			return nil, nil, linkErr
+		}
+
 		expiresAt := time.Now().UTC().Add(1 * time.Hour)
 		if !token.Expiry.IsZero() {
 			expiresAt = token.Expiry
@@ -234,6 +237,25 @@ func (s *OAuthService) AuthenticateOrCreateUser(ctx context.Context, provider *m
 
 	default:
 		return nil, nil, err
+	}
+}
+
+// applyTokenToRecord copies a freshly issued provider token onto an existing
+// OAuthUserToken row.
+func applyTokenToRecord(rec *model.OAuthUserToken, token *oauth2.Token, providerUserID, email string) {
+	rec.ProviderUserID = providerUserID
+	rec.AccessToken = token.AccessToken
+	if token.RefreshToken != "" {
+		rt := token.RefreshToken
+		rec.RefreshToken = &rt
+	}
+	if token.TokenType != "" {
+		rec.TokenType = token.TokenType
+	}
+	rec.ProviderUserEmail = &email
+	if !token.Expiry.IsZero() {
+		exp := token.Expiry
+		rec.ExpiresAt = &exp
 	}
 }
 

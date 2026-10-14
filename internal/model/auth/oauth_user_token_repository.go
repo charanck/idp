@@ -9,6 +9,7 @@ import (
 // OAuthUserTokenRepository is the persistence boundary for OAuthUserToken.
 type OAuthUserTokenRepository interface {
 	FindByProviderAndProviderUserID(ctx context.Context, providerID uuid.UUID, providerUserID string) (*OAuthUserToken, error)
+	FindByUserAndProvider(ctx context.Context, userID, providerID uuid.UUID) (*OAuthUserToken, error)
 	Create(ctx context.Context, t *OAuthUserToken) error
 	Update(ctx context.Context, t *OAuthUserToken) error
 }

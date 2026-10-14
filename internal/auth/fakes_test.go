@@ -415,6 +415,18 @@ func (f *fakeOAuthUserTokenRepository) FindByProviderAndProviderUserID(ctx conte
 	return nil, gorm.ErrRecordNotFound
 }
 
+func (f *fakeOAuthUserTokenRepository) FindByUserAndProvider(ctx context.Context, userID, providerID uuid.UUID) (*authmodel.OAuthUserToken, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, t := range f.tokens {
+		if t.UserID == userID && t.ProviderID == providerID {
+			cp := t
+			return &cp, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
 func (f *fakeOAuthUserTokenRepository) Create(ctx context.Context, t *authmodel.OAuthUserToken) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
