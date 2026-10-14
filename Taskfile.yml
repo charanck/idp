@@ -1,0 +1,22 @@
+# https://taskfile.dev - run `task --list` to see everything.
+version: "3"
+
+tasks:
+  build:
+    desc: Build everything
+    cmds:
+      - go build ./...
+
+  test:
+    desc: Run unit and integration tests (set CP_TEST_DATABASE_URL, see CONTRIBUTING.md)
+    # -p 1 is required: every package's tests share one ephemeral Postgres
+    # (CP_TEST_DATABASE_URL) and truncate its tables between tests, which races
+    # across packages if the go tool runs them concurrently (its default).
+    cmds:
+      - go test -p 1 ./... {{.CLI_ARGS}}
+
+  e2e:
+    desc: Prune Postgres/Redis, boot the server and run ./e2e on a clean slate (extra go test args after --)
+    # Deletes the idp-postgres/idp-redis containers and volumes; see scripts/e2e.sh.
+    cmds:
+      - ./scripts/e2e.sh {{.CLI_ARGS}}

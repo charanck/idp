@@ -277,10 +277,13 @@ func TestAPIKeyAuth_FixedWindowThrottlesRepeatedRequests(t *testing.T) {
 	envName, _ := admin.createEnvironment(t, appID)
 
 	path := "/api/v1/config/configs/list?service=" + appName + "&environment=" + envName
+	// Pin one client IP so the loop fills only its own rate-limit bucket
+	// instead of poisoning the window every other test's requests share.
+	clientIP := pinnedClientIP()
 	var lastStatus int
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		resp := apiRequest(t, base, http.MethodGet, path, apiKey, nil)
+		resp := apiRequestFromIP(t, base, http.MethodGet, path, apiKey, nil, clientIP)
 		lastStatus = resp.StatusCode
 		resp.Body.Close()
 		if lastStatus == http.StatusTooManyRequests {

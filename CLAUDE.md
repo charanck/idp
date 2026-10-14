@@ -37,7 +37,8 @@ logging in via an external IdP like Google).
 go build ./...          # build everything
 go run ./cmd/server      # run the HTTP server
 go run ./cmd/migrate-cutover [--dry-run]   # standalone schema-reconciliation/validation tool
-make test                # go test -p 1 ./... (see Makefile for why -p 1 is required)
+task test                # go test -p 1 ./... (see Taskfile.yml for why -p 1 is required)
+task e2e                 # prune Postgres/Redis, boot the server, run ./e2e on a clean slate (extra go test args after --)
 ```
 
 Regenerating templ views (only needed after editing a `.templ` file) requires the
@@ -49,13 +50,13 @@ go run github.com/a-h/templ/cmd/templ generate
 
 Most tests are integration tests against a real Postgres instance (goose/GORM target
 Postgres-specific types a mock or sqlite can't stand in for). Point `CP_TEST_DATABASE_URL` at a
-throwaway Postgres database before running `make test`; without it, those tests `t.Skip()`
+throwaway Postgres database before running `task test`; without it, those tests `t.Skip()`
 individually rather than failing:
 
 ```bash
 docker run --rm -d -p 5433:5432 -e POSTGRES_PASSWORD=idp -e POSTGRES_USER=idp -e POSTGRES_DB=idp_test postgres:15.3-alpine
 export CP_TEST_DATABASE_URL="host=localhost port=5433 dbname=idp_test user=idp password=idp sslmode=disable"
-make test
+task test
 ```
 
 Required env vars (see `docs/configuration.md` for the full list): `MASTER_ENCRYPTION_KEY` (no

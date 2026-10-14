@@ -23,12 +23,12 @@ Most tests are integration tests against a real Postgres instance:
 ```bash
 docker run --rm -d -p 5433:5432 -e POSTGRES_PASSWORD=idp -e POSTGRES_USER=idp -e POSTGRES_DB=idp_test postgres:15.3-alpine
 export CP_TEST_DATABASE_URL="host=localhost port=5433 dbname=idp_test user=idp password=idp sslmode=disable"
-make test
+task test
 ```
 
 Without `CP_TEST_DATABASE_URL` set, those tests `t.Skip()` individually rather than failing.
 
-Please add or update tests for any behavior change, and make sure `make test` passes before
+Please add or update tests for any behavior change, and make sure `task test` passes before
 opening a PR.
 
 ## Making changes

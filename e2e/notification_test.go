@@ -179,6 +179,14 @@ func (s *adminSession) createServiceClient(t *testing.T) string {
 // inspect/close.
 func apiRequest(t *testing.T, base, method, path, apiKey string, body []byte) *http.Response {
 	t.Helper()
+	return apiRequestFromIP(t, base, method, path, apiKey, body, "")
+}
+
+// apiRequestFromIP is apiRequest pinned to clientIP via X-Forwarded-For, so
+// repeated calls land in one rate-limit bucket. An empty clientIP leaves the
+// per-request random IP from TestMain in effect.
+func apiRequestFromIP(t *testing.T, base, method, path, apiKey string, body []byte, clientIP string) *http.Response {
+	t.Helper()
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -190,6 +198,9 @@ func apiRequest(t *testing.T, base, method, path, apiKey string, body []byte) *h
 	req.Header.Set("Content-Type", "application/json")
 	if apiKey != "" {
 		req.Header.Set("X-API-Key", apiKey)
+	}
+	if clientIP != "" {
+		req.Header.Set("X-Forwarded-For", clientIP)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

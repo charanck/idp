@@ -85,8 +85,36 @@ releases.
 ## Running tests
 
 ```bash
-make test
+task test
 ```
+
+### End-to-end tests
+
+The `e2e/` suite drives a real running server over HTTP. Tasks are defined in `Taskfile.yml` and run with [Task](https://taskfile.dev/installation/) (`task --list`
+shows them all). The e2e task also requires Docker, Go, `curl` and `openssl`.
+
+```bash
+task e2e                      # extra go test args go after --, e.g. task e2e -- -run TestOIDC -v
+```
+
+`task e2e` always starts from a clean slate: it **deletes the `idp-postgres`/`idp-redis` containers and
+their volumes** from `docker-compose.local.yml` (any local dev data in them is lost), starts them fresh,
+builds and boots `cmd/server` on port 8000 with a throwaway master key and the default rate limits,
+runs `go test ./e2e/...`, then stops the server and removes the containers and volumes again. Set
+`E2E_PORT` to use another port, or `E2E_KEEP=1` to leave the containers up afterwards.
+
+To run against a server you started yourself, set the variables the tests read and call `go test`
+directly (without them the tests skip rather than fail):
+
+```bash
+CP_E2E_BASE_URL=http://localhost:8000 ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=changeme123 \
+  go test -p 1 -count=1 ./e2e/...
+```
+
+The tests give every request its own client IP via `X-Forwarded-For`, so the login/S2S rate limiters
+don't couple tests together; no server-side limit changes are needed. Start that server on a fresh
+database with a fixed `MASTER_ENCRYPTION_KEY` — changing the key against an existing database breaks
+the stored OIDC signing key.
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full dev workflow.
 
