@@ -68,6 +68,14 @@ func (r *gormApplicationRepository) Delete(ctx context.Context, app *model.Appli
 // the find-then-create race between concurrent first-time callers.
 func (r *gormApplicationRepository) GetOrCreate(ctx context.Context, name string) (*model.Application, error) {
 	var app model.Application
+	// Fast path: the Application almost always exists already, so skip the
+	// transaction and advisory lock (taken on every notification create) and
+	// only fall into the serialized path on a miss.
+	if err := r.db.WithContext(ctx).Where("name = ?", name).First(&app).Error; err == nil {
+		return &app, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", advisoryLockKey("application-get-or-create", name)).Error; err != nil {
 			return err

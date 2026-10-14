@@ -83,6 +83,10 @@ const (
 	ActionRollback = "rollback"
 )
 
+// MaxConfigVersions is how many versions of a ConfigEntry are retained; each
+// new version prunes any older than the newest MaxConfigVersions.
+const MaxConfigVersions = 5
+
 type ConfigEntryVersion struct {
 	ID            uuid.UUID `gorm:"column:id;type:uuid;primaryKey"`
 	ConfigEntryID uuid.UUID `gorm:"column:config_entry_id"`

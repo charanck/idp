@@ -259,14 +259,16 @@ func recordConfigVersionTx(tx *gorm.DB, entry *model.ConfigEntry, action, change
 		return nil, err
 	}
 
-	var last model.ConfigEntryVersion
-	err := tx.Where("config_entry_id = ?", entry.ID).Order("version DESC").First(&last).Error
-	versionNumber := 1
-	if err == nil {
-		versionNumber = last.Version + 1
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+	// MAX(version) reads one scalar instead of loading the whole last version
+	// row (including its encrypted value) just to read its number.
+	var maxVersion int
+	if err := tx.Model(&model.ConfigEntryVersion{}).
+		Where("config_entry_id = ?", entry.ID).
+		Select("COALESCE(MAX(version), 0)").
+		Scan(&maxVersion).Error; err != nil {
 		return nil, err
 	}
+	versionNumber := maxVersion + 1
 
 	var changedByPtr *string
 	if changedBy != "" {
@@ -283,6 +285,12 @@ func recordConfigVersionTx(tx *gorm.DB, entry *model.ConfigEntry, action, change
 		ChangedBy:     changedByPtr,
 	}
 	if err := tx.Create(version).Error; err != nil {
+		return nil, err
+	}
+	// Keep only the newest MaxConfigVersions versions: prune everything older
+	// on every new version, inside the same (advisory-locked) transaction.
+	if err := tx.Where("config_entry_id = ? AND version <= ?", entry.ID, versionNumber-model.MaxConfigVersions).
+		Delete(&model.ConfigEntryVersion{}).Error; err != nil {
 		return nil, err
 	}
 	return version, nil

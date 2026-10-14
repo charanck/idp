@@ -35,13 +35,9 @@ func postLoginLandingPath(ctx context.Context, store AuthStore, userID uuid.UUID
 	if err != nil {
 		return "/profile/"
 	}
-	appIDs := make(map[uuid.UUID][]uuid.UUID, len(groups))
-	for _, g := range groups {
-		ids, err := store.GroupApplicationIDs(ctx, g.ID)
-		if err != nil {
-			return "/profile/"
-		}
-		appIDs[g.ID] = ids
+	appIDs, err := groupAppIDsFor(ctx, store, groups)
+	if err != nil {
+		return "/profile/"
 	}
 	if auth.ComputeEffectivePermissions(groups, appIDs).HasModule(auth.ModuleDashboard) {
 		return "/dashboard/"

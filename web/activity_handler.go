@@ -13,6 +13,10 @@ import (
 
 const activityPageSize = 50
 
+// activityMaxRows caps how many (newest-first) log rows a page view loads and
+// paginates in memory, so the cost doesn't grow with 180 days of history.
+const activityMaxRows = 5000
+
 // ActivityReader is the read side of the audit log, used by the activity log
 // page. Satisfied by *activity.Logger.
 type ActivityReader interface {
@@ -35,7 +39,7 @@ func (h *ActivityHandler) List(c echo.Context) error {
 	userFilter := c.QueryParam("user")
 
 	activities, err := h.reader.List(c.Request().Context(), activitymodel.ListFilter{
-		Resource: resourceFilter, Type: typeFilter, UserLike: userFilter,
+		Resource: resourceFilter, Type: typeFilter, UserLike: userFilter, Limit: activityMaxRows,
 	})
 	if err != nil {
 		return err

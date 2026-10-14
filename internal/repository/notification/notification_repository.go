@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	model "controlplane/internal/model/notification"
 )
@@ -44,19 +45,22 @@ func (r *gormNotificationRepository) FindByID(ctx context.Context, id uuid.UUID)
 }
 
 func (r *gormNotificationRepository) List(ctx context.Context, filter model.ListNotificationsFilter) ([]model.Notification, error) {
-	query := r.db.WithContext(ctx).Preload("Application").Order("created_at DESC")
+	query := r.db.WithContext(ctx).Preload("Application").Order("notifications.created_at DESC")
+	if filter.Limit > 0 {
+		query = query.Limit(filter.Limit)
+	}
 	if filter.ApplicationID != nil {
-		query = query.Where("application_id = ?", *filter.ApplicationID)
+		query = query.Where("notifications.application_id = ?", *filter.ApplicationID)
 	}
 	if filter.Service != "" {
 		query = query.Joins("JOIN applications ON applications.id = notifications.application_id").
 			Where("applications.name = ?", filter.Service)
 	}
 	if filter.Channel != "" {
-		query = query.Where("channel = ?", filter.Channel)
+		query = query.Where("notifications.channel = ?", filter.Channel)
 	}
 	if filter.Status != "" {
-		query = query.Where("status = ?", filter.Status)
+		query = query.Where("notifications.status = ?", filter.Status)
 	}
 	var notifications []model.Notification
 	if err := query.Find(&notifications).Error; err != nil {
@@ -101,7 +105,9 @@ func (r *gormNotificationRepository) GetUnreadInApp(ctx context.Context, userID 
 func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]model.Notification, error) {
 	var notifications []model.Notification
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.
+		// FOR UPDATE: two concurrent consumers must not both read (and both
+		// return) the same unread rows before either marks them read.
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Preload("Application").
 			Where("application_id = ?", applicationID).
 			Where("channel = ?", model.ChannelInApp).
@@ -127,12 +133,16 @@ func (r *gormNotificationRepository) ConsumeUnreadInApp(ctx context.Context, use
 	return notifications, nil
 }
 
-func (r *gormNotificationRepository) MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error {
+func (r *gormNotificationRepository) MarkInAppAsRead(ctx context.Context, userID string, applicationID uuid.UUID, notificationIDs []uuid.UUID) error {
 	if len(notificationIDs) == 0 {
 		return nil
 	}
 	return r.db.WithContext(ctx).Model(&model.Notification{}).
 		Where("id IN ?", notificationIDs).
+		Where("application_id = ?", applicationID).
+		Where("channel = ?", model.ChannelInApp).
+		Where("recipient ->> 'user_id' = ?", userID).
+		Where("read_at IS NULL").
 		Update("read_at", time.Now()).Error
 }
 
@@ -170,7 +180,21 @@ func (r *gormNotificationRepository) MarkFailed(ctx context.Context, id uuid.UUI
 }
 
 func (r *gormNotificationRepository) DeleteOlderThan(ctx context.Context, before time.Time) error {
-	return r.db.WithContext(ctx).Where("created_at < ?", before).Delete(&model.Notification{}).Error
+	// Bounded batches; see activity repository's DeleteOlderThan.
+	for {
+		res := r.db.WithContext(ctx).Exec(
+			`DELETE FROM notifications WHERE ctid IN (SELECT ctid FROM notifications WHERE created_at < ? LIMIT ?)`,
+			before, deleteBatchSize)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected < deleteBatchSize {
+			return nil
+		}
+	}
 }
+
+// deleteBatchSize bounds how many rows a single retention DELETE removes.
+const deleteBatchSize = 5000
 
 var _ model.NotificationRepository = (*gormNotificationRepository)(nil)

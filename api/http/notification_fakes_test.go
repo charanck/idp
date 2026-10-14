@@ -74,6 +74,9 @@ func (f *fakeSessionValidator) Validate(token string) (notification.SessionClaim
 type fakeUnreadConsumer struct {
 	notifications []notificationmodel.Notification
 	err           error
+
+	markedUserID        string
+	markedApplicationID uuid.UUID
 }
 
 func (f *fakeUnreadConsumer) ListInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error) {
@@ -88,7 +91,8 @@ func (f *fakeUnreadConsumer) ConsumeUnreadInAppForUser(ctx context.Context, user
 	return f.notifications, f.err
 }
 
-func (f *fakeUnreadConsumer) MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error {
+func (f *fakeUnreadConsumer) MarkInAppAsRead(ctx context.Context, userID string, applicationID uuid.UUID, notificationIDs []uuid.UUID) error {
+	f.markedUserID, f.markedApplicationID = userID, applicationID
 	return f.err
 }
 

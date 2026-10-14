@@ -21,6 +21,35 @@ type GroupPermissionLoader interface {
 	GroupApplicationIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error)
 }
 
+// groupAppIDsFor loads the Application allow-lists for groups, in one query
+// when the loader supports batching (*auth.AuthService does) and one per group
+// otherwise.
+func groupAppIDsFor(ctx context.Context, loader interface {
+	GroupApplicationIDs(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error)
+}, groups []authmodel.Group) (map[uuid.UUID][]uuid.UUID, error) {
+	if len(groups) == 0 {
+		return map[uuid.UUID][]uuid.UUID{}, nil
+	}
+	if b, ok := loader.(interface {
+		GroupApplicationIDsFor(ctx context.Context, groupIDs []uuid.UUID) (map[uuid.UUID][]uuid.UUID, error)
+	}); ok {
+		groupIDs := make([]uuid.UUID, len(groups))
+		for i, g := range groups {
+			groupIDs[i] = g.ID
+		}
+		return b.GroupApplicationIDsFor(ctx, groupIDs)
+	}
+	out := make(map[uuid.UUID][]uuid.UUID, len(groups))
+	for _, g := range groups {
+		ids, err := loader.GroupApplicationIDs(ctx, g.ID)
+		if err != nil {
+			return nil, err
+		}
+		out[g.ID] = ids
+	}
+	return out, nil
+}
+
 // EffectivePermissionsFromContext returns the current user's computed
 // permissions, attached by AuthMiddleware.LoadUser. Zero value (no modules,
 // restricted to zero applications) if there is no logged-in user.

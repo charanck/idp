@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 	gormtracing "gorm.io/plugin/opentelemetry/tracing"
@@ -28,6 +29,11 @@ func newDatabase(cfg *appconfig.Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get sql.DB: %w", err)
 	}
+	sqlDB.SetMaxOpenConns(cfg.DBMaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.DBMaxIdleConns)
+	sqlDB.SetConnMaxLifetime(time.Duration(cfg.DBConnMaxLifetimeSecs) * time.Second)
+	sqlDB.SetConnMaxIdleTime(time.Duration(cfg.DBConnMaxIdleTimeSecs) * time.Second)
+
 	if err := db.Migrate(sqlDB); err != nil {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}

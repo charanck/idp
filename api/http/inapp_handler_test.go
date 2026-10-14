@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -102,5 +103,24 @@ func TestUnread_ReturnsUnreadNotificationsAsJSON(t *testing.T) {
 	}
 	if len(body) != 1 || body[0].Channel != "inapp" {
 		t.Fatalf("unexpected body: %+v", body)
+	}
+}
+
+func TestMarkAsRead_ScopesToTokenUserAndApplication(t *testing.T) {
+	appID := uuid.New()
+	consumer := &fakeUnreadConsumer{}
+	h := apihttp.NewInAppHandler(&fakeSessionValidator{claims: notification.SessionClaims{UserID: "user-1", ApplicationID: appID}}, consumer)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/notifications/inapp/mark-as-read",
+		strings.NewReader(`{"notification_ids":["`+uuid.NewString()+`"]}`))
+	req.Header.Set(echo.HeaderAuthorization, "Bearer good-token")
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	if err := h.MarkAsRead(e.NewContext(req, rec)); err != nil {
+		t.Fatalf("MarkAsRead: %v", err)
+	}
+	if consumer.markedUserID != "user-1" || consumer.markedApplicationID != appID {
+		t.Fatalf("mark-as-read not scoped to token claims: user=%q app=%s", consumer.markedUserID, consumer.markedApplicationID)
 	}
 }

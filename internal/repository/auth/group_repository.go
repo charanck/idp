@@ -62,6 +62,30 @@ func (r *gormGroupRepository) ListApplicationIDs(ctx context.Context, groupID uu
 	return ids, nil
 }
 
+// ListApplicationIDsByGroups returns the Application allow-lists for many
+// groups in one query (groups with no rows are absent from the map).
+func (r *gormGroupRepository) ListApplicationIDsByGroups(ctx context.Context, groupIDs []uuid.UUID) (map[uuid.UUID][]uuid.UUID, error) {
+	out := make(map[uuid.UUID][]uuid.UUID, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		GroupID       uuid.UUID
+		ApplicationID uuid.UUID
+	}
+	err := r.db.WithContext(ctx).Table("group_applications").
+		Select("group_id, application_id").
+		Where("group_id IN ?", groupIDs).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.GroupID] = append(out[row.GroupID], row.ApplicationID)
+	}
+	return out, nil
+}
+
 func (r *gormGroupRepository) SetApplications(ctx context.Context, groupID uuid.UUID, applicationIDs []uuid.UUID) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Table("group_applications").Where("group_id = ?", groupID).Delete(nil).Error; err != nil {
@@ -89,6 +113,31 @@ func (r *gormGroupRepository) ListByUserID(ctx context.Context, userID uuid.UUID
 		return nil, err
 	}
 	return groups, nil
+}
+
+// ListByUserIDs returns the groups of many users in one query, keyed by user
+// ID (users with no groups are absent from the map).
+func (r *gormGroupRepository) ListByUserIDs(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID][]model.Group, error) {
+	out := make(map[uuid.UUID][]model.Group, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		model.Group
+		UserID uuid.UUID
+	}
+	err := r.db.WithContext(ctx).Model(&model.Group{}).
+		Select("groups.*, user_groups.user_id AS user_id").
+		Joins("JOIN user_groups ON user_groups.group_id = groups.id").
+		Where("user_groups.user_id IN ?", userIDs).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.UserID] = append(out[row.UserID], row.Group)
+	}
+	return out, nil
 }
 
 func (r *gormGroupRepository) SetUserGroups(ctx context.Context, userID uuid.UUID, groupIDs []uuid.UUID) error {

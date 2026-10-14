@@ -54,6 +54,25 @@ func (s *AuthService) GroupApplicationIDs(ctx context.Context, groupID uuid.UUID
 	return s.groups.ListApplicationIDs(ctx, groupID)
 }
 
+// GroupApplicationIDsFor returns the Application allow-lists for several
+// groups at once, using a single query when the repository supports it.
+func (s *AuthService) GroupApplicationIDsFor(ctx context.Context, groupIDs []uuid.UUID) (map[uuid.UUID][]uuid.UUID, error) {
+	if b, ok := s.groups.(interface {
+		ListApplicationIDsByGroups(ctx context.Context, groupIDs []uuid.UUID) (map[uuid.UUID][]uuid.UUID, error)
+	}); ok {
+		return b.ListApplicationIDsByGroups(ctx, groupIDs)
+	}
+	out := make(map[uuid.UUID][]uuid.UUID, len(groupIDs))
+	for _, id := range groupIDs {
+		ids, err := s.groups.ListApplicationIDs(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = ids
+	}
+	return out, nil
+}
+
 // CreateGroupInput bundles CreateGroup/UpdateGroup's mutable fields.
 type CreateGroupInput struct {
 	Name           string
@@ -130,6 +149,25 @@ func (s *AuthService) DeleteGroup(ctx context.Context, id uuid.UUID) (*model.Gro
 // UserGroups returns the groups a user belongs to.
 func (s *AuthService) UserGroups(ctx context.Context, userID uuid.UUID) ([]model.Group, error) {
 	return s.groups.ListByUserID(ctx, userID)
+}
+
+// UserGroupsFor returns the groups of several users at once, using a single
+// query when the repository supports it.
+func (s *AuthService) UserGroupsFor(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID][]model.Group, error) {
+	if b, ok := s.groups.(interface {
+		ListByUserIDs(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID][]model.Group, error)
+	}); ok {
+		return b.ListByUserIDs(ctx, userIDs)
+	}
+	out := make(map[uuid.UUID][]model.Group, len(userIDs))
+	for _, id := range userIDs {
+		gs, err := s.groups.ListByUserID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = gs
+	}
+	return out, nil
 }
 
 // SetUserGroups replaces a user's group memberships.

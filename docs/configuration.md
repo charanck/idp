@@ -40,6 +40,10 @@ Postgres is required — there is no SQLite support.
 | `DB_USER` | `idp` | |
 | `DB_PASSWORD` | `idp` | |
 | `DB_SSLMODE` | `disable` | |
+| `DB_MAX_OPEN_CONNS` | `25` | Max open Postgres connections in the app's pool (DBOS keeps its own separate pool). |
+| `DB_MAX_IDLE_CONNS` | `25` | Max idle connections kept in the pool. |
+| `DB_CONN_MAX_LIFETIME_SECONDS` | `1800` | Recycle connections older than this. |
+| `DB_CONN_MAX_IDLE_TIME_SECONDS` | `300` | Close connections idle longer than this. |
 
 ## Cache and sessions
 

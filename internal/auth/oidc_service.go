@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -61,6 +62,19 @@ type OIDCService struct {
 	groups      model.GroupRepository
 	users       model.UserRepository
 	encryption  *crypto.EncryptionService
+
+	// keyMu/key memoize the parsed singleton signing keypair: the key never
+	// rotates, and re-reading, decrypting and PEM-parsing it (plus taking a
+	// global advisory lock in GetOrCreate) on every /token, /userinfo and
+	// /jwks.json request was pure overhead.
+	keyMu sync.Mutex
+	key   *signingKeyMaterial
+}
+
+type signingKeyMaterial struct {
+	priv *rsa.PrivateKey
+	pub  *rsa.PublicKey
+	kid  string
 }
 
 func NewOIDCService(
@@ -81,22 +95,46 @@ func NewOIDCService(
 	}
 }
 
-// EnsureSigningKey returns the singleton RS256 keypair, generating one on
-// first call.
-func (s *OIDCService) EnsureSigningKey(ctx context.Context) (*rsa.PrivateKey, string, error) {
-	row, err := s.signingKeys.GetOrCreate(ctx, s.generateSigningKeyRow)
+// signingKey returns the memoized singleton keypair, loading (and generating
+// on first ever use) it from the database on the first call.
+func (s *OIDCService) signingKey(ctx context.Context) (*signingKeyMaterial, error) {
+	s.keyMu.Lock()
+	defer s.keyMu.Unlock()
+	if s.key != nil {
+		return s.key, nil
+	}
+	row, err := s.signingKeys.Get(ctx)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// Only take the advisory-lock/generate path when the row is missing.
+		row, err = s.signingKeys.GetOrCreate(ctx, s.generateSigningKeyRow)
+	}
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	privPEM, err := s.encryption.DecryptFromStorage(row.EncryptedPrivateKey)
 	if err != nil {
-		return nil, "", fmt.Errorf("decrypt oidc signing key: %w", err)
+		return nil, fmt.Errorf("decrypt oidc signing key: %w", err)
 	}
-	privKey, err := parseRSAPrivateKeyPEM(privPEM)
+	priv, err := parseRSAPrivateKeyPEM(privPEM)
+	if err != nil {
+		return nil, err
+	}
+	pub, err := parseRSAPublicKeyPEM(row.PublicKeyPEM)
+	if err != nil {
+		return nil, err
+	}
+	s.key = &signingKeyMaterial{priv: priv, pub: pub, kid: row.Kid}
+	return s.key, nil
+}
+
+// EnsureSigningKey returns the singleton RS256 keypair, generating one on
+// first call.
+func (s *OIDCService) EnsureSigningKey(ctx context.Context) (*rsa.PrivateKey, string, error) {
+	k, err := s.signingKey(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	return privKey, row.Kid, nil
+	return k.priv, k.kid, nil
 }
 
 func (s *OIDCService) generateSigningKeyRow() (*model.OIDCSigningKey, error) {
@@ -146,21 +184,18 @@ func parseRSAPublicKeyPEM(pubPEM string) (*rsa.PublicKey, error) {
 // JWKS builds the JSON Web Key Set for /.well-known/jwks.json from the
 // singleton signing key's public half.
 func (s *OIDCService) JWKS(ctx context.Context) (map[string]any, error) {
-	row, err := s.signingKeys.GetOrCreate(ctx, s.generateSigningKeyRow)
+	k, err := s.signingKey(ctx)
 	if err != nil {
 		return nil, err
 	}
-	pubKey, err := parseRSAPublicKeyPEM(row.PublicKeyPEM)
-	if err != nil {
-		return nil, err
-	}
+	pubKey := k.pub
 	return map[string]any{
 		"keys": []map[string]any{
 			{
 				"kty": "RSA",
 				"use": "sig",
 				"alg": "RS256",
-				"kid": row.Kid,
+				"kid": k.kid,
 				"n":   base64.RawURLEncoding.EncodeToString(pubKey.N.Bytes()),
 				"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(pubKey.E)).Bytes()),
 			},
@@ -348,14 +383,11 @@ func signClaims(privKey *rsa.PrivateKey, kid string, claims jwt.MapClaims) (stri
 // ValidateAccessToken verifies tokenString's RS256 signature and expiry,
 // returning its claims for the userinfo endpoint.
 func (s *OIDCService) ValidateAccessToken(ctx context.Context, tokenString string) (map[string]any, error) {
-	row, err := s.signingKeys.Get(ctx)
+	k, err := s.signingKey(ctx)
 	if err != nil {
 		return nil, err
 	}
-	pubKey, err := parseRSAPublicKeyPEM(row.PublicKeyPEM)
-	if err != nil {
-		return nil, err
-	}
+	pubKey := k.pub
 
 	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (any, error) {
 		return pubKey, nil

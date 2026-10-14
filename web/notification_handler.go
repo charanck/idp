@@ -17,6 +17,10 @@ import (
 
 const notificationsPageSize = 25
 
+// notificationMaxRows caps how many (newest-first) notifications a page view
+// loads and paginates in memory; the table holds 90 days of history.
+const notificationMaxRows = 5000
+
 // NotificationStore is the read side of notification delivery, used by the
 // (all-logged-in-users, read-only) notifications page. Satisfied by
 // *notification.NotificationService.
@@ -67,7 +71,7 @@ func (h *NotificationHandler) List(c echo.Context) error {
 	channelFilter := c.QueryParam("channel")
 	statusFilter := c.QueryParam("status")
 
-	filter := notificationmodel.ListNotificationsFilter{Channel: channelFilter, Status: statusFilter}
+	filter := notificationmodel.ListNotificationsFilter{Channel: channelFilter, Status: statusFilter, Limit: notificationMaxRows}
 	if appIDFilter != "" {
 		if id, err := uuid.Parse(appIDFilter); err == nil {
 			filter.ApplicationID = &id

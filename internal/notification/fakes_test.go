@@ -202,15 +202,23 @@ func (f *fakeNotificationRepository) ConsumeUnreadInApp(ctx context.Context, use
 	return out, nil
 }
 
-func (f *fakeNotificationRepository) MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error {
+func (f *fakeNotificationRepository) MarkInAppAsRead(ctx context.Context, userID string, applicationID uuid.UUID, notificationIDs []uuid.UUID) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	now := time.Now()
 	for _, id := range notificationIDs {
-		if n, ok := f.notifications[id]; ok {
-			n.ReadAt = &now
-			f.notifications[id] = n
+		n, ok := f.notifications[id]
+		if !ok || n.Channel != model.ChannelInApp || n.ReadAt != nil || n.ApplicationID != applicationID {
+			continue
 		}
+		var recipient struct {
+			UserID string `json:"user_id"`
+		}
+		if err := json.Unmarshal(n.Recipient, &recipient); err != nil || recipient.UserID != userID {
+			continue
+		}
+		n.ReadAt = &now
+		f.notifications[id] = n
 	}
 	return nil
 }

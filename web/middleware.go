@@ -110,13 +110,9 @@ func (m *AuthMiddleware) computePermissions(ctx context.Context, userID uuid.UUI
 	if err != nil {
 		return auth.EffectivePermissions{}
 	}
-	appIDs := make(map[uuid.UUID][]uuid.UUID, len(groups))
-	for _, g := range groups {
-		ids, err := m.groups.GroupApplicationIDs(ctx, g.ID)
-		if err != nil {
-			return auth.EffectivePermissions{}
-		}
-		appIDs[g.ID] = ids
+	appIDs, err := groupAppIDsFor(ctx, m.groups, groups)
+	if err != nil {
+		return auth.EffectivePermissions{}
 	}
 	return auth.ComputeEffectivePermissions(groups, appIDs)
 }

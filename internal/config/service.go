@@ -434,6 +434,7 @@ func (s *ConfigService) UpdateConfigEntry(ctx context.Context, id uuid.UUID, in 
 		return nil, err
 	}
 
+	oldApplicationID, oldEnvironmentID := entry.ApplicationID, entry.EnvironmentID
 	entry.ApplicationID = in.ApplicationID
 	entry.EnvironmentID = in.EnvironmentID
 	entry.Key = in.Key
@@ -458,6 +459,21 @@ func (s *ConfigService) UpdateConfigEntry(ctx context.Context, id uuid.UUID, in 
 	}
 	if err := s.InvalidateScopeCache(ctx, app.Name, env.Name); err != nil {
 		return nil, err
+	}
+	// Moving an entry between applications/environments also changes the scope
+	// it left, whose cached list would otherwise keep serving the old entry.
+	if oldApplicationID != entry.ApplicationID || oldEnvironmentID != entry.EnvironmentID {
+		oldApp, err := s.apps.FindByID(ctx, oldApplicationID)
+		if err != nil {
+			return nil, err
+		}
+		oldEnv, err := s.envs.FindByID(ctx, oldEnvironmentID)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.InvalidateScopeCache(ctx, oldApp.Name, oldEnv.Name); err != nil {
+			return nil, err
+		}
 	}
 
 	entry.Application = *app

@@ -23,6 +23,11 @@ type Config struct {
 	DBPassword string
 	DBSSLMode  string
 
+	DBMaxOpenConns        int
+	DBMaxIdleConns        int
+	DBConnMaxLifetimeSecs int
+	DBConnMaxIdleTimeSecs int
+
 	RedisURL            string
 	CacheKeyPrefix      string
 	CacheTimeoutSeconds int
@@ -139,6 +144,11 @@ func Load() (*Config, error) {
 		DBUser:     getenv("DB_USER", "idp"),
 		DBPassword: getenv("DB_PASSWORD", "idp"),
 		DBSSLMode:  getenv("DB_SSLMODE", "disable"),
+
+		DBMaxOpenConns:        getenvInt("DB_MAX_OPEN_CONNS", 25),
+		DBMaxIdleConns:        getenvInt("DB_MAX_IDLE_CONNS", 25),
+		DBConnMaxLifetimeSecs: getenvInt("DB_CONN_MAX_LIFETIME_SECONDS", 1800),
+		DBConnMaxIdleTimeSecs: getenvInt("DB_CONN_MAX_IDLE_TIME_SECONDS", 300),
 
 		RedisURL:            getenv("REDIS_URL", "redis://127.0.0.1:6379/1"),
 		CacheKeyPrefix:      getenv("CACHE_KEY_PREFIX", "control_plane"),

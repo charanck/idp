@@ -17,7 +17,7 @@ type InAppConsumer interface {
 	ListInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error)
 	GetUnreadInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error)
 	ConsumeUnreadInAppForUser(ctx context.Context, userID string, applicationID uuid.UUID) ([]notificationmodel.Notification, error)
-	MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error
+	MarkInAppAsRead(ctx context.Context, userID string, applicationID uuid.UUID, notificationIDs []uuid.UUID) error
 }
 
 // InAppHandler lists the bearer token's authorized user's in-app
@@ -87,7 +87,7 @@ func (h *InAppHandler) MarkAsRead(c echo.Context) error {
 	if token == "" {
 		return echo.NewHTTPError(http.StatusUnauthorized, "missing authorization header")
 	}
-	_, err := h.validator.Validate(token)
+	claims, err := h.validator.Validate(token)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "invalid or expired session")
 	}
@@ -110,7 +110,7 @@ func (h *InAppHandler) MarkAsRead(c echo.Context) error {
 		notificationIDs = append(notificationIDs, parsed)
 	}
 
-	if err := h.consumer.MarkInAppAsRead(c.Request().Context(), notificationIDs); err != nil {
+	if err := h.consumer.MarkInAppAsRead(c.Request().Context(), claims.UserID, claims.ApplicationID, notificationIDs); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to mark notifications as read")
 	}
 

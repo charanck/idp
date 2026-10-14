@@ -76,14 +76,15 @@ func (c *RedisCache) GetVersion(ctx context.Context, key string) (int64, error) 
 }
 
 func (c *RedisCache) BumpVersion(ctx context.Context, key string) error {
-	_, found, err := c.Get(ctx, key)
-	if err != nil {
-		return err
-	}
-	if !found {
-		return c.Set(ctx, key, "2", 0)
-	}
-	return c.rdb.Incr(ctx, c.prefixed(key)).Err()
+	// An absent counter is conceptually version 1, so seed it with SETNX and
+	// then INCR; both steps are atomic, so concurrent first bumps can't both
+	// write "2" and lose an invalidation (the old GET-then-SET could).
+	pk := c.prefixed(key)
+	pipe := c.rdb.TxPipeline()
+	pipe.SetNX(ctx, pk, 1, 0)
+	pipe.Incr(ctx, pk)
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // NoopCache is a disabled-caching backend: every read misses, every write

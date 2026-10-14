@@ -32,6 +32,15 @@ func (s *Service) GetCounts(ctx context.Context) (Counts, error) {
 	var c Counts
 	var err error
 
+	if b, ok := s.repo.(interface {
+		CountAll(ctx context.Context) (applications, environments, configs, secrets, flags, clients int64, err error)
+	}); ok {
+		if c.ApplicationCount, c.EnvironmentCount, c.ConfigCount, c.SecretCount, c.FlagCount, c.ClientCount, err = b.CountAll(ctx); err != nil {
+			return Counts{}, err
+		}
+		return c, nil
+	}
+
 	if c.ApplicationCount, err = s.repo.CountApplications(ctx); err != nil {
 		return Counts{}, err
 	}

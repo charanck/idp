@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -21,9 +23,27 @@ var ErrInvalidBackgroundImageURL = errors.New("background image URL must start w
 
 var hexColorPattern = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
+const brandingCacheKey = "authcache:branding"
+
 // GetBranding returns the singleton login/product branding settings row.
+// Read-through cached, invalidated by UpdateBranding - it is read on every web
+// request via web.AuthMiddleware, same as GetPolicy.
 func (s *AuthService) GetBranding(ctx context.Context) (*model.Branding, error) {
-	return s.branding.Get(ctx)
+	version, err := s.cache.GetVersion(ctx, brandingCacheVersionKey)
+	if err != nil {
+		return s.branding.Get(ctx)
+	}
+	cacheKey := fmt.Sprintf("%s:v%d", brandingCacheKey, version)
+	if cached, found := cacheGet[*model.Branding](ctx, s.cache, cacheKey); found {
+		return cached, nil
+	}
+
+	branding, err := s.branding.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cacheSet(ctx, s.cache, cacheKey, s.cacheTimeout, branding)
+	return branding, nil
 }
 
 // UpdateBrandingInput bundles Branding's editable fields.
@@ -53,6 +73,9 @@ func (s *AuthService) UpdateBranding(ctx context.Context, in UpdateBrandingInput
 	branding.BackgroundImageURL = in.BackgroundImageURL
 	if err := s.branding.Update(ctx, branding); err != nil {
 		return nil, err
+	}
+	if err := s.cache.BumpVersion(ctx, brandingCacheVersionKey); err != nil {
+		slog.WarnContext(ctx, "failed to invalidate branding cache", "error", err)
 	}
 	return branding, nil
 }

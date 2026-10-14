@@ -221,3 +221,35 @@ func TestConsumeUnreadInAppForUser_OnlyInAppChannelAndMarksRead(t *testing.T) {
 		t.Fatalf("expected 0 unread on 2nd call, got %d", len(againUnread))
 	}
 }
+
+func TestMarkInAppAsRead_OnlyAffectsCallersOwnNotifications(t *testing.T) {
+	repo := newFakeNotificationRepository()
+	svc := notification.NewNotificationService(repo, newFakeApplicationRepository(), &fakeEnqueuer{})
+	ctx := context.Background()
+
+	mustCreate := func(userID string) *model.Notification {
+		n, err := svc.CreateNotification(ctx, notification.CreateNotificationInput{
+			Channel:   model.ChannelInApp,
+			Recipient: datatypes.JSON(`{"user_id":"` + userID + `"}`),
+			Content:   datatypes.JSON(`{"message":"hi"}`),
+		})
+		if err != nil {
+			t.Fatalf("CreateNotification: %v", err)
+		}
+		return n
+	}
+	mine := mustCreate("u1")
+	theirs := mustCreate("u2")
+
+	// u1 tries to mark both its own and u2's notification as read.
+	if err := svc.MarkInAppAsRead(ctx, "u1", mine.ApplicationID, []uuid.UUID{mine.ID, theirs.ID}); err != nil {
+		t.Fatalf("MarkInAppAsRead: %v", err)
+	}
+
+	if n, _ := svc.GetNotification(ctx, mine.ID); n == nil || n.ReadAt == nil {
+		t.Fatal("expected u1's own notification to be marked read")
+	}
+	if n, _ := svc.GetNotification(ctx, theirs.ID); n == nil || n.ReadAt != nil {
+		t.Fatal("u2's notification must not be markable by u1")
+	}
+}

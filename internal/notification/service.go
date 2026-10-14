@@ -160,9 +160,11 @@ func (s *NotificationService) ConsumeUnreadInAppForUser(ctx context.Context, use
 	return s.repo.ConsumeUnreadInApp(ctx, userID, applicationID)
 }
 
-// MarkInAppAsRead marks one or more in-app notifications as read.
-func (s *NotificationService) MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error {
-	return s.repo.MarkInAppAsRead(ctx, notificationIDs)
+// MarkInAppAsRead marks one or more of userID's in-app notifications (within
+// applicationID) as read. IDs that belong to another user or application are
+// ignored, so a session token can't be used to mark someone else's inbox.
+func (s *NotificationService) MarkInAppAsRead(ctx context.Context, userID string, applicationID uuid.UUID, notificationIDs []uuid.UUID) error {
+	return s.repo.MarkInAppAsRead(ctx, userID, applicationID, notificationIDs)
 }
 
 // markProcessing/markSent/markRetrying/markFailed are worker-facing status

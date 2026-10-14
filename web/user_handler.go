@@ -55,16 +55,27 @@ func (h *UserHandler) List(c echo.Context) error {
 		return err
 	}
 
-	rows := make([]pages.UserRow, 0, len(users))
-	for _, u := range users {
-		userGroups, err := h.users.UserGroups(ctx, u.ID)
+	// Without a group filter, paginate first so only the visible page's users
+	// need their memberships loaded; with a filter every user's groups are
+	// needed to filter, but still in one batched query rather than one each.
+	var page Page[pages.UserRow]
+	if groupFilter == "" {
+		userPage := Paginate(users, usersPageSize, PageParam(c))
+		rows, err := h.userRows(ctx, userPage.Items, "")
 		if err != nil {
 			return err
 		}
-		if groupFilter != "" && !containsGroupID(userGroups, groupFilter) {
-			continue
+		page = Page[pages.UserRow]{
+			Items: rows, Number: userPage.Number, NumPages: userPage.NumPages,
+			HasPrevious: userPage.HasPrevious, HasNext: userPage.HasNext,
+			PreviousNumber: userPage.PreviousNumber, NextNumber: userPage.NextNumber,
 		}
-		rows = append(rows, pages.UserRow{User: u, Groups: userGroups, Locked: u.IsLocked(time.Now())})
+	} else {
+		rows, err := h.userRows(ctx, users, groupFilter)
+		if err != nil {
+			return err
+		}
+		page = Paginate(rows, usersPageSize, PageParam(c))
 	}
 
 	extra := url.Values{}
@@ -75,7 +86,6 @@ func (h *UserHandler) List(c echo.Context) error {
 		extra.Set("group", groupFilter)
 	}
 
-	page := Paginate(rows, usersPageSize, PageParam(c))
 	return pages.UsersList(flashes(c), navUser(c), pages.UsersListData{
 		CSRFToken: csrfToken(c),
 		Users:     page.Items, Groups: groups, CurrentQ: q, CurrentGroup: groupFilter, ExtraQuery: extra.Encode(),
@@ -84,6 +94,50 @@ func (h *UserHandler) List(c echo.Context) error {
 		PrevNum: page.PreviousNumber, NextNum: page.NextNumber,
 		Window: page.PageRange(),
 	}).Render(c.Request().Context(), c.Response())
+}
+
+// userRows builds list rows for users, loading all their group memberships in
+// one batch and dropping users outside groupFilter when it is non-empty.
+func (h *UserHandler) userRows(ctx context.Context, users []authmodel.User, groupFilter string) ([]pages.UserRow, error) {
+	ids := make([]uuid.UUID, len(users))
+	for i, u := range users {
+		ids[i] = u.ID
+	}
+	groupsByUser, err := userGroupsFor(ctx, h.users, ids)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	rows := make([]pages.UserRow, 0, len(users))
+	for _, u := range users {
+		ug := groupsByUser[u.ID]
+		if groupFilter != "" && !containsGroupID(ug, groupFilter) {
+			continue
+		}
+		rows = append(rows, pages.UserRow{User: u, Groups: ug, Locked: u.IsLocked(now)})
+	}
+	return rows, nil
+}
+
+// userGroupsFor loads memberships for many users in one query when the store
+// supports batching (*auth.AuthService does), one query per user otherwise.
+func userGroupsFor(ctx context.Context, store interface {
+	UserGroups(ctx context.Context, userID uuid.UUID) ([]authmodel.Group, error)
+}, userIDs []uuid.UUID) (map[uuid.UUID][]authmodel.Group, error) {
+	if b, ok := store.(interface {
+		UserGroupsFor(ctx context.Context, userIDs []uuid.UUID) (map[uuid.UUID][]authmodel.Group, error)
+	}); ok {
+		return b.UserGroupsFor(ctx, userIDs)
+	}
+	out := make(map[uuid.UUID][]authmodel.Group, len(userIDs))
+	for _, id := range userIDs {
+		gs, err := store.UserGroups(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = gs
+	}
+	return out, nil
 }
 
 func containsGroupID(groups []authmodel.Group, id string) bool {

@@ -140,7 +140,7 @@ directly — read paths must incorporate the current version into their cache ke
 
 Every `ConfigEntry` write path (web UI create/clone/edit) calls `ConfigService.RecordConfigVersion`,
 which snapshots the entry's current *encrypted* value into `ConfigEntryVersion` via a cascading FK
-(`config_entry`), numbered per entry starting at 1. Deleting a `ConfigEntry` deletes its version
+(`config_entry`), numbered per entry starting at 1. Only the newest 5 versions per entry are kept (`MaxConfigVersions`); each new version prunes older ones in the same transaction. Deleting a `ConfigEntry` deletes its version
 history with it (cascade) — history is not kept for deleted configs, and re-creating the same key
 later starts a fresh history at version 1. `ConfigService.RollbackConfig` restores a prior version
 by calling `UpsertConfig` again (tagged as a rollback action) rather than mutating history in

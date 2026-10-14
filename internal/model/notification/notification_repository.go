@@ -16,6 +16,8 @@ type ListNotificationsFilter struct {
 	Service       string
 	Channel       string
 	Status        string
+	// Limit caps the rows returned, newest first (0 = unlimited).
+	Limit int
 }
 
 // NotificationRepository is the persistence seam for Notification rows.
@@ -37,7 +39,9 @@ type NotificationRepository interface {
 	// newest first, without changing their read state.
 	GetUnreadInApp(ctx context.Context, userID string, applicationID uuid.UUID) ([]Notification, error)
 	// MarkInAppAsRead marks one or more in-app notifications as read.
-	MarkInAppAsRead(ctx context.Context, notificationIDs []uuid.UUID) error
+	// Only the given user's unread in-app notifications for applicationID are
+	// affected; IDs belonging to anyone else are silently ignored.
+	MarkInAppAsRead(ctx context.Context, userID string, applicationID uuid.UUID, notificationIDs []uuid.UUID) error
 	MarkProcessing(ctx context.Context, id uuid.UUID) error
 	MarkSent(ctx context.Context, id uuid.UUID, provider, providerMessageID string) error
 	MarkRetrying(ctx context.Context, id uuid.UUID, attempt int, sendErr error) error

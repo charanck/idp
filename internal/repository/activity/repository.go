@@ -22,7 +22,11 @@ func (r *gormRepository) Create(ctx context.Context, a *model.Activity) error {
 }
 
 func (r *gormRepository) List(ctx context.Context, filter model.ListFilter) ([]model.Activity, error) {
-	query := r.db.WithContext(ctx).Order("timestamp DESC")
+	// details is a large free-text column no list view renders; skip it.
+	query := r.db.WithContext(ctx).Omit("details").Order("timestamp DESC")
+	if filter.Limit > 0 {
+		query = query.Limit(filter.Limit)
+	}
 	if filter.Resource != "" {
 		query = query.Where("resource = ?", filter.Resource)
 	}
@@ -58,7 +62,22 @@ func (r *gormRepository) DistinctTypes(ctx context.Context) ([]string, error) {
 }
 
 func (r *gormRepository) DeleteOlderThan(ctx context.Context, before time.Time) error {
-	return r.db.WithContext(ctx).Where("timestamp < ?", before).Delete(&model.Activity{}).Error
+	// Deleted in bounded batches: one giant DELETE holds a single long
+	// transaction, bursts WAL, and bloats every index on the table at once.
+	for {
+		res := r.db.WithContext(ctx).Exec(
+			`DELETE FROM activities WHERE ctid IN (SELECT ctid FROM activities WHERE "timestamp" < ? LIMIT ?)`,
+			before, deleteBatchSize)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected < deleteBatchSize {
+			return nil
+		}
+	}
 }
+
+// deleteBatchSize bounds how many rows a single retention DELETE removes.
+const deleteBatchSize = 5000
 
 var _ model.Repository = (*gormRepository)(nil)

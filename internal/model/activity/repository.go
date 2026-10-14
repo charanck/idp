@@ -10,6 +10,9 @@ type ListFilter struct {
 	Resource string
 	Type     string
 	UserLike string // case-insensitive substring match on user_email
+	// Limit caps the rows returned, newest first (0 = unlimited). The log is
+	// append-only and unbounded, so list pages must cap what they load.
+	Limit int
 }
 
 // Repository is the persistence seam for the append-only activity log.

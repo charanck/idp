@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -67,6 +68,7 @@ const (
 	groupsCacheVersionKey   = "authcache:groups-version"
 	clientsCacheVersionKey  = "authcache:clients-version"
 	policyCacheVersionKey   = "authcache:policy-version"
+	brandingCacheVersionKey = "authcache:branding-version"
 )
 
 // invalidateUsers/Groups/Clients/Policy bump their respective version
@@ -324,12 +326,39 @@ func (s *AuthService) CreateServiceClient(ctx context.Context, name string) (*Se
 	return &ServiceClientCredentials{Client: client, APIKey: rawAPIKey}, nil
 }
 
+// apiKeyCacheTTL bounds how long a *successfully verified* API key is cached
+// in Redis. Entries are keyed by the shared clients-version counter (bumped by
+// every service-client mutation), so a change on any replica orphans them
+// immediately; the TTL only reclaims the orphans and backstops a missed bump.
+// Failed verifications are never cached.
+const apiKeyCacheTTL = 15 * time.Second
+
+// apiKeyCacheKey is "authcache:apikey:v<clients-version>:<sha256(apiKey)>";
+// the raw key never reaches Redis.
+func apiKeyCacheKey(version int64, apiKey string) string {
+	sum := sha256.Sum256([]byte(apiKey))
+	return fmt.Sprintf("authcache:apikey:v%d:%s", version, hex.EncodeToString(sum[:]))
+}
+
 // AuthenticateServiceAPIKey authenticates a service client using the
 // "<key_id>.<secret>" format.
 func (s *AuthService) AuthenticateServiceAPIKey(ctx context.Context, apiKey string) (*model.ServiceClient, error) {
 	keyID, secret, ok := strings.Cut(apiKey, ".")
 	if !ok || keyID == "" || secret == "" {
 		return nil, nil
+	}
+
+	// The shared clients-version counter is read before the DB lookup, so a
+	// bump that races with the lookup leaves a stale-stamped entry that is
+	// never honored. If the counter can't be read (or caching is disabled),
+	// bypass the cache entirely rather than risk honoring a revoked key.
+	version, verErr := s.cache.GetVersion(ctx, clientsCacheVersionKey)
+	cacheOK := verErr == nil
+	cacheKey := apiKeyCacheKey(version, apiKey)
+	if cacheOK {
+		if cached, found := cacheGet[model.ServiceClient](ctx, s.cache, cacheKey); found {
+			return &cached, nil
+		}
 	}
 
 	client, err := s.clients.FindByAPIKeyIDActive(ctx, keyID)
@@ -342,6 +371,9 @@ func (s *AuthService) AuthenticateServiceAPIKey(ctx context.Context, apiKey stri
 
 	if client.APIKeyHash == "" || !security.VerifyPassword(secret, client.APIKeyHash) {
 		return nil, nil
+	}
+	if cacheOK {
+		defer cacheSet(ctx, s.cache, cacheKey, apiKeyCacheTTL, *client)
 	}
 	if security.IsLegacyHash(client.APIKeyHash) {
 		if newHash, err := security.HashPassword(secret); err != nil {

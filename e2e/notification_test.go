@@ -555,6 +555,7 @@ func TestInAppUnreadEndpoint_ListsOnlyThatUsersUnreadAndMarksThemRead(t *testing
 		t.Fatalf("unread status = %d", unreadResp.StatusCode)
 	}
 	var unread []struct {
+		ID      string `json:"id"`
 		Channel string `json:"channel"`
 	}
 	if err := json.NewDecoder(unreadResp.Body).Decode(&unread); err != nil {
@@ -564,22 +565,48 @@ func TestInAppUnreadEndpoint_ListsOnlyThatUsersUnreadAndMarksThemRead(t *testing
 		t.Fatalf("unread = %+v, want exactly one inapp notification", unread)
 	}
 
-	req2, err := http.NewRequest(http.MethodGet, base+"/api/v1/notifications/inapp/unread", nil)
+	getUnread := func() int {
+		t.Helper()
+		r, err := http.NewRequest(http.MethodGet, base+"/api/v1/notifications/inapp/unread", nil)
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		r.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatalf("GET inapp/unread: %v", err)
+		}
+		defer resp.Body.Close()
+		var items []struct{}
+		if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+			t.Fatalf("decode unread response: %v", err)
+		}
+		return len(items)
+	}
+
+	// Reading does not consume: the notification stays unread until marked.
+	if n := getUnread(); n != 1 {
+		t.Fatalf("second unread count = %d, want 1 (GET must not mark as read)", n)
+	}
+
+	markReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/notifications/inapp/mark-as-read",
+		strings.NewReader(`{"notification_ids":["`+unread[0].ID+`"]}`))
 	if err != nil {
 		t.Fatalf("NewRequest: %v", err)
 	}
-	req2.Header.Set("Authorization", "Bearer "+token)
-	againResp, err := http.DefaultClient.Do(req2)
+	markReq.Header.Set("Authorization", "Bearer "+token)
+	markReq.Header.Set("Content-Type", "application/json")
+	markResp, err := http.DefaultClient.Do(markReq)
 	if err != nil {
-		t.Fatalf("GET inapp/unread (again): %v", err)
+		t.Fatalf("POST mark-as-read: %v", err)
 	}
-	defer againResp.Body.Close()
-	var again []struct{}
-	if err := json.NewDecoder(againResp.Body).Decode(&again); err != nil {
-		t.Fatalf("decode second unread response: %v", err)
+	defer markResp.Body.Close()
+	if markResp.StatusCode != http.StatusOK {
+		t.Fatalf("mark-as-read status = %d", markResp.StatusCode)
 	}
-	if len(again) != 0 {
-		t.Fatalf("second unread = %+v, want none left (first call should have marked them read)", again)
+
+	if n := getUnread(); n != 0 {
+		t.Fatalf("unread count after mark-as-read = %d, want 0", n)
 	}
 }
 
