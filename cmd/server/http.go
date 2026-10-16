@@ -7,9 +7,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	otelecho "go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"controlplane/internal/observability"
 	"controlplane/internal/session"
+	"controlplane/internal/traceid"
 	"controlplane/web"
 )
 
@@ -24,6 +27,7 @@ func newEchoServer(sessions *session.Store) *echo.Echo {
 	if observability.Enabled() {
 		e.Use(otelecho.Middleware(observability.ServiceName))
 	}
+	e.Use(traceIDMiddleware())
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogStatus: true, LogURI: true, LogMethod: true, LogLatency: true, LogRemoteIP: true, LogError: true,
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
@@ -32,6 +36,9 @@ func newEchoServer(sessions *session.Store) *echo.Echo {
 			// letting OTEL correlate this log line with its trace/span ID.
 			ctx := c.Request().Context()
 			attrs := []any{"method", v.Method, "uri", v.URI, "status", v.Status, "latency", v.Latency, "remote_ip", v.RemoteIP}
+			if id := traceid.FromContext(ctx); id != "" {
+				attrs = append(attrs, "trace_id", id)
+			}
 			if v.Error != nil {
 				attrs = append(attrs, "err", v.Error)
 			}
@@ -80,6 +87,40 @@ func skipForStatelessAPI(mw echo.MiddlewareFunc) echo.MiddlewareFunc {
 			return wrapped(c)
 		}
 	}
+}
+
+// traceIDMiddleware resolves each non-web-UI request's trace ID (traceparent,
+// then X-Trace-Id, then X-Request-Id, else a freshly generated one), stores it
+// on the request context, echoes it in the X-Trace-Id response header, and
+// tags the active OTEL span with it when one is recording. Web UI routes are
+// left untouched.
+func traceIDMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			req := c.Request()
+			if !isTraceablePath(req.URL.Path) {
+				return next(c)
+			}
+			id := traceid.Resolve(req.Header)
+			ctx := traceid.WithTraceID(req.Context(), id)
+			if span := trace.SpanFromContext(ctx); span.IsRecording() {
+				span.SetAttributes(attribute.String("request.trace_id", id))
+			}
+			c.SetRequest(req.WithContext(ctx))
+			c.Response().Header().Set(traceid.ResponseHeader, id)
+			return next(c)
+		}
+	}
+}
+
+// isTraceablePath reports whether a request path is an API/IdP route that
+// should carry a trace ID: the stateless API surface (minus public static
+// assets) plus the forward-auth verify endpoint.
+func isTraceablePath(path string) bool {
+	if strings.HasPrefix(path, "/static/") || path == "/favicon.ico" {
+		return false
+	}
+	return isStatelessAPIPath(path) || path == "/forward-auth/verify"
 }
 
 func isStatelessAPIPath(path string) bool {

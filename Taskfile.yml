@@ -19,4 +19,5 @@ tasks:
     desc: Prune Postgres/Redis, boot the server and run ./e2e on a clean slate (extra go test args after --)
     # Deletes the idp-postgres/idp-redis containers and volumes; see scripts/e2e.sh.
     cmds:
-      - ./scripts/e2e.sh {{.CLI_ARGS}}
+      # Run through bash explicitly: Windows can't exec a .sh file directly.
+      - bash ./scripts/e2e.sh {{.CLI_ARGS}}

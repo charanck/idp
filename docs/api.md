@@ -59,6 +59,10 @@ The browser-facing half, `GET/POST /oauth2/authorize`, is session-authenticated 
 listed here — see [OIDC Identity Provider setup](#setting-up-control-plane-as-an-oidc-identity-provider)
 below.
 
+## Trace IDs
+
+Every API/IdP request (`/api/...`, `/.well-known/...`, `/oauth2/token`, `/oauth2/userinfo`, `/forward-auth/verify`; not the web UI) gets a trace ID, taken from the first valid of: the W3C `traceparent` header, `X-Trace-Id`, `X-Request-Id` (non-`traceparent` values must be 32 hex characters). If none is valid, a new W3C-compatible ID is generated. It is returned in the `X-Trace-Id` response header and recorded in the request log (`trace_id`), the OTEL span (`request.trace_id`), activity-log `details` (`trace_id`), and `notifications.trace_id` (also attached to the delivery workflow's logs). With OTEL enabled, an inbound `traceparent` also continues the caller's trace.
+
 ## Authentication
 
 Two distinct credentials are used across these endpoints, never interchangeably:

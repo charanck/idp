@@ -42,6 +42,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	logglobal "go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -124,6 +125,11 @@ func Setup(ctx context.Context, version string) (Shutdown, error) {
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(tracerProvider)
+	// Without a propagator otelecho ignores an inbound traceparent and always
+	// starts a new root trace.
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{}, propagation.Baggage{},
+	))
 
 	metricExporter, err := otlpmetricgrpc.New(ctx)
 	if err != nil {

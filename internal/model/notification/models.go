@@ -44,6 +44,7 @@ type Notification struct {
 	IdempotencyKey    *string                 `gorm:"column:idempotency_key"`
 	Error             *string                 `gorm:"column:error"`
 	ReadAt            *time.Time              `gorm:"column:read_at"`
+	TraceID           *string                 `gorm:"column:trace_id"`
 	CreatedAt         time.Time               `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt         time.Time               `gorm:"column:updated_at;autoUpdateTime"`
 }

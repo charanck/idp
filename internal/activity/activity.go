@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	model "controlplane/internal/model/activity"
+	"controlplane/internal/traceid"
 )
 
 type Logger struct {
@@ -44,6 +45,33 @@ func requestInfoFromContext(ctx context.Context) RequestInfo {
 	return info
 }
 
+// marshalDetails serializes details to JSON, folding in the request's trace ID
+// (when non-empty) under "trace_id": added to an object, created as a lone
+// object when details is nil, or wrapping a non-object as
+// {"trace_id":..., "details":...}. Returns nil bytes when there is nothing to store.
+func marshalDetails(details any, traceID string) ([]byte, error) {
+	if details == nil && traceID == "" {
+		return nil, nil
+	}
+	if traceID == "" {
+		return json.Marshal(details)
+	}
+	if details == nil {
+		return json.Marshal(map[string]any{"trace_id": traceID})
+	}
+	b, err := json.Marshal(details)
+	if err != nil {
+		return nil, err
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(b, &obj) == nil && obj != nil {
+		id, _ := json.Marshal(traceID)
+		obj["trace_id"] = id
+		return json.Marshal(obj)
+	}
+	return json.Marshal(map[string]any{"trace_id": traceID, "details": json.RawMessage(b)})
+}
+
 func (l *Logger) log(ctx context.Context, typ, resource, resourceID, resourceName, userEmail string, details any) {
 	info := requestInfoFromContext(ctx)
 	if userEmail == "" {
@@ -56,14 +84,11 @@ func (l *Logger) log(ctx context.Context, typ, resource, resourceID, resourceNam
 	}
 
 	var detailsStr *string
-	if details != nil {
-		b, err := json.Marshal(details)
-		if err != nil {
-			slog.Warn("failed to serialize activity details", "resource", resource, "resource_id", resourceID, "err", err)
-		} else {
-			s := string(b)
-			detailsStr = &s
-		}
+	if b, err := marshalDetails(details, traceid.FromContext(ctx)); err != nil {
+		slog.Warn("failed to serialize activity details", "resource", resource, "resource_id", resourceID, "err", err)
+	} else if b != nil {
+		s := string(b)
+		detailsStr = &s
 	}
 
 	var namePtr *string

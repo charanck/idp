@@ -11,6 +11,7 @@ import (
 
 	configmodel "controlplane/internal/model/config"
 	model "controlplane/internal/model/notification"
+	"controlplane/internal/traceid"
 )
 
 // NotificationService creates and reads notifications, and enqueues them for
@@ -87,6 +88,9 @@ func (s *NotificationService) CreateNotification(ctx context.Context, in CreateN
 	if in.IdempotencyKey != "" {
 		key := in.IdempotencyKey
 		n.IdempotencyKey = &key
+	}
+	if id := traceid.FromContext(ctx); id != "" {
+		n.TraceID = &id
 	}
 
 	if err := s.repo.Create(ctx, n); err != nil {

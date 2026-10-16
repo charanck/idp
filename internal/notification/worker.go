@@ -11,6 +11,7 @@ import (
 
 	model "controlplane/internal/model/notification"
 	"controlplane/internal/notification/provider"
+	"controlplane/internal/traceid"
 )
 
 // Publisher is the narrow slice of *Hub that Worker needs, satisfied by
@@ -119,6 +120,12 @@ func (w *Worker) SendWorkflow(ctx dbos.Context, payload SendPayload) (sendWorkfl
 		slog.Warn("notification send workflow: notification no longer exists", "id", payload.NotificationID)
 		return sendWorkflowResult{}, nil
 	}
+	// The originating API request's trace ID (if any), attached to this
+	// workflow's logs and the provider send so a delivery traces back to it.
+	var traceID string
+	if n.TraceID != nil {
+		traceID = *n.TraceID
+	}
 	// A notification already past "queued"/"retrying" was handled by a
 	// previous run of this workflow ID - skip.
 	if n.Status != model.StatusQueued && n.Status != model.StatusRetrying {
@@ -133,7 +140,7 @@ func (w *Worker) SendWorkflow(ctx dbos.Context, payload SendPayload) (sendWorkfl
 	if !ok {
 		permErr := fmt.Errorf("no channel registered for %q", n.Channel)
 		if _, markErr := w.stepMarkFailed(ctx, n.ID, n.Attempt, permErr); markErr != nil {
-			slog.Error("mark failed after unknown channel", "id", n.ID, "err", markErr)
+			slog.Error("mark failed after unknown channel", "id", n.ID, "err", markErr, "trace_id", traceID)
 		}
 		n.Status = model.StatusFailed
 		w.stepPublish(ctx, n) //nolint:errcheck // stepPublish never returns a non-nil error, see its doc comment.
@@ -150,7 +157,7 @@ func (w *Worker) SendWorkflow(ctx dbos.Context, payload SendPayload) (sendWorkfl
 			if !setting.IsActive {
 				permErr := fmt.Errorf("channel %q is disabled", n.Channel)
 				if _, markErr := w.stepMarkFailed(ctx, n.ID, n.Attempt, permErr); markErr != nil {
-					slog.Error("mark failed after disabled channel", "id", n.ID, "err", markErr)
+					slog.Error("mark failed after disabled channel", "id", n.ID, "err", markErr, "trace_id", traceID)
 				}
 				n.Status = model.StatusFailed
 				w.stepPublish(ctx, n) //nolint:errcheck // stepPublish never returns a non-nil error, see its doc comment.
@@ -174,7 +181,7 @@ func (w *Worker) SendWorkflow(ctx dbos.Context, payload SendPayload) (sendWorkfl
 	// naturally idempotent (it only updates attempt/error columns).
 	attempt := n.Attempt
 	result, sendErr := dbos.RunAsStep(ctx, func(stepCtx context.Context) (*provider.Result, error) {
-		return channel.Send(stepCtx, provider.Notification{Recipient: n.Recipient, Content: n.Content}, settings)
+		return channel.Send(traceid.WithTraceID(stepCtx, traceID), provider.Notification{Recipient: n.Recipient, Content: n.Content}, settings)
 	},
 		dbos.WithStepMaxRetries(maxRetry),
 		dbos.WithStepRetryPredicate(func(sendErr error) bool {
@@ -184,7 +191,7 @@ func (w *Worker) SendWorkflow(ctx dbos.Context, payload SendPayload) (sendWorkfl
 			}
 			attempt++
 			if markErr := w.notifications.markRetrying(ctx, n.ID, attempt, sendErr); markErr != nil {
-				slog.Error("mark retrying", "id", n.ID, "err", markErr)
+				slog.Error("mark retrying", "id", n.ID, "err", markErr, "trace_id", traceID)
 			}
 			return true
 		}),
@@ -193,7 +200,7 @@ func (w *Worker) SendWorkflow(ctx dbos.Context, payload SendPayload) (sendWorkfl
 		// RunAsStep only returns once its retries are exhausted (or the
 		// predicate rejected a permanent error), so this is always terminal.
 		if _, err := w.stepMarkFailed(ctx, n.ID, attempt+1, sendErr); err != nil {
-			slog.Error("mark failed", "id", n.ID, "err", err)
+			slog.Error("mark failed", "id", n.ID, "err", err, "trace_id", traceID)
 		}
 		n.Status = model.StatusFailed
 		w.stepPublish(ctx, n) //nolint:errcheck // stepPublish never returns a non-nil error, see its doc comment.
